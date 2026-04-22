@@ -27,7 +27,8 @@ void Shell::run() {
         bool shouldExit = false;
         const bool handled = executeBuiltinCommand(tokens, shouldExit);
         if (!handled) {
-            std::cout << "Unknown command\n";
+            // 非内建命令自动按系统外部程序执行。
+            executeExternalCommand(tokens);
         }
         if (shouldExit) {
             break;

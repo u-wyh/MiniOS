@@ -3,6 +3,8 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <sys/wait.h>
+#include <unistd.h>
 
 bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldExit) {
     // 每次执行前默认不退出，只有 exit 分支会显式改为 true。
@@ -15,34 +17,20 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
     const std::string& command = tokens[0];
 
     if (command == "help") {
-        // 打印当前支持的内建命令列表。
-        std::cout << "Supported commands:\n";
-        std::cout << "help\n";
-        std::cout << "pwd\n";
+        // help 同时说明内建命令和可直接执行的系统命令。
+        std::cout << "Built-in commands:\n";
+        std::cout << "help pwd echo clear exit cd\n";
+        std::cout << "Other system commands can be executed directly, e.g.:\n";
         std::cout << "ls\n";
-        std::cout << "cd <path>\n";
-        std::cout << "echo <text>\n";
-        std::cout << "clear\n";
-        std::cout << "exit\n";
+        std::cout << "cat readme.md\n";
+        std::cout << "uname -a\n";
+        std::cout << "python3 --version\n";
         return true;
     }
 
     if (command == "pwd") {
         // 输出当前工作目录。
         std::cout << std::filesystem::current_path().string() << '\n';
-        return true;
-    }
-
-    if (command == "ls") {
-        // 列出当前目录下的直接子项名称。
-        try {
-            for (const auto& entry : std::filesystem::directory_iterator(std::filesystem::current_path())) {
-                std::cout << entry.path().filename().string() << '\n';
-            }
-        } catch (const std::filesystem::filesystem_error&) {
-            // 保持失败提示一致，避免异常导致 Shell 崩溃。
-            std::cout << "Failed to list directory\n";
-        }
         return true;
     }
 
@@ -95,6 +83,41 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
         return true;
     }
 
-    // 非内建命令交给调用方处理（下一轮可接外部执行）。
+    // 非内建命令交给外部执行流程处理。
     return false;
+}
+
+void executeExternalCommand(const std::vector<std::string>& tokens) {
+    // 无 token 时无需执行，直接返回。
+    if (tokens.empty()) {
+        return;
+    }
+
+    // 组织 execvp 参数数组，末尾补 nullptr 以满足系统调用约定。
+    std::vector<char*> argv;
+    argv.reserve(tokens.size() + 1);
+    for (const auto& token : tokens) {
+        argv.push_back(const_cast<char*>(token.c_str()));
+    }
+    argv.push_back(nullptr);
+
+    // fork 子进程执行外部命令，父进程等待完成后回到 Shell 提示符。
+    pid_t pid = fork();
+    if (pid < 0) {
+        std::cout << "Failed to execute command\n";
+        return;
+    }
+
+    if (pid == 0) {
+        // 子进程调用 execvp，返回则代表命令不存在或执行失败。
+        execvp(argv[0], argv.data());
+        std::cerr << "Command not found\n";
+        _exit(1);
+    }
+
+    // 父进程等待子进程，保证命令执行行为稳定且不崩溃。
+    int status = 0;
+    if (waitpid(pid, &status, 0) < 0) {
+        std::cout << "Failed to execute command\n";
+    }
 }

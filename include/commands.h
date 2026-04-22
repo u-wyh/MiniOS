@@ -7,4 +7,7 @@
 // 统一处理内建命令：返回 true 表示已处理，false 表示不是内建命令。
 bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldExit);
 
+// 执行外部命令（非内建命令），失败时输出清晰错误提示。
+void executeExternalCommand(const std::vector<std::string>& tokens);
+
 #endif
