@@ -31,12 +31,44 @@ int main() {
             std::cout << "Supported commands:\n";
             std::cout << "help\n";
             std::cout << "pwd\n";
+            std::cout << "ls\n";
+            std::cout << "cd <path>\n";
             std::cout << "echo <text>\n";
             std::cout << "clear\n";
             std::cout << "exit\n";
         } else if (command == "pwd") {
             // 输出当前工作目录，作为后续文件系统模块的基础能力。
             std::cout << std::filesystem::current_path().string() << '\n';
+        } else if (command == "ls") {
+            // 列出当前目录下的直接子项名称（文件或目录）。
+            try {
+                for (const auto& entry : std::filesystem::directory_iterator(std::filesystem::current_path())) {
+                    std::cout << entry.path().filename().string() << '\n';
+                }
+            } catch (const std::filesystem::filesystem_error&) {
+                // 目录读取失败时给出清晰提示，避免程序崩溃。
+                std::cout << "Failed to list directory\n";
+            }
+        } else if (command == "cd") {
+            // 读取目标路径参数；无参数时按规范输出用法提示。
+            std::string path;
+            iss >> path;
+            if (path.empty()) {
+                std::cout << "Usage: cd <path>\n";
+                continue;
+            }
+
+            // 仅在目标存在且为目录时切换，错误输入不影响 Shell 主循环。
+            try {
+                const std::filesystem::path target(path);
+                if (std::filesystem::exists(target) && std::filesystem::is_directory(target)) {
+                    std::filesystem::current_path(target);
+                } else {
+                    std::cout << "Directory not found\n";
+                }
+            } catch (const std::filesystem::filesystem_error&) {
+                std::cout << "Directory not found\n";
+            }
         } else if (command == "echo") {
             // 保留命令后的原始参数内容（去掉一个前导空格后输出）。
             std::string args;
