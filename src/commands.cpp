@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <iostream>
 #include <algorithm>
+#include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -218,5 +219,81 @@ bool executePipeCommand(const std::vector<std::string>& tokens) {
     close(pipe_fd[1]);
     waitpid(left_pid, nullptr, 0);
     waitpid(right_pid, nullptr, 0);
+    return true;
+}
+
+bool executeRedirectCommand(const std::vector<std::string>& tokens) {
+    // 只在包含输出重定向符时处理，否则交回普通流程。
+    const int gt_count = static_cast<int>(std::count(tokens.begin(), tokens.end(), ">"));
+    const int ggt_count = static_cast<int>(std::count(tokens.begin(), tokens.end(), ">>"));
+    const int redirect_count = gt_count + ggt_count;
+    if (redirect_count == 0) {
+        return false;
+    }
+
+    // 本轮只支持单次输出重定向，且不支持与管道混用。
+    if (redirect_count != 1 || std::count(tokens.begin(), tokens.end(), "|") > 0) {
+        std::cout << "Invalid redirect command\n";
+        return true;
+    }
+
+    // 找到重定向符并拆分左侧命令与右侧目标文件。
+    const auto gt_it = std::find(tokens.begin(), tokens.end(), ">");
+    const auto ggt_it = std::find(tokens.begin(), tokens.end(), ">>");
+    const bool append_mode = (ggt_it != tokens.end());
+    const auto op_it = append_mode ? ggt_it : gt_it;
+    const std::size_t op_pos = static_cast<std::size_t>(op_it - tokens.begin());
+
+    if (op_pos == 0 || op_pos >= tokens.size() - 1) {
+        std::cout << "Invalid redirect command\n";
+        return true;
+    }
+    if (op_pos != tokens.size() - 2) {
+        std::cout << "Invalid redirect command\n";
+        return true;
+    }
+
+    const std::vector<std::string> left(tokens.begin(), tokens.begin() + static_cast<long>(op_pos));
+    const std::string& output_file = tokens[op_pos + 1];
+    if (left.empty() || output_file.empty()) {
+        std::cout << "Invalid redirect command\n";
+        return true;
+    }
+
+    // fork 子进程执行重定向：子进程重定向 stdout 后再 execvp 命令。
+    pid_t pid = fork();
+    if (pid < 0) {
+        std::cout << "Failed to execute command\n";
+        return true;
+    }
+
+    if (pid == 0) {
+        // 只写打开  不存在就创建  根据不同的输入符号选择增加还是清空
+        int flags = O_WRONLY | O_CREAT | (append_mode ? O_APPEND : O_TRUNC);
+        int fd = open(output_file.c_str(), flags, 0644);
+        if (fd < 0) {
+            std::cerr << "Failed to execute command\n";
+            _exit(1);
+        }
+
+        dup2(fd, STDOUT_FILENO);
+        close(fd);
+
+        std::vector<char*> argv;
+        argv.reserve(left.size() + 1);
+        for (const auto& token : left) {
+            argv.push_back(const_cast<char*>(token.c_str()));
+        }
+        argv.push_back(nullptr);
+
+        execvp(argv[0], argv.data());
+        std::cerr << "Command not found\n";
+        _exit(1);
+    }
+
+    int status = 0;
+    if (waitpid(pid, &status, 0) < 0) {
+        std::cout << "Failed to execute command\n";
+    }
     return true;
 }
