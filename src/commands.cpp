@@ -222,6 +222,126 @@ bool executePipeCommand(const std::vector<std::string>& tokens) {
     return true;
 }
 
+bool executePipeRedirectCommand(const std::vector<std::string>& tokens) {
+    // 仅在同时包含管道和输出重定向时处理，否则交回普通流程。
+    const int pipe_count = static_cast<int>(std::count(tokens.begin(), tokens.end(), "|"));
+    const int gt_count = static_cast<int>(std::count(tokens.begin(), tokens.end(), ">"));
+    const int ggt_count = static_cast<int>(std::count(tokens.begin(), tokens.end(), ">>"));
+    const int redirect_count = gt_count + ggt_count;
+    if (pipe_count == 0 || redirect_count == 0) {
+        return false;
+    }
+
+    // 本轮只支持一个管道 + 一个输出重定向，且不与输入重定向混用。
+    if (pipe_count != 1 || redirect_count != 1 || std::count(tokens.begin(), tokens.end(), "<") > 0) {
+        std::cout << "Invalid command\n";
+        return true;
+    }
+
+    const auto pipe_it = std::find(tokens.begin(), tokens.end(), "|");
+    const auto gt_it = std::find(tokens.begin(), tokens.end(), ">");
+    const auto ggt_it = std::find(tokens.begin(), tokens.end(), ">>");
+    const bool append_mode = (ggt_it != tokens.end());
+    const auto redir_it = append_mode ? ggt_it : gt_it;
+
+    const std::size_t pipe_pos = static_cast<std::size_t>(pipe_it - tokens.begin());
+    const std::size_t redir_pos = static_cast<std::size_t>(redir_it - tokens.begin());
+
+    // 合法结构：left | right > file 或 left | right >> file。
+    if (pipe_pos == 0 || pipe_pos >= redir_pos || redir_pos != tokens.size() - 2 || pipe_pos + 1 >= redir_pos) {
+        std::cout << "Invalid command\n";
+        return true;
+    }
+
+    const std::vector<std::string> left(tokens.begin(), tokens.begin() + static_cast<long>(pipe_pos));
+    const std::vector<std::string> right(tokens.begin() + static_cast<long>(pipe_pos) + 1,
+                                         tokens.begin() + static_cast<long>(redir_pos));
+    const std::string& output_file = tokens[redir_pos + 1];
+    if (left.empty() || right.empty() || output_file.empty()) {
+        std::cout << "Invalid command\n";
+        return true;
+    }
+
+    int pipe_fd[2];
+    if (pipe(pipe_fd) < 0) {
+        std::cout << "Failed to execute command\n";
+        return true;
+    }
+
+    pid_t left_pid = fork();
+    if (left_pid < 0) {
+        close(pipe_fd[0]);
+        close(pipe_fd[1]);
+        std::cout << "Failed to execute command\n";
+        return true;
+    }
+
+    if (left_pid == 0) {
+        // 左子进程：stdout -> 管道写端，执行 left 命令。
+        if (dup2(pipe_fd[1], STDOUT_FILENO) < 0) {
+            _exit(1);
+        }
+        close(pipe_fd[0]);
+        close(pipe_fd[1]);
+
+        std::vector<char*> left_argv;
+        left_argv.reserve(left.size() + 1);
+        for (const auto& token : left) {
+            left_argv.push_back(const_cast<char*>(token.c_str()));
+        }
+        left_argv.push_back(nullptr);
+
+        execvp(left_argv[0], left_argv.data());
+        std::cerr << "Command not found\n";
+        _exit(1);
+    }
+
+    pid_t right_pid = fork();
+    if (right_pid < 0) {
+        close(pipe_fd[0]);
+        close(pipe_fd[1]);
+        waitpid(left_pid, nullptr, 0);
+        std::cout << "Failed to execute command\n";
+        return true;
+    }
+
+    if (right_pid == 0) {
+        // 右子进程：stdin <- 管道读端，stdout -> 目标文件，执行 right 命令。
+        int flags = O_WRONLY | O_CREAT | (append_mode ? O_APPEND : O_TRUNC);
+        int fd = open(output_file.c_str(), flags, 0644);
+        if (fd < 0) {
+            std::cerr << "Failed to execute command\n";
+            _exit(1);
+        }
+
+        if (dup2(pipe_fd[0], STDIN_FILENO) < 0 || dup2(fd, STDOUT_FILENO) < 0) {
+            close(fd);
+            _exit(1);
+        }
+        close(fd);
+        close(pipe_fd[0]);
+        close(pipe_fd[1]);
+
+        std::vector<char*> right_argv;
+        right_argv.reserve(right.size() + 1);
+        for (const auto& token : right) {
+            right_argv.push_back(const_cast<char*>(token.c_str()));
+        }
+        right_argv.push_back(nullptr);
+
+        execvp(right_argv[0], right_argv.data());
+        std::cerr << "Command not found\n";
+        _exit(1);
+    }
+
+    // 父进程关闭管道端并等待两个子进程，保证 Shell 稳定返回提示符。
+    close(pipe_fd[0]);
+    close(pipe_fd[1]);
+    waitpid(left_pid, nullptr, 0);
+    waitpid(right_pid, nullptr, 0);
+    return true;
+}
+
 bool executeRedirectCommand(const std::vector<std::string>& tokens) {
     // 只在包含输出重定向符时处理，否则交回普通流程。
     const int gt_count = static_cast<int>(std::count(tokens.begin(), tokens.end(), ">"));

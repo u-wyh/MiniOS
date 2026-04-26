@@ -23,6 +23,11 @@ void Shell::run() {
             continue;
         }
 
+        // 优先处理“单管道 + 输出重定向”组合命令。
+        if (executePipeRedirectCommand(tokens)) {
+            continue;
+        }
+
         // 先处理输入重定向命令，处理后直接进入下一轮提示符。
         if (executeInputRedirectCommand(tokens)) {
             continue;

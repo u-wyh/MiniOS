@@ -13,6 +13,9 @@ void executeExternalCommand(const std::vector<std::string>& tokens);
 // 执行单管道命令：返回 true 表示本次输入属于管道场景并已处理。
 bool executePipeCommand(const std::vector<std::string>& tokens);
 
+// 执行“单管道 + 输出重定向”命令：返回 true 表示本次输入已处理。
+bool executePipeRedirectCommand(const std::vector<std::string>& tokens);
+
 // 执行输出重定向命令：返回 true 表示本次输入属于重定向场景并已处理。
 bool executeRedirectCommand(const std::vector<std::string>& tokens);
 
