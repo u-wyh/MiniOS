@@ -3,12 +3,16 @@
 
 #include <iostream>
 #include <sstream>
+#include <sys/wait.h>
 
 void Shell::run() {
     std::string input;
 
     // 主循环：持续读取输入并分发给命令模块处理。
     while (true) {
+        // 非阻塞回收已结束的后台子进程，避免僵尸进程累积。
+        while (waitpid(-1, nullptr, WNOHANG) > 0) {}
+
         std::cout << "MiniOS> ";
         std::getline(std::cin, input);
 
@@ -20,6 +24,11 @@ void Shell::run() {
         // 先做最小解析：按空白切分，空输入直接进入下一轮。
         const std::vector<std::string> tokens = parseInput(input);
         if (tokens.empty()) {
+            continue;
+        }
+
+        // 优先处理后台命令，避免被其他执行分支误判。
+        if (executeBackgroundCommand(tokens)) {
             continue;
         }
 

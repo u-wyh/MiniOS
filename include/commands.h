@@ -22,4 +22,7 @@ bool executeRedirectCommand(const std::vector<std::string>& tokens);
 // 执行输入重定向命令：返回 true 表示本次输入属于重定向场景并已处理。
 bool executeInputRedirectCommand(const std::vector<std::string>& tokens);
 
+// 执行后台命令：返回 true 表示本次输入属于后台场景并已处理。
+bool executeBackgroundCommand(const std::vector<std::string>& tokens);
+
 #endif

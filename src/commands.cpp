@@ -493,3 +493,51 @@ bool executeInputRedirectCommand(const std::vector<std::string>& tokens) {
     }
     return true;
 }
+
+bool executeBackgroundCommand(const std::vector<std::string>& tokens) {
+    // 仅当命令以 '&' 结尾时处理，否则交回普通流程。
+    if (tokens.empty() || tokens.back() != "&") {
+        return false;
+    }
+
+    // 本轮只支持单命令后台运行，不支持多个 '&' 或与管道/重定向混用。
+    if (std::count(tokens.begin(), tokens.end(), "&") != 1 ||
+        std::count(tokens.begin(), tokens.end(), "|") > 0 ||
+        std::count(tokens.begin(), tokens.end(), "<") > 0 ||
+        std::count(tokens.begin(), tokens.end(), ">") > 0 ||
+        std::count(tokens.begin(), tokens.end(), ">>") > 0 ||
+        tokens.size() == 1) {
+        std::cout << "Invalid background command\n";
+        return true;
+    }
+
+    const std::vector<std::string> real_cmd(tokens.begin(), tokens.end() - 1);
+    if (real_cmd.empty()) {
+        std::cout << "Invalid background command\n";
+        return true;
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        std::cout << "Failed to execute command\n";
+        return true;
+    }
+
+    if (pid == 0) {
+        // 子进程直接执行真实命令；失败时给出清晰提示并退出。
+        std::vector<char*> argv;
+        argv.reserve(real_cmd.size() + 1);
+        for (const auto& token : real_cmd) {
+            argv.push_back(const_cast<char*>(token.c_str()));
+        }
+        argv.push_back(nullptr);
+
+        execvp(argv[0], argv.data());
+        std::cerr << "Command not found\n";
+        _exit(1);
+    }
+
+    // 父进程不阻塞等待，立即返回提示符并打印后台任务 pid。
+    std::cout << "[background pid] " << pid << '\n';
+    return true;
+}
