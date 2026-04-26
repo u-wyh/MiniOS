@@ -11,8 +11,8 @@
 namespace {
 
 // MiniOS 内部任务表（PCB 列表）与自增任务编号。
-std::vector<TaskControlBlock> g_tasks;
-int g_nextTaskId = 1;
+std::vector<TCB> g_tasks;
+int g_nextTid = 1;
 
 // 把命令 token 拼成可读字符串，便于 task list 展示。
 std::string joinCommand(const std::vector<std::string>& commandTokens) {
@@ -27,29 +27,29 @@ std::string joinCommand(const std::vector<std::string>& commandTokens) {
 }
 
 // 根据 waitpid 状态码更新任务状态，仅处理仍在 Running 的任务。
-void updateTaskStateByStatus(TaskControlBlock& task, int status) {
-    if (task.state != "Running") {
+void updateTaskStateByStatus(TCB& task, int status) {
+    if (task.state != TaskState::Running) {
         return;
     }
     if (WIFEXITED(status)) {
-        task.state = (WEXITSTATUS(status) == 0) ? "Done" : "Failed";
+        task.state = (WEXITSTATUS(status) == 0) ? TaskState::Done : TaskState::Failed;
         return;
     }
     if (WIFSIGNALED(status)) {
-        task.state = (WTERMSIG(status) == SIGTERM) ? "Killed" : "Failed";
+        task.state = (WTERMSIG(status) == SIGTERM) ? TaskState::Killed : TaskState::Failed;
     }
 }
 
 void refreshTaskStates() {
     // 轮询所有 Running 任务，非阻塞更新状态。
     for (auto& task : g_tasks) {
-        if (task.state != "Running") {
+        if (task.state != TaskState::Running) {
             continue;
         }
 
         int status = 0;
-        const pid_t result = waitpid(task.pid, &status, WNOHANG);
-        if (result == task.pid) {
+        const pid_t result = waitpid(task.hostPid, &status, WNOHANG);
+        if (result == task.hostPid) {
             updateTaskStateByStatus(task, status);
         }
     }
@@ -75,69 +75,87 @@ bool spawnTaskInternal(const std::vector<std::string>& commandTokens, int& taskI
         _exit(1);
     }
 
-    TaskControlBlock task{};
-    task.taskId = g_nextTaskId++;
-    task.pid = pid;
+    TCB task{};
+    task.tid = g_nextTid++;
+    task.hostPid = pid;
     task.command = joinCommand(commandTokens);
-    task.state = "Running";
+    task.state = TaskState::Running;
     g_tasks.push_back(task);
-    taskId = task.taskId;
+    taskId = task.tid;
     return true;
 }
 
 // 打印任务表前先刷新状态，确保 Running/Done 等信息尽量实时。
 void listTasks() {
+    const auto stateToString = [](TaskState state) -> const char* {
+        switch (state) {
+            case TaskState::Ready:
+                return "Ready";
+            case TaskState::Running:
+                return "Running";
+            case TaskState::Done:
+                return "Done";
+            case TaskState::Killed:
+                return "Killed";
+            case TaskState::Failed:
+                return "Failed";
+            default:
+                return "Unknown";
+        }
+    };
+
     refreshTaskStates();
 
-    std::cout << "ID   PID    STATE      COMMAND\n";
+    std::cout << "TID   PID    STATE      COMMAND\n";
     for (const auto& task : g_tasks) {
-        std::cout << task.taskId << "    " << task.pid << "   " << task.state << "    " << task.command << '\n';
+        std::cout << task.tid << "    " << task.hostPid << "   " << stateToString(task.state)
+                  << "    " << task.command << '\n';
     }
 }
 
-// 按 task id 终止任务：只允许结束 Running 任务。
+// 按 tid 终止任务：只允许结束 Running 任务。
 void killTaskById(const std::string& taskIdText) {
     refreshTaskStates();
 
-    int taskId = -1;
+    int tid = -1;
     try {
-        taskId = std::stoi(taskIdText);
+        tid = std::stoi(taskIdText);
     } catch (...) {
         std::cout << "Invalid task id\n";
         return;
     }
 
-    auto it = std::find_if(g_tasks.begin(), g_tasks.end(), [taskId](const TaskControlBlock& task) {
-        return task.taskId == taskId;
+    auto it = std::find_if(g_tasks.begin(), g_tasks.end(), [tid](const TCB& task) {
+        return task.tid == tid;
     });
     if (it == g_tasks.end()) {
         std::cout << "Task not found\n";
         return;
     }
 
-    if (it->state != "Running") {
+    if (it->state != TaskState::Running) {
         std::cout << "Task is not running\n";
         return;
     }
 
-    if (kill(it->pid, SIGTERM) != 0) {
+    if (kill(it->hostPid, SIGTERM) != 0) {
         std::cout << "Failed to kill task\n";
         return;
     }
-    it->state = "Killed";
+    it->state = TaskState::Killed;
 }
 
-// 判断给定字符串是否对应当前 PCB 中存在的 task id。
+// 判断给定字符串是否对应当前 PCB 中存在的 tid。
 bool hasTaskId(const std::string& taskIdText) {
-    int taskId = -1;
+    int tid = -1;
     try {
-        taskId = std::stoi(taskIdText);
+        tid = std::stoi(taskIdText);
     } catch (...) {
         return false;
     }
 
-    const auto it = std::find_if(g_tasks.begin(), g_tasks.end(), [taskId](const TaskControlBlock& task) {
-        return task.taskId == taskId;
+    const auto it = std::find_if(g_tasks.begin(), g_tasks.end(), [tid](const TCB& task) {
+        return task.tid == tid;
     });
     return it != g_tasks.end();
 }
@@ -152,18 +170,19 @@ bool executeTaskCommand(const std::vector<std::string>& tokens) {
 
     const std::string& command = tokens[0];
     if (command == "run") {
-        if (tokens.size() < 2) {
-            std::cout << "Usage: run <command>\n";
+        // 本轮按规范使用 run <command> & 创建后台任务。
+        if (tokens.size() < 3 || tokens.back() != "&") {
+            std::cout << "Usage: run <command> &\n";
             return true;
         }
-        const std::vector<std::string> commandTokens(tokens.begin() + 1, tokens.end());
+        const std::vector<std::string> commandTokens(tokens.begin() + 1, tokens.end() - 1);
         int taskId = 0;
         pid_t pid = 0;
         if (!spawnTaskInternal(commandTokens, taskId, pid)) {
             std::cout << "Failed to spawn task\n";
             return true;
         }
-        std::cout << "[task spawned] id=" << taskId << " pid=" << pid << '\n';
+        std::cout << "[started task] id=" << taskId << " pid=" << pid << '\n';
         return true;
     }
 
@@ -195,7 +214,7 @@ bool executeTaskCommand(const std::vector<std::string>& tokens) {
 void onProcessReaped(pid_t pid, int status) {
     // Shell 统一回收子进程后，任务表按 pid 同步状态。
     for (auto& task : g_tasks) {
-        if (task.pid == pid) {
+        if (task.hostPid == pid) {
             updateTaskStateByStatus(task, status);
             break;
         }

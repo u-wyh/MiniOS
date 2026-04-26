@@ -6,11 +6,19 @@
 
 #include <sys/types.h>
 
-struct TaskControlBlock {
-    int taskId;
-    pid_t pid;
+enum class TaskState {
+    Ready,
+    Running,
+    Done,
+    Killed,
+    Failed
+};
+
+struct TCB {
+    int tid;
+    pid_t hostPid;
     std::string command;
-    std::string state;
+    TaskState state;
 };
 
 // 处理无前缀 Linux 风格任务命令（run/ps/kill），返回是否已处理。

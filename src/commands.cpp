@@ -23,6 +23,10 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
         // help 同时说明内建命令和可直接执行的系统命令。
         std::cout << "Built-in commands:\n";
         std::cout << "help pwd echo clear exit cd run ps kill\n";
+        std::cout << "Task manager style:\n";
+        std::cout << "run <command> &\n";
+        std::cout << "ps\n";
+        std::cout << "kill <tid>\n";
         std::cout << "Other system commands can be executed directly, e.g.:\n";
         std::cout << "ls\n";
         std::cout << "cat readme.md\n";
@@ -517,10 +521,20 @@ bool executeBackgroundCommand(const std::vector<std::string>& tokens) {
         return true;
     }
 
-    const std::vector<std::string> real_cmd(tokens.begin(), tokens.end() - 1);
-    if (real_cmd.empty()) {
+    const std::vector<std::string> raw_cmd(tokens.begin(), tokens.end() - 1);
+    if (raw_cmd.empty()) {
         std::cout << "Invalid background command\n";
         return true;
+    }
+
+    // Linux 风格：run <command> & 进入 MiniOS TCB 任务管理。
+    std::vector<std::string> real_cmd = raw_cmd;
+    if (raw_cmd[0] == "run") {
+        if (raw_cmd.size() < 2) {
+            std::cout << "Usage: run <command> &\n";
+            return true;
+        }
+        real_cmd.assign(raw_cmd.begin() + 1, raw_cmd.end());
     }
 
     int taskId = 0;
@@ -530,7 +544,11 @@ bool executeBackgroundCommand(const std::vector<std::string>& tokens) {
         return true;
     }
 
-    // 父进程不阻塞等待，立即返回提示符并打印后台任务 pid。
-    std::cout << "[background pid] " << pid << " [task id] " << taskId << '\n';
+    // 父进程不阻塞等待，立即返回提示符并打印任务信息。
+    if (raw_cmd[0] == "run") {
+        std::cout << "[started task] id=" << taskId << " pid=" << pid << '\n';
+    } else {
+        std::cout << "[background pid] " << pid << " [task id] " << taskId << '\n';
+    }
     return true;
 }
