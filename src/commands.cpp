@@ -297,3 +297,79 @@ bool executeRedirectCommand(const std::vector<std::string>& tokens) {
     }
     return true;
 }
+
+bool executeInputRedirectCommand(const std::vector<std::string>& tokens) {
+    // 只在包含输入重定向符时处理，否则交回普通流程。
+    const int input_count = static_cast<int>(std::count(tokens.begin(), tokens.end(), "<"));
+    if (input_count == 0) {
+        return false;
+    }
+
+    // 本轮只支持单次输入重定向，且不支持与管道或输出重定向混用。
+    if (input_count != 1 ||
+        std::count(tokens.begin(), tokens.end(), "|") > 0 ||
+        std::count(tokens.begin(), tokens.end(), ">") > 0 ||
+        std::count(tokens.begin(), tokens.end(), ">>") > 0) {
+        std::cout << "Invalid redirect command\n";
+        return true;
+    }
+
+    // 找到输入重定向符并拆分左侧命令与右侧输入文件。
+    const auto op_it = std::find(tokens.begin(), tokens.end(), "<");
+    const std::size_t op_pos = static_cast<std::size_t>(op_it - tokens.begin());
+
+    if (op_pos == 0 || op_pos >= tokens.size() - 1) {
+        std::cout << "Invalid redirect command\n";
+        return true;
+    }
+    if (op_pos != tokens.size() - 2) {
+        std::cout << "Invalid redirect command\n";
+        return true;
+    }
+
+    const std::vector<std::string> left(tokens.begin(), tokens.begin() + static_cast<long>(op_pos));
+    const std::string& input_file = tokens[op_pos + 1];
+    if (left.empty() || input_file.empty()) {
+        std::cout << "Invalid redirect command\n";
+        return true;
+    }
+
+    // fork 子进程执行重定向：子进程重定向 stdin 后再 execvp 命令。
+    pid_t pid = fork();
+    if (pid < 0) {
+        std::cout << "Failed to execute command\n";
+        return true;
+    }
+
+    if (pid == 0) {
+        int fd = open(input_file.c_str(), O_RDONLY);
+        if (fd < 0) {
+            std::cerr << "Input file not found\n";
+            _exit(1);
+        }
+
+        if (dup2(fd, STDIN_FILENO) < 0) {
+            close(fd);
+            std::cerr << "Failed to execute command\n";
+            _exit(1);
+        }
+        close(fd);
+
+        std::vector<char*> argv;
+        argv.reserve(left.size() + 1);
+        for (const auto& token : left) {
+            argv.push_back(const_cast<char*>(token.c_str()));
+        }
+        argv.push_back(nullptr);
+
+        execvp(argv[0], argv.data());
+        std::cerr << "Command not found\n";
+        _exit(1);
+    }
+
+    int status = 0;
+    if (waitpid(pid, &status, 0) < 0) {
+        std::cout << "Failed to execute command\n";
+    }
+    return true;
+}

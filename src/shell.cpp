@@ -23,7 +23,12 @@ void Shell::run() {
             continue;
         }
 
-        // 先处理输出重定向命令，处理后直接进入下一轮提示符。
+        // 先处理输入重定向命令，处理后直接进入下一轮提示符。
+        if (executeInputRedirectCommand(tokens)) {
+            continue;
+        }
+
+        // 再处理输出重定向命令，处理后直接进入下一轮提示符。
         if (executeRedirectCommand(tokens)) {
             continue;
         }
