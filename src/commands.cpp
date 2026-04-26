@@ -1,4 +1,5 @@
 #include "commands.h"
+#include "task.h"
 
 #include <cstdlib>
 #include <filesystem>
@@ -21,7 +22,7 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
     if (command == "help") {
         // help 同时说明内建命令和可直接执行的系统命令。
         std::cout << "Built-in commands:\n";
-        std::cout << "help pwd echo clear exit cd\n";
+        std::cout << "help pwd echo clear exit cd run ps kill\n";
         std::cout << "Other system commands can be executed directly, e.g.:\n";
         std::cout << "ls\n";
         std::cout << "cat readme.md\n";
@@ -82,6 +83,11 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
     if (command == "exit") {
         // 通知 Shell 主循环退出。
         shouldExit = true;
+        return true;
+    }
+
+    // 无前缀 Linux 风格任务命令入口（run/ps/kill），并兼容系统同名命令回退。
+    if (executeTaskCommand(tokens)) {
         return true;
     }
 
@@ -517,27 +523,14 @@ bool executeBackgroundCommand(const std::vector<std::string>& tokens) {
         return true;
     }
 
-    pid_t pid = fork();
-    if (pid < 0) {
+    int taskId = 0;
+    pid_t pid = 0;
+    if (!spawnManagedTask(real_cmd, taskId, pid)) {
         std::cout << "Failed to execute command\n";
         return true;
     }
 
-    if (pid == 0) {
-        // 子进程直接执行真实命令；失败时给出清晰提示并退出。
-        std::vector<char*> argv;
-        argv.reserve(real_cmd.size() + 1);
-        for (const auto& token : real_cmd) {
-            argv.push_back(const_cast<char*>(token.c_str()));
-        }
-        argv.push_back(nullptr);
-
-        execvp(argv[0], argv.data());
-        std::cerr << "Command not found\n";
-        _exit(1);
-    }
-
     // 父进程不阻塞等待，立即返回提示符并打印后台任务 pid。
-    std::cout << "[background pid] " << pid << '\n';
+    std::cout << "[background pid] " << pid << " [task id] " << taskId << '\n';
     return true;
 }

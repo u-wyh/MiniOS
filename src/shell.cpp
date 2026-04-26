@@ -1,5 +1,6 @@
 #include "shell.h"
 #include "commands.h"
+#include "task.h"
 
 #include <iostream>
 #include <sstream>
@@ -11,7 +12,11 @@ void Shell::run() {
     // 主循环：持续读取输入并分发给命令模块处理。
     while (true) {
         // 非阻塞回收已结束的后台子进程，避免僵尸进程累积。
-        while (waitpid(-1, nullptr, WNOHANG) > 0) {}
+        int status = 0;
+        pid_t pid = 0;
+        while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+            onProcessReaped(pid, status);
+        }
 
         std::cout << "MiniOS> ";
         std::getline(std::cin, input);
