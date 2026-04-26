@@ -1,4 +1,5 @@
 #include "task.h"
+#include "scheduler.h"
 
 #include <algorithm>
 #include <csignal>
@@ -33,10 +34,14 @@ void updateTaskStateByStatus(TCB& task, int status) {
     }
     if (WIFEXITED(status)) {
         task.state = (WEXITSTATUS(status) == 0) ? TaskState::Done : TaskState::Failed;
+        // 任务不可再运行，需从调度器就绪队列移除。
+        getScheduler().removeTask(task.tid);
         return;
     }
     if (WIFSIGNALED(status)) {
         task.state = (WTERMSIG(status) == SIGTERM) ? TaskState::Killed : TaskState::Failed;
+        // 信号终止同样要从调度视图中删除。
+        getScheduler().removeTask(task.tid);
     }
 }
 
@@ -82,6 +87,8 @@ bool spawnTaskInternal(const std::vector<std::string>& commandTokens, int& taskI
     task.state = TaskState::Running;
     g_tasks.push_back(task);
     taskId = task.tid;
+    // 新任务创建成功后加入调度器 ready queue。
+    getScheduler().addTask(task.tid);
     return true;
 }
 
@@ -143,6 +150,8 @@ void killTaskById(const std::string& taskIdText) {
         return;
     }
     it->state = TaskState::Killed;
+    // kill 成功后立即从调度器移除，避免后续继续被 tick 选择。
+    getScheduler().removeTask(it->tid);
 }
 
 // 判断给定字符串是否对应当前 PCB 中存在的 tid。

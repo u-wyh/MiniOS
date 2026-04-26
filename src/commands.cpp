@@ -1,4 +1,5 @@
 #include "commands.h"
+#include "scheduler.h"
 #include "task.h"
 
 #include <cstdlib>
@@ -22,11 +23,12 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
     if (command == "help") {
         // help 同时说明内建命令和可直接执行的系统命令。
         std::cout << "Built-in commands:\n";
-        std::cout << "help pwd echo clear exit cd run ps kill\n";
+        std::cout << "help pwd echo clear exit cd run ps kill sched\n";
         std::cout << "Task manager style:\n";
         std::cout << "run <command> &\n";
         std::cout << "ps\n";
         std::cout << "kill <tid>\n";
+        std::cout << "sched status|tick|policy rr\n";
         std::cout << "Other system commands can be executed directly, e.g.:\n";
         std::cout << "ls\n";
         std::cout << "cat readme.md\n";
@@ -87,6 +89,11 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
     if (command == "exit") {
         // 通知 Shell 主循环退出。
         shouldExit = true;
+        return true;
+    }
+
+    // sched 属于 MiniOS 扩展命令，优先在内建分发层处理。
+    if (executeSchedulerCommand(tokens)) {
         return true;
     }
 
