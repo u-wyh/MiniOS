@@ -1,4 +1,5 @@
 #include "commands.h"
+#include "memory.h"
 #include "semaphore.h"
 #include "scheduler.h"
 #include "task.h"
@@ -24,7 +25,7 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
     if (command == "help") {
         // help 同时说明内建命令和可直接执行的系统命令。
         std::cout << "Built-in commands:\n";
-        std::cout << "help pwd echo clear exit cd run ps kill block wake sched sem\n";
+        std::cout << "help pwd echo clear exit cd run ps kill block wake sched sem mem\n";
         std::cout << "Task manager style:\n";
         std::cout << "run <command> &\n";
         std::cout << "ps\n";
@@ -36,6 +37,9 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
         std::cout << "sem wait <name>\n";
         std::cout << "sem post <name>\n";
         std::cout << "sem list\n";
+        std::cout << "mem alloc <size>\n";
+        std::cout << "mem free <id>\n";
+        std::cout << "mem stat\n";
         std::cout << "Other system commands can be executed directly, e.g.:\n";
         std::cout << "ls\n";
         std::cout << "cat readme.md\n";
@@ -105,6 +109,10 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
     }
 
     if (executeSemaphoreCommand(tokens)) {
+        return true;
+    }
+
+    if (executeMemoryCommand(tokens)) {
         return true;
     }
 
