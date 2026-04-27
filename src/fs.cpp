@@ -1,6 +1,7 @@
 #include "fs.h"
 
 #include <algorithm>
+#include <iomanip>
 #include <iostream>
 
 bool FileSystem::touch(const std::string& name) {
@@ -57,6 +58,27 @@ bool FileSystem::cat(const std::string& name) const {
     return true;
 }
 
+bool FileSystem::stat(const std::string& name) const {
+    // 查看文件元信息：输出名称和内容长度，不存在则提示错误。
+    const auto it = std::find_if(files.begin(), files.end(), [&](const FileNode& file) {
+        return file.name == name;
+    });
+
+    if (it == files.end()) {
+        std::cout << "File not found\n";
+        return false;
+    }
+
+    std::cout << std::left
+              << std::setw(20) << "NAME"
+              << std::setw(10) << "SIZE"
+              << '\n';
+    std::cout << std::setw(20) << it->name
+              << std::setw(10) << it->content.size()
+              << '\n';
+    return true;
+}
+
 bool FileSystem::remove(const std::string& name) {
     // 删除文件：存在则删除，缺失则提示并返回失败。
     const auto it = std::find_if(files.begin(), files.end(), [&](const FileNode& file) {
@@ -82,7 +104,17 @@ void FileSystem::ls() const {
     }
 
     std::sort(names.begin(), names.end());
+    std::cout << std::left
+              << std::setw(20) << "NAME"
+              << std::setw(10) << "SIZE"
+              << '\n';
     for (const auto& name : names) {
-        std::cout << name << '\n';
+        const auto it = std::find_if(files.begin(), files.end(), [&](const FileNode& file) {
+            return file.name == name;
+        });
+        const std::size_t size = (it == files.end()) ? 0 : it->content.size();
+        std::cout << std::setw(20) << name
+                  << std::setw(10) << size
+                  << '\n';
     }
 }

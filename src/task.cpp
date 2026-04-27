@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <csignal>
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <sys/wait.h>
@@ -76,7 +77,7 @@ bool spawnTaskInternal(const std::vector<std::string>& commandTokens, int& taskI
         argv.push_back(nullptr);
 
         execvp(argv[0], argv.data());
-        std::cerr << "Command not found\n";
+        std::cerr << "Unknown command\n";
         _exit(1);
     }
 
@@ -115,10 +116,16 @@ void listTasks() {
 
     refreshTaskStates();
 
-    std::cout << "TID   PID    STATE      COMMAND\n";
+    std::cout << std::left
+              << std::setw(6) << "TID"
+              << std::setw(8) << "PID"
+              << std::setw(10) << "STATE"
+              << "COMMAND\n";
     for (const auto& task : g_tasks) {
-        std::cout << task.tid << "    " << task.hostPid << "   " << stateToString(task.state)
-                  << "    " << task.command << '\n';
+        std::cout << std::setw(6) << task.tid
+                  << std::setw(8) << task.hostPid
+                  << std::setw(10) << stateToString(task.state)
+                  << task.command << '\n';
     }
 }
 
@@ -130,7 +137,7 @@ void killTaskById(const std::string& taskIdText) {
     try {
         tid = std::stoi(taskIdText);
     } catch (...) {
-        std::cout << "Invalid task id\n";
+        std::cout << "Invalid argument\n";
         return;
     }
 
@@ -286,7 +293,7 @@ bool executeTaskCommand(const std::vector<std::string>& tokens) {
         try {
             tid = std::stoi(tokens[1]);
         } catch (...) {
-            std::cout << "Invalid task id\n";
+            std::cout << "Invalid argument\n";
             return true;
         }
         doBlockTaskByTid(tid);
@@ -302,7 +309,7 @@ bool executeTaskCommand(const std::vector<std::string>& tokens) {
         try {
             tid = std::stoi(tokens[1]);
         } catch (...) {
-            std::cout << "Invalid task id\n";
+            std::cout << "Invalid argument\n";
             return true;
         }
         doWakeTaskByTid(tid);
@@ -349,7 +356,7 @@ void onTaskScheduled(int prevTid, int nextTid) {
 
 bool blockTaskByTid(int tid) {
     if (tid <= 0) {
-        std::cout << "Invalid task id\n";
+        std::cout << "Invalid argument\n";
         return false;
     }
     return doBlockTaskByTid(tid);
@@ -357,7 +364,7 @@ bool blockTaskByTid(int tid) {
 
 bool wakeTaskByTid(int tid) {
     if (tid <= 0) {
-        std::cout << "Invalid task id\n";
+        std::cout << "Invalid argument\n";
         return false;
     }
     return doWakeTaskByTid(tid);

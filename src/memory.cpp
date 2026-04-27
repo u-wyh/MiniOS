@@ -1,5 +1,6 @@
 #include "memory.h"
 
+#include <iomanip>
 #include <iostream>
 #include <string>
 
@@ -67,9 +68,14 @@ void MemoryManager::stat() const {
     std::cout << "Used : " << usedSize << '\n';
     std::cout << "Free : " << (totalSize - usedSize) << '\n';
     std::cout << "\nBlocks:\n";
-    std::cout << "ID   SIZE   STATE\n";
+    std::cout << std::left
+              << std::setw(6) << "ID"
+              << std::setw(10) << "SIZE"
+              << "STATE\n";
     for (const auto& block : blocks) {
-        std::cout << block.id << "    " << block.size << "    " << (block.used ? "Used" : "Free") << '\n';
+        std::cout << std::setw(6) << block.id
+                  << std::setw(10) << block.size
+                  << (block.used ? "Used" : "Free") << '\n';
     }
 }
 
@@ -102,12 +108,12 @@ bool executeMemoryCommand(const std::vector<std::string>& tokens) {
         try {
             size = std::stoll(tokens[2]);
         } catch (...) {
-            std::cout << "Invalid allocation size\n";
+            std::cout << "Invalid argument\n";
             return true;
         }
 
         if (size <= 0) {
-            std::cout << "Invalid allocation size\n";
+            std::cout << "Invalid argument\n";
             return true;
         }
 
@@ -131,12 +137,12 @@ bool executeMemoryCommand(const std::vector<std::string>& tokens) {
         try {
             id = std::stoi(tokens[2]);
         } catch (...) {
-            std::cout << "Invalid block id\n";
+            std::cout << "Invalid argument\n";
             return true;
         }
 
         if (!g_memoryManager.freeBlock(id)) {
-            std::cout << "Invalid block id\n";
+            std::cout << "Invalid argument\n";
             return true;
         }
         std::cout << "freed block id=" << id << '\n';

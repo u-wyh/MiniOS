@@ -19,6 +19,8 @@ public:
     bool write(const std::string& name, const std::string& text);
     // 输出文件内容到标准输出；不存在时输出错误提示。
     bool cat(const std::string& name) const;
+    // 输出单个文件元信息（文件名与内容长度）。
+    bool stat(const std::string& name) const;
     // 删除指定文件；不存在时输出错误提示。
     bool remove(const std::string& name);
     // 列出当前 MiniFS 中的所有文件名。

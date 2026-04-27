@@ -29,34 +29,37 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
     const std::string& command = tokens[0];
 
     if (command == "help") {
-        // help 同时说明内建命令和可直接执行的系统命令。
-        std::cout << "Built-in commands:\n";
-        std::cout << "help pwd echo clear exit cd run ps kill block wake sched sem mem\n";
-        std::cout << "touch write cat ls rm hostls\n";
-        std::cout << "Task manager style:\n";
+        // Phase1 毕业版：按模块分类展示全部命令入口。
+        std::cout << "[Shell]\n";
+        std::cout << "help pwd cd echo clear exit hostls\n";
+        std::cout << "\n[Task]\n";
         std::cout << "run <command> &\n";
         std::cout << "ps\n";
         std::cout << "kill <tid>\n";
         std::cout << "block <tid>\n";
         std::cout << "wake <tid>\n";
-        std::cout << "sched status|tick|policy rr\n";
+        std::cout << "\n[Scheduler]\n";
+        std::cout << "sched status\n";
+        std::cout << "sched tick\n";
+        std::cout << "sched policy rr\n";
+        std::cout << "\n[Sync]\n";
         std::cout << "sem create <name> <count>\n";
         std::cout << "sem wait <name>\n";
         std::cout << "sem post <name>\n";
         std::cout << "sem list\n";
+        std::cout << "\n[Memory]\n";
         std::cout << "mem alloc <size>\n";
         std::cout << "mem free <id>\n";
         std::cout << "mem stat\n";
+        std::cout << "\n[FileSystem]\n";
         std::cout << "touch <file>\n";
         std::cout << "write <file> <text>\n";
         std::cout << "cat <file>\n";
         std::cout << "ls\n";
+        std::cout << "stat <file>\n";
         std::cout << "rm <file>\n";
-        std::cout << "hostls [args]\n";
-        std::cout << "Other system commands can be executed directly, e.g.:\n";
-        std::cout << "hostls\n";
-        std::cout << "uname -a\n";
-        std::cout << "python3 --version\n";
+        std::cout << "\n[External]\n";
+        std::cout << "Any other system command, e.g. uname -a\n";
         return true;
     }
 
@@ -116,8 +119,8 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
     }
 
     if (command == "touch") {
-        if (tokens.size() < 2) {
-            std::cout << "Usage: touch <file>\n";
+        if (tokens.size() != 2) {
+            std::cout << "Invalid argument\n";
             return true;
         }
 
@@ -127,7 +130,7 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
 
     if (command == "write") {
         if (tokens.size() < 3) {
-            std::cout << "Usage: write <file> <text>\n";
+            std::cout << "Invalid argument\n";
             return true;
         }
 
@@ -145,8 +148,8 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
     }
 
     if (command == "cat") {
-        if (tokens.size() < 2) {
-            std::cout << "Usage: cat <file>\n";
+        if (tokens.size() != 2) {
+            std::cout << "Invalid argument\n";
             return true;
         }
 
@@ -155,13 +158,27 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
     }
 
     if (command == "ls") {
+        if (tokens.size() != 1) {
+            std::cout << "Invalid argument\n";
+            return true;
+        }
         g_fileSystem.ls();
         return true;
     }
 
+    if (command == "stat") {
+        if (tokens.size() != 2) {
+            std::cout << "Invalid argument\n";
+            return true;
+        }
+
+        g_fileSystem.stat(tokens[1]);
+        return true;
+    }
+
     if (command == "rm") {
-        if (tokens.size() < 2) {
-            std::cout << "Usage: rm <file>\n";
+        if (tokens.size() != 2) {
+            std::cout << "Invalid argument\n";
             return true;
         }
 
@@ -180,7 +197,11 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
         return true;
     }
 
-    // sched 属于 MiniOS 扩展命令，优先在内建分发层处理。
+    // 统一分发顺序：Task -> Scheduler -> Sync -> Memory。
+    if (executeTaskCommand(tokens)) {
+        return true;
+    }
+
     if (executeSchedulerCommand(tokens)) {
         return true;
     }
@@ -190,11 +211,6 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
     }
 
     if (executeMemoryCommand(tokens)) {
-        return true;
-    }
-
-    // 无前缀 Linux 风格任务命令入口（run/ps/kill），并兼容系统同名命令回退。
-    if (executeTaskCommand(tokens)) {
         return true;
     }
 
@@ -226,7 +242,7 @@ void executeExternalCommand(const std::vector<std::string>& tokens) {
     if (pid == 0) {
         // 子进程调用 execvp，返回则代表命令不存在或执行失败。
         execvp(argv[0], argv.data());
-        std::cerr << "Command not found\n";
+        std::cerr << "Unknown command\n";
         _exit(1);
     }
 
@@ -296,7 +312,7 @@ bool executePipeCommand(const std::vector<std::string>& tokens) {
         left_argv.push_back(nullptr);
 
         execvp(left_argv[0], left_argv.data());
-        std::cerr << "Command not found\n";
+        std::cerr << "Unknown command\n";
         _exit(1);
     }
 
@@ -323,7 +339,7 @@ bool executePipeCommand(const std::vector<std::string>& tokens) {
         right_argv.push_back(nullptr);
 
         execvp(right_argv[0], right_argv.data());
-        std::cerr << "Command not found\n";
+        std::cerr << "Unknown command\n";
         _exit(1);
     }
 
@@ -405,7 +421,7 @@ bool executePipeRedirectCommand(const std::vector<std::string>& tokens) {
         left_argv.push_back(nullptr);
 
         execvp(left_argv[0], left_argv.data());
-        std::cerr << "Command not found\n";
+        std::cerr << "Unknown command\n";
         _exit(1);
     }
 
@@ -443,7 +459,7 @@ bool executePipeRedirectCommand(const std::vector<std::string>& tokens) {
         right_argv.push_back(nullptr);
 
         execvp(right_argv[0], right_argv.data());
-        std::cerr << "Command not found\n";
+        std::cerr << "Unknown command\n";
         _exit(1);
     }
 
@@ -520,7 +536,7 @@ bool executeRedirectCommand(const std::vector<std::string>& tokens) {
         argv.push_back(nullptr);
 
         execvp(argv[0], argv.data());
-        std::cerr << "Command not found\n";
+        std::cerr << "Unknown command\n";
         _exit(1);
     }
 
@@ -596,7 +612,7 @@ bool executeInputRedirectCommand(const std::vector<std::string>& tokens) {
         argv.push_back(nullptr);
 
         execvp(argv[0], argv.data());
-        std::cerr << "Command not found\n";
+        std::cerr << "Unknown command\n";
         _exit(1);
     }
 

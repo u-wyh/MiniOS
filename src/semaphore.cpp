@@ -3,6 +3,7 @@
 #include "scheduler.h"
 #include "task.h"
 
+#include <iomanip>
 #include <iostream>
 #include <unordered_map>
 
@@ -21,12 +22,12 @@ void createSemaphore(const std::vector<std::string>& tokens) {
     try {
         count = std::stoi(tokens[3]);
     } catch (...) {
-        std::cout << "Invalid semaphore count\n";
+        std::cout << "Invalid argument\n";
         return;
     }
 
     if (count < 0) {
-        std::cout << "Invalid semaphore count\n";
+        std::cout << "Invalid argument\n";
         return;
     }
 
@@ -108,9 +109,14 @@ void postSemaphore(const std::vector<std::string>& tokens) {
 }
 
 void listSemaphore() {
-    std::cout << "NAME    COUNT   WAITERS\n";
+    std::cout << std::left
+              << std::setw(16) << "NAME"
+              << std::setw(10) << "COUNT"
+              << "WAITERS\n";
     for (const auto& [name, sem] : g_semaphores) {
-        std::cout << name << "    " << sem.count << "       " << sem.waitQueue.size() << '\n';
+        std::cout << std::setw(16) << name
+                  << std::setw(10) << sem.count
+                  << sem.waitQueue.size() << '\n';
     }
 }
 
