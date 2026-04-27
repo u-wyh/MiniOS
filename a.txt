@@ -1,2 +1,24 @@
-hello
-world
+run sleep 30 &
+run sleep 30 &
+ps
+sched status
+
+block 1
+ps
+sched status
+
+sched tick
+ps
+
+wake 1
+ps
+sched status
+
+block 2
+wake 2
+
+kill 1
+kill 2
+
+help
+exit

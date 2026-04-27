@@ -24,6 +24,8 @@ public:
     void status() const;
     // 设置调度策略（当前仅支持 rr）。
     void setPolicy(const std::string& policy);
+    // 判断给定 tid 是否是当前任务。
+    bool isCurrent(int tid) const;
 
 private:
     // 当前调度策略。

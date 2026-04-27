@@ -23,11 +23,13 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
     if (command == "help") {
         // help 同时说明内建命令和可直接执行的系统命令。
         std::cout << "Built-in commands:\n";
-        std::cout << "help pwd echo clear exit cd run ps kill sched\n";
+        std::cout << "help pwd echo clear exit cd run ps kill block wake sched\n";
         std::cout << "Task manager style:\n";
         std::cout << "run <command> &\n";
         std::cout << "ps\n";
         std::cout << "kill <tid>\n";
+        std::cout << "block <tid>\n";
+        std::cout << "wake <tid>\n";
         std::cout << "sched status|tick|policy rr\n";
         std::cout << "Other system commands can be executed directly, e.g.:\n";
         std::cout << "ls\n";

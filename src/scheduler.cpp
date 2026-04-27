@@ -1,4 +1,5 @@
 #include "scheduler.h"
+#include "task.h"
 
 #include <algorithm>
 #include <iostream>
@@ -40,12 +41,14 @@ void Scheduler::tick() {
     }
 
     // RR：先把上一轮 current 放回队尾，再取队首作为本轮 current。
+    const int prevTid = currentTid;
     if (currentTid > 0) {
         readyQueue.push_back(currentTid);
     }
 
     currentTid = readyQueue.front();
     readyQueue.pop_front();
+    onTaskScheduled(prevTid, currentTid);
     std::cout << "Scheduled task: " << currentTid << '\n';
 }
 
@@ -82,6 +85,10 @@ void Scheduler::setPolicy(const std::string& policyName) {
         return;
     }
     std::cout << "Unsupported scheduler policy\n";
+}
+
+bool Scheduler::isCurrent(int tid) const {
+    return currentTid == tid;
 }
 
 Scheduler& getScheduler() {
