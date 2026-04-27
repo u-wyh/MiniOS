@@ -1,4 +1,5 @@
 #include "commands.h"
+#include "fs.h"
 #include "memory.h"
 #include "semaphore.h"
 #include "scheduler.h"
@@ -11,6 +12,11 @@
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+namespace {
+// MiniFS 全局实例：Shell 生命周期内常驻，模拟内存文件系统。
+FileSystem g_fileSystem;
+}
 
 bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldExit) {
     // 每次执行前默认不退出，只有 exit 分支会显式改为 true。
@@ -26,6 +32,7 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
         // help 同时说明内建命令和可直接执行的系统命令。
         std::cout << "Built-in commands:\n";
         std::cout << "help pwd echo clear exit cd run ps kill block wake sched sem mem\n";
+        std::cout << "touch write cat ls rm hostls\n";
         std::cout << "Task manager style:\n";
         std::cout << "run <command> &\n";
         std::cout << "ps\n";
@@ -40,9 +47,14 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
         std::cout << "mem alloc <size>\n";
         std::cout << "mem free <id>\n";
         std::cout << "mem stat\n";
-        std::cout << "Other system commands can be executed directly, e.g.:\n";
+        std::cout << "touch <file>\n";
+        std::cout << "write <file> <text>\n";
+        std::cout << "cat <file>\n";
         std::cout << "ls\n";
-        std::cout << "cat readme.md\n";
+        std::cout << "rm <file>\n";
+        std::cout << "hostls [args]\n";
+        std::cout << "Other system commands can be executed directly, e.g.:\n";
+        std::cout << "hostls\n";
         std::cout << "uname -a\n";
         std::cout << "python3 --version\n";
         return true;
@@ -100,6 +112,71 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
     if (command == "exit") {
         // 通知 Shell 主循环退出。
         shouldExit = true;
+        return true;
+    }
+
+    if (command == "touch") {
+        if (tokens.size() < 2) {
+            std::cout << "Usage: touch <file>\n";
+            return true;
+        }
+
+        g_fileSystem.touch(tokens[1]);
+        return true;
+    }
+
+    if (command == "write") {
+        if (tokens.size() < 3) {
+            std::cout << "Usage: write <file> <text>\n";
+            return true;
+        }
+
+        // 支持 write 文本包含空格：把第 3 个 token 起全部拼接。
+        std::string text;
+        for (std::size_t i = 2; i < tokens.size(); ++i) {
+            if (i > 2) {
+                text += ' ';
+            }
+            text += tokens[i];
+        }
+
+        g_fileSystem.write(tokens[1], text);
+        return true;
+    }
+
+    if (command == "cat") {
+        if (tokens.size() < 2) {
+            std::cout << "Usage: cat <file>\n";
+            return true;
+        }
+
+        g_fileSystem.cat(tokens[1]);
+        return true;
+    }
+
+    if (command == "ls") {
+        g_fileSystem.ls();
+        return true;
+    }
+
+    if (command == "rm") {
+        if (tokens.size() < 2) {
+            std::cout << "Usage: rm <file>\n";
+            return true;
+        }
+
+        g_fileSystem.remove(tokens[1]);
+        return true;
+    }
+
+    if (command == "hostls") {
+        std::vector<std::string> host_tokens;
+        host_tokens.reserve(tokens.size());
+        host_tokens.push_back("ls");
+        for (std::size_t i = 1; i < tokens.size(); ++i) {
+            host_tokens.push_back(tokens[i]);
+        }
+        executeExternalCommand(host_tokens);
         return true;
     }
 
