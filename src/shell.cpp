@@ -14,6 +14,10 @@ void Shell::run() {
         // 非阻塞回收已结束的后台子进程，避免僵尸进程累积。
         int status = 0;
         pid_t pid = 0;
+        // waitpid() 是父进程用来等待并回收子进程的函数。
+        // pid_t waitpid(pid_t pid, int *status, int options);
+        // 三个参数分别意思是:进程号,如果是-1的话表示等待任意子进程;
+        // 状态信息; 控制等待方式,WNOHANG表示非阻塞方式。
         while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
             onProcessReaped(pid, status);
         }

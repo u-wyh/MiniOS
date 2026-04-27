@@ -46,8 +46,8 @@ void updateTaskStateByStatus(TCB& task, int status) {
     }
 }
 
+// 轮询所有 Running 任务，非阻塞更新状态。
 void refreshTaskStates() {
-    // 轮询所有 Running 任务，非阻塞更新状态。
     for (auto& task : g_tasks) {
         if (task.state != TaskState::Running) {
             continue;
@@ -178,8 +178,8 @@ bool hasTaskId(const std::string& taskIdText) {
     return it != g_tasks.end();
 }
 
+// 按 MiniOS tid 在线性任务表中查找对应 TCB。
 TCB* findTaskByTid(int tid) {
-    // 按 MiniOS tid 在线性任务表中查找对应 TCB。
     auto it = std::find_if(g_tasks.begin(), g_tasks.end(), [tid](const TCB& task) {
         return task.tid == tid;
     });
@@ -189,8 +189,8 @@ TCB* findTaskByTid(int tid) {
     return &(*it);
 }
 
+// block 前先刷新一次状态，避免对已结束任务做阻塞操作。
 bool doBlockTaskByTid(int tid) {
-    // block 前先刷新一次状态，避免对已结束任务做阻塞操作。
     refreshTaskStates();
 
     TCB* task = findTaskByTid(tid);
@@ -319,8 +319,8 @@ bool executeTaskCommand(const std::vector<std::string>& tokens) {
     return false;
 }
 
+// Shell 统一回收子进程后，任务表按 pid 同步状态。
 void onProcessReaped(pid_t pid, int status) {
-    // Shell 统一回收子进程后，任务表按 pid 同步状态。
     for (auto& task : g_tasks) {
         if (task.hostPid == pid) {
             updateTaskStateByStatus(task, status);
@@ -337,8 +337,8 @@ bool spawnManagedTask(const std::vector<std::string>& commandTokens, int& taskId
     return spawnTaskInternal(commandTokens, taskId, pid);
 }
 
+// 调度器切换时同步 TCB 状态：prev 回到 Ready，next 进入 Running。
 void onTaskScheduled(int prevTid, int nextTid) {
-    // 调度器切换时同步 TCB 状态：prev 回到 Ready，next 进入 Running。
     if (prevTid > 0) {
         TCB* prevTask = findTaskByTid(prevTid);
         if (prevTask != nullptr && prevTask->state == TaskState::Running) {

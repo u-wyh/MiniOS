@@ -640,6 +640,7 @@ bool executeBackgroundCommand(const std::vector<std::string>& tokens) {
         return true;
     }
 
+    // 复制这个命令 去掉最后的& 作为真正执行的命令
     const std::vector<std::string> raw_cmd(tokens.begin(), tokens.end() - 1);
     if (raw_cmd.empty()) {
         std::cout << "Invalid background command\n";
