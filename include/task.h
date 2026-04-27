@@ -34,4 +34,8 @@ void onProcessReaped(pid_t pid, int status);
 // 调度器完成一次任务切换后，同步任务状态：prev Running->Ready，next Ready->Running。
 void onTaskScheduled(int prevTid, int nextTid);
 
+// 供同步原语调用的任务状态接口：按 tid 执行 block/wake。
+bool blockTaskByTid(int tid);
+bool wakeTaskByTid(int tid);
+
 #endif

@@ -91,6 +91,10 @@ bool Scheduler::isCurrent(int tid) const {
     return currentTid == tid;
 }
 
+int Scheduler::getCurrentTid() const {
+    return currentTid;
+}
+
 Scheduler& getScheduler() {
     // 进程内单例：TaskManager 与命令入口共享同一个调度器实例。
     static Scheduler scheduler;

@@ -182,28 +182,20 @@ TCB* findTaskByTid(int tid) {
     return &(*it);
 }
 
-void blockTaskById(const std::string& taskIdText) {
+bool doBlockTaskByTid(int tid) {
     // block 前先刷新一次状态，避免对已结束任务做阻塞操作。
     refreshTaskStates();
-
-    int tid = -1;
-    try {
-        tid = std::stoi(taskIdText);
-    } catch (...) {
-        std::cout << "Invalid task id\n";
-        return;
-    }
 
     TCB* task = findTaskByTid(tid);
     if (task == nullptr) {
         std::cout << "Task not found\n";
-        return;
+        return false;
     }
 
     // 仅 Ready/Running 任务允许进入 Blocked。
     if (task->state != TaskState::Ready && task->state != TaskState::Running) {
         std::cout << "Task cannot be blocked\n";
-        return;
+        return false;
     }
 
     const bool wasCurrent = getScheduler().isCurrent(tid);
@@ -213,34 +205,28 @@ void blockTaskById(const std::string& taskIdText) {
         // 若阻塞的是当前任务，立即尝试切换到下一个可运行任务。
         getScheduler().tick();
     }
+    return true;
 }
 
-void wakeTaskById(const std::string& taskIdText) {
+bool doWakeTaskByTid(int tid) {
     // wake 前先刷新状态，确保状态判断基于最新任务视图。
     refreshTaskStates();
-
-    int tid = -1;
-    try {
-        tid = std::stoi(taskIdText);
-    } catch (...) {
-        std::cout << "Invalid task id\n";
-        return;
-    }
 
     TCB* task = findTaskByTid(tid);
     if (task == nullptr) {
         std::cout << "Task not found\n";
-        return;
+        return false;
     }
 
     // 只有 Blocked 任务可以被唤醒回 Ready。
     if (task->state != TaskState::Blocked) {
         std::cout << "Task is not blocked\n";
-        return;
+        return false;
     }
 
     task->state = TaskState::Ready;
     getScheduler().addTask(tid);
+    return true;
 }
 
 }  // namespace
@@ -296,7 +282,14 @@ bool executeTaskCommand(const std::vector<std::string>& tokens) {
             std::cout << "Usage: block <tid>\n";
             return true;
         }
-        blockTaskById(tokens[1]);
+        int tid = -1;
+        try {
+            tid = std::stoi(tokens[1]);
+        } catch (...) {
+            std::cout << "Invalid task id\n";
+            return true;
+        }
+        doBlockTaskByTid(tid);
         return true;
     }
 
@@ -305,7 +298,14 @@ bool executeTaskCommand(const std::vector<std::string>& tokens) {
             std::cout << "Usage: wake <tid>\n";
             return true;
         }
-        wakeTaskById(tokens[1]);
+        int tid = -1;
+        try {
+            tid = std::stoi(tokens[1]);
+        } catch (...) {
+            std::cout << "Invalid task id\n";
+            return true;
+        }
+        doWakeTaskByTid(tid);
         return true;
     }
 
@@ -345,4 +345,20 @@ void onTaskScheduled(int prevTid, int nextTid) {
             nextTask->state = TaskState::Running;
         }
     }
+}
+
+bool blockTaskByTid(int tid) {
+    if (tid <= 0) {
+        std::cout << "Invalid task id\n";
+        return false;
+    }
+    return doBlockTaskByTid(tid);
+}
+
+bool wakeTaskByTid(int tid) {
+    if (tid <= 0) {
+        std::cout << "Invalid task id\n";
+        return false;
+    }
+    return doWakeTaskByTid(tid);
 }

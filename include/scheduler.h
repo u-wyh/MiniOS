@@ -26,6 +26,8 @@ public:
     void setPolicy(const std::string& policy);
     // 判断给定 tid 是否是当前任务。
     bool isCurrent(int tid) const;
+    // 获取当前任务 tid；无当前任务时返回 -1。
+    int getCurrentTid() const;
 
 private:
     // 当前调度策略。
