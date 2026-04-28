@@ -5,6 +5,11 @@ MB_FLAGS    equ 0x00000003
 ; 校验和，保证三者相加为 0
 MB_CHECKSUM equ -(MB_MAGIC + MB_FLAGS)
 
+; GDT 代码段选择子（第 1 项，偏移 0x08）
+CODE_SEL    equ 0x08
+; GDT 数据段选择子（第 2 项，偏移 0x10）
+DATA_SEL    equ 0x10
+
 section .multiboot
 align 4
     dd MB_MAGIC
@@ -16,6 +21,21 @@ global _start
 extern kernel_main
 
 _start:
+    ; 加载我们自定义的 GDT，让 CPU 使用受控的段描述符集合
+    lgdt [gdt_descriptor]
+
+    ; 通过远跳转强制刷新 CS，切换到新 GDT 的代码段描述符
+    jmp CODE_SEL:.reload_cs
+
+.reload_cs:
+    ; 重新加载数据相关段寄存器，确保与新 GDT 的数据段一致
+    mov ax, DATA_SEL
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
+
     ; 初始化栈顶，保证进入 C 代码前有可用栈空间
     mov esp, stack_top
     ; 调用 C 语言内核入口
@@ -26,6 +46,23 @@ _start:
     cli
     hlt
     jmp .hang
+
+section .rodata
+align 8
+gdt_start:
+    ; 空描述符：GDT 第 0 项必须为 null descriptor
+    dq 0x0000000000000000
+    ; 代码段：base=0，limit=4GB，32 位，可执行可读
+    dq 0x00CF9A000000FFFF
+    ; 数据段：base=0，limit=4GB，32 位，可读写
+    dq 0x00CF92000000FFFF
+gdt_end:
+
+gdt_descriptor:
+    ; GDT 界限（字节数 - 1）
+    dw gdt_end - gdt_start - 1
+    ; GDT 基地址
+    dd gdt_start
 
 section .bss
 align 16
