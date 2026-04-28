@@ -33,3 +33,5 @@ stack_bottom:
     ; 预留 16KB 栈空间
     resb 16384
 stack_top:
+
+section .note.GNU-stack noalloc noexec nowrite
