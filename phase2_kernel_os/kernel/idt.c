@@ -25,11 +25,11 @@ struct idt_ptr {
 
 // 全局 IDT 表
 static struct idt_entry idt[IDT_SIZE];
-// 记录 int 0x80 是否被成功处理，便于在 VGA 上可视化确认
-static volatile int int80_handled = 0;
 
 // 汇编 ISR 入口（int 0x80 对应）
 extern void isr80(void);
+// IRQ0 定时器中断入口
+extern void irq0_stub(void);
 
 // 设置指定中断向量的门描述符
 static void idt_set_gate(unsigned char vector, unsigned int handler, unsigned short selector, unsigned char type_attr) {
@@ -51,8 +51,7 @@ static void idt_load(void) {
 // C 层中断处理函数：由汇编 ISR stub 调用
 void interrupt_handler_80(void) {
     // 由中断路径输出提示，验证 IDT + ISR + iret 链路可用
-    print_string("[OK] INT 0x80 TRIGGERED\n");
-    int80_handled = 1;
+    print_string("interrupt triggered\n");
 }
 
 // 初始化 IDT：清空、注册 int 0x80、加载 IDTR
@@ -68,11 +67,9 @@ void idt_init(void) {
 
     // 注册 0x80 软件中断入口
     idt_set_gate(0x80, (unsigned int)isr80, KERNEL_CODE_SELECTOR, IDT_TYPE_ATTR);
+    // 注册 IRQ0 定时器中断入口（PIC 重映射后对应 0x20）
+    idt_set_gate(0x20, (unsigned int)irq0_stub, KERNEL_CODE_SELECTOR, IDT_TYPE_ATTR);
 
     // 将 IDT 正式交给 CPU 使用
     idt_load();
-}
-
-int idt_was_int80_handled(void) {
-    return int80_handled;
 }
