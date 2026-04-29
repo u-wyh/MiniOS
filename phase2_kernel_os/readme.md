@@ -334,6 +334,41 @@ PIT 基础结构：
 
 - 输入缓冲区或命令行雏形
 
+#### Task7：输入缓冲区（行输入）
+
+本轮目标：
+
+- 为键盘输入增加最小缓冲区
+- 让系统支持“输入一行字符串 + Enter 确认”
+
+新增功能：
+
+- 在 `keyboard.c` 中新增 `input_buffer[128]`
+- 用 `input_index` 记录当前输入位置
+- 普通字符会写入 buffer 并实时回显
+- Enter 会补 `'\0'`、换行、输出整行内容并清空 buffer
+
+修改文件：
+
+- 修改 `kernel/keyboard.c`
+- 修改 `readme.md`
+- 新增 `docs/task7_input.md`
+
+验证结果：
+
+- `make clean` / `make` / `make run` 通过
+- PIT 仍然持续输出 `T`
+- 输入 `a b c` 后屏幕先显示 `abc`
+- 按 Enter 后会换行并再次输出 `abc`
+
+当前系统能力提升：
+
+- MiniOS 已从“字符输入”升级为“字符串输入”
+
+下一步计划：
+
+- Mini Shell
+
 ## 六、当前能力状态
 
 当前系统已具备：

@@ -3,6 +3,11 @@
 #include "pic.h"
 #include "vga.h"
 
+// 最小输入缓冲区：用于把逐个按键积累成一整行字符串
+static char input_buffer[128];
+// 记录当前已经输入到缓冲区的字符数
+static int input_index = 0;
+
 // 将最小 Set 1 扫描码映射成小写字母或数字
 static char scancode_to_ascii(unsigned char scancode) {
     switch (scancode) {
@@ -46,7 +51,7 @@ static char scancode_to_ascii(unsigned char scancode) {
     }
 }
 
-// 键盘中断处理：读取 0x60 端口、忽略释放码、输出可识别字符
+// 键盘中断处理：读取 0x60 端口、维护输入缓冲、处理 Enter 提交
 void keyboard_handler(void) {
     unsigned char scancode = inb(0x60);
     char ch;
@@ -57,9 +62,27 @@ void keyboard_handler(void) {
         return;
     }
 
+    // Enter 键表示一行输入结束：补 '\0' 后再把整行重新输出一遍
+    if (scancode == 0x1C) {
+        input_buffer[input_index] = '\0';
+        print_char('\n');
+        print_string(input_buffer);
+        print_char('\n');
+        input_index = 0;
+        pic_send_eoi(1);
+        return;
+    }
+
     ch = scancode_to_ascii(scancode);
     if (ch != '\0') {
+        // 将普通字符写入缓冲区，同时回显到屏幕
+        input_buffer[input_index++] = ch;
         print_char(ch);
+
+        // 保证缓冲区末尾始终留给 '\0'，避免后续字符串越界
+        if (input_index >= 127) {
+            input_index = 0;
+        }
     }
 
     // 告知 PIC：IRQ1 已处理完成，否则后续键盘中断可能停止
