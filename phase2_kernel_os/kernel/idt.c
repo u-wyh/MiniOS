@@ -30,6 +30,8 @@ static struct idt_entry idt[IDT_SIZE];
 extern void isr80(void);
 // IRQ0 定时器中断入口
 extern void irq0_stub(void);
+// IRQ1 键盘中断入口
+extern void irq1_stub(void);
 
 // 设置指定中断向量的门描述符
 static void idt_set_gate(unsigned char vector, unsigned int handler, unsigned short selector, unsigned char type_attr) {
@@ -69,6 +71,8 @@ void idt_init(void) {
     idt_set_gate(0x80, (unsigned int)isr80, KERNEL_CODE_SELECTOR, IDT_TYPE_ATTR);
     // 注册 IRQ0 定时器中断入口（PIC 重映射后对应 0x20）
     idt_set_gate(0x20, (unsigned int)irq0_stub, KERNEL_CODE_SELECTOR, IDT_TYPE_ATTR);
+    // 注册 IRQ1 键盘中断入口（PIC 重映射后对应 0x21）
+    idt_set_gate(0x21, (unsigned int)irq1_stub, KERNEL_CODE_SELECTOR, IDT_TYPE_ATTR);
 
     // 将 IDT 正式交给 CPU 使用
     idt_load();

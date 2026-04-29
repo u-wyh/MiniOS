@@ -41,8 +41,8 @@ void pic_remap(void) {
     outb(PIC2_DATA, ICW4_8086);
     io_wait();
 
-    // 当前阶段只放开 IRQ0，其余硬件中断保持屏蔽
-    outb(PIC1_DATA, 0xFE);
+    // 当前阶段放开 IRQ0 和 IRQ1，其余硬件中断保持屏蔽
+    outb(PIC1_DATA, 0xFC);
     outb(PIC2_DATA, 0xFF);
 }
 

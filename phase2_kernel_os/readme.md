@@ -293,6 +293,47 @@ PIT 基础结构：
 
 - 键盘中断输入
 
+#### Task6：键盘中断输入
+
+本轮目标：
+
+- 注册 `IRQ1 -> IDT[0x21]`
+- 通过键盘中断读取扫描码
+- 将最小范围的 `a-z`/`0-9` 映射成字符并输出到 VGA
+
+新增功能：
+
+- 新增键盘中断汇编入口 `irq1_stub`
+- 新增 `keyboard_handler()`，读取端口 `0x60`
+- 新增最小 `scancode -> ASCII` 映射
+- 为键盘中断增加 `pic_send_eoi(1)`
+
+修改文件：
+
+- 新增 `include/keyboard.h`
+- 新增 `kernel/keyboard.c`
+- 修改 `kernel/idt.c`
+- 修改 `boot/interrupt.asm`
+- 修改 `kernel/pic.c`
+- 修改 `kernel/kernel.c`
+- 修改 `Makefile`
+- 修改 `readme.md`
+- 新增 `docs/task6_keyboard.md`
+
+验证结果：
+
+- `make clean` / `make` / `make run` 通过
+- PIT 仍可持续输出 `T`
+- 按下普通字母键后，屏幕可显示对应小写字符
+
+当前系统能力提升：
+
+- MiniOS 已从“可自动运行并接收时钟中断”提升为“可通过键盘进行最小交互输入”
+
+下一步计划：
+
+- 输入缓冲区或命令行雏形
+
 ## 六、当前能力状态
 
 当前系统已具备：
