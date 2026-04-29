@@ -1,6 +1,7 @@
 #include "io.h"
 #include "keyboard.h"
 #include "pic.h"
+#include "shell.h"
 #include "vga.h"
 
 // 最小输入缓冲区：用于把逐个按键积累成一整行字符串
@@ -47,6 +48,7 @@ static char scancode_to_ascii(unsigned char scancode) {
         case 0x08: return '7';
         case 0x09: return '8';
         case 0x0A: return '9';
+        case 0x39: return ' ';
         default:   return '\0';
     }
 }
@@ -62,12 +64,11 @@ void keyboard_handler(void) {
         return;
     }
 
-    // Enter 键表示一行输入结束：补 '\0' 后再把整行重新输出一遍
+    // Enter 键表示一行输入结束：补 '\0' 后交给 Shell 执行
     if (scancode == 0x1C) {
         input_buffer[input_index] = '\0';
         print_char('\n');
-        print_string(input_buffer);
-        print_char('\n');
+        shell_execute(input_buffer);
         input_index = 0;
         pic_send_eoi(1);
         return;

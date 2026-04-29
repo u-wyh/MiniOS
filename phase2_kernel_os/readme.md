@@ -369,6 +369,54 @@ PIT 基础结构：
 
 - Mini Shell
 
+#### Task8：Mini Shell 命令解析框架
+
+本轮目标：
+
+- 把“输入一行字符串”升级为“输入命令并执行”
+- 在启动后显示 `MiniOS> ` 提示符
+
+新增功能：
+
+- 新增 `shell_init()`
+- 新增 `shell_execute(const char* line)`
+- 支持最小命令：`help`、`clear`、`echo`
+- 支持未知命令提示 `Unknown command`
+
+修改文件：
+
+- 新增 `include/shell.h`
+- 新增 `kernel/shell.c`
+- 修改 `kernel/kernel.c`
+- 修改 `kernel/keyboard.c`
+- 修改 `kernel/pit.c`
+- 修改 `Makefile`
+- 修改 `readme.md`
+- 新增 `docs/task8_shell.md`
+
+支持命令：
+
+- `help`
+- `clear`
+- `echo`
+
+验证结果：
+
+- `make clean` / `make` / `make run` 通过
+- 启动后显示 `MiniOS> `
+- `help` 可显示命令列表
+- `clear` 可清屏并重新显示提示符
+- `echo hello` 可输出 `hello`
+
+当前系统能力提升：
+
+- MiniOS 已从“行输入”升级为“命令执行”
+
+下一步计划：
+
+- 内核命令扩展
+- 或任务管理雏形
+
 ## 六、当前能力状态
 
 当前系统已具备：

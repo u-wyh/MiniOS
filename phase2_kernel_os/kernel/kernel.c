@@ -1,6 +1,7 @@
 #include "idt.h"
 #include "pic.h"
 #include "pit.h"
+#include "shell.h"
 #include "vga.h"
 
 // 内核主函数：初始化显示、软件中断、PIT 与键盘中断
@@ -15,6 +16,9 @@ void kernel_main(void) {
 
     // 保留 Task4 验证路径，先手动触发一次软件中断
     __asm__ __volatile__("int $0x80");
+
+    // 在中断路径验证完成后打印 Shell 提示符，避免提示符被启动信息打断
+    shell_init();
 
     // 所有中断准备完成后再打开 IF，允许 IRQ0/IRQ1 进入 CPU
     __asm__ __volatile__("sti");

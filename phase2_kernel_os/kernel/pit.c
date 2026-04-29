@@ -29,9 +29,8 @@ void pit_init(unsigned int frequency) {
     outb(PIT_CHANNEL0_PORT, (unsigned char)((divisor >> 8) & 0xFF));
 }
 
-// 定时器中断处理：输出 T 并向 PIC 发送 EOI
+// 定时器中断处理：当前阶段只维护 tick，避免频繁刷屏影响 Shell 观察
 void timer_handler(void) {
     tick_count++;
-    print_char('T');
     pic_send_eoi(0);
 }
