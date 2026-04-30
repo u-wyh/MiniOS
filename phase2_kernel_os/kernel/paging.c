@@ -39,13 +39,16 @@ void map_page(unsigned int virtual_address, unsigned int physical_address, unsig
     unsigned int table_index;
     unsigned int* page_table;
     unsigned int directory_flags;
+    unsigned int aligned_virtual_address;
 
     if (page_directory == (unsigned int*)0) {
         return;
     }
 
-    directory_index = virtual_address >> 22;
-    table_index = (virtual_address >> 12) & 0x3FF;
+    // 统一按页对齐，避免调用方传入段内地址时产生歧义
+    aligned_virtual_address = virtual_address & 0xFFFFF000;
+    directory_index = aligned_virtual_address >> 22;
+    table_index = (aligned_virtual_address >> 12) & 0x3FF;
     directory_flags = PAGE_PRESENT | PAGE_WRITABLE;
 
     // 如果要映射用户态页，对应的 PDE 也必须带上 PAGE_USER
@@ -69,7 +72,7 @@ void map_page(unsigned int virtual_address, unsigned int physical_address, unsig
     page_table[table_index] = (physical_address & 0xFFFFF000) | flags;
 
     // 当前页表已生效时，刷新单页 TLB，确保后续访问命中新映射
-    __asm__ __volatile__("invlpg (%0)" : : "r"(virtual_address) : "memory");
+    __asm__ __volatile__("invlpg (%0)" : : "r"(aligned_virtual_address) : "memory");
 }
 
 // 初始化页目录和页表，并通过 CR3/CR0 正式开启分页

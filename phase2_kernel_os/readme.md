@@ -966,3 +966,124 @@ limit = 4GB
 - 系统调用表
 - 最小 `write` syscall
 - 用户程序加载与更清晰的地址空间管理
+
+## ✅ Task19：系统调用（write）
+
+本轮目标：
+
+- 把现有 `int 0x80` 演示链路收口成真正的最小 syscall 入口
+- 约定系统调用号 `SYS_WRITE = 1`
+- 让用户态通过寄存器传参，把字符串交给内核输出
+
+新增能力：
+
+- 用户态可执行：
+  - `eax = SYS_WRITE`
+  - `ebx = str_ptr`
+  - `int 0x80`
+- 内核可根据 `eax` 分发最小 `write` 系统调用
+- 内核可读取用户态传入的字符串地址并输出到 VGA
+
+修改文件：
+
+- `include/syscall.h`
+- `kernel/syscall.c`
+- `kernel/idt.c`
+- `kernel/user.c`
+- `Makefile`
+- `docs/task19_syscall.md`
+
+验证结果：
+
+- 系统正常启动到 `MiniOS>`
+- 输入 `user` 后，用户态触发 `SYS_WRITE`
+- 屏幕输出：
+  - `enter user mode...`
+  - `Hello from user`
+
+当前系统能力提升：
+
+- 用户态不再只是“能进内核”，而是已经能通过标准化入口请求一个最小内核服务
+- `int 0x80` 开始具备 syscall 语义，而不只是验证消息输出
+
+下一步计划：
+
+- 扩展 syscall 编号
+- 最小 syscall 表
+- 更安全的用户指针检查
+
+## ✅ Task20：系统调用层
+
+本轮目标：
+
+- 把单个 `write` syscall 扩展成最小 syscall layer
+- 统一通过 `eax` 传 syscall 编号
+- 支持最小返回值语义
+
+当前支持的 syscall：
+
+- `SYS_WRITE = 1`
+- `SYS_EXIT = 2`
+- `SYS_GETPID = 3`
+- `SYS_TIME = 4`
+
+参数与返回值约定：
+
+- `eax`：syscall 编号
+- `ebx`：第一个参数（当前 `write` 用它传字符串地址）
+- `eax`：内核返回值
+
+本轮验证用户态程序会依次执行：
+
+1. `SYS_WRITE`
+2. `SYS_GETPID`
+3. `SYS_TIME`
+4. `SYS_EXIT`
+
+验证结果：
+
+- 系统正常启动到 `MiniOS>`
+- 输入 `user` 后，屏幕依次输出：
+  - `enter user mode...`
+  - `Hello from user`
+  - `pid: 1`
+  - `time: <tick>`
+  - `user exit`
+
+当前系统能力提升：
+
+- `int 0x80` 已经不再只是单功能演示，而是具备了最小 syscall 分发层
+- 用户态可通过统一入口请求多种内核服务
+- 返回值已开始通过 `eax` 传回
+
+修改文件：
+
+- `include/syscall.h`
+- `kernel/syscall.c`
+- `kernel/idt.c`
+- `kernel/user.c`
+- `kernel/pit.c`
+- `kernel/pic.c`
+- `kernel/sched.c`
+- `include/sched.h`
+- `Makefile`
+- `docs/task20_syscall_layer.md`
+
+下一步计划：
+
+- 引入真正的 syscall 表
+- 增加用户指针检查
+- 让 `exit` 返回控制台而不是停机收口
+
+### Task21：ELF Loader（用户程序加载）
+
+本任务实现最小 ELF Loader：
+
+- 从内存中的 ELF 数组读取 `Elf32_Ehdr`
+- 解析 `e_entry / e_phoff / e_phnum`
+- 遍历 `Elf32_Phdr`，筛选 `PT_LOAD`
+- 为段按页分配物理页并建立 `VA -> PA` 映射
+- 拷贝段内容并处理 `memsz > filesz` 的零填充
+- 通过 `enter_user_mode(entry, user_stack_top)` 进入 Ring3 执行 ELF 入口
+
+验证目标：用户态程序可通过 `int 0x80` 调用 `write`，输出 `Hello from ELF`。

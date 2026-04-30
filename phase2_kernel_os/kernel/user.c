@@ -1,82 +1,86 @@
+#include "elf.h"
 #include "mm.h"
 #include "paging.h"
 #include "user.h"
 
-// 用户代码放在 4MB 处，避开低端内核身份映射区域，形成清晰的用户空间入口
-#define USER_CODE_VA 0x00400000
-// 用户栈顶放在 8MB 处，栈页实际映射在其下方 4KB
 #define USER_STACK_TOP 0x00800000
 #define USER_STACK_SIZE 4096
 
-// 汇编入口：通过构造 iretd 返回帧，把 CPU 从 Ring0 切到 Ring3
+// 汇编入口：构造 iret 返回帧，从 Ring0 切换到 Ring3
 extern void enter_user_mode(unsigned int user_entry, unsigned int user_stack_top);
 
-// 记录用户空间是否已经准备完成，避免重复分配用户页
+// 防止重复初始化用户空间
 static int user_space_ready = 0;
-// 记录 shell 是否已经请求执行一次用户态测试
+// shell 命令触发的“待进入用户态”请求标志
 static int user_enter_pending = 0;
-// 保存用户代码页和用户栈页的物理地址，便于后续调试和文档说明
-static unsigned char* user_code_page = (unsigned char*)0;
+// ELF Loader 返回的用户程序入口
+static unsigned int user_entry = 0;
+// 用户栈对应的一页物理内存
 static unsigned char* user_stack_page = (unsigned char*)0;
 
-// 这是最小用户态测试程序的机器码：
-// 1) eax=1 -> int 0x80：让内核打印 "user mode running"
-// 2) eax=2 -> int 0x80：让内核打印 "syscall from user mode"
-// 3) 跳回自身，防止未来系统调用返回用户态后执行落空
-static const unsigned char user_program[] = {
+// 内存内置的最小 ELF 用户程序：进入后执行 write/getpid/time/exit
+static const unsigned char user_elf_image[] = {
+    0x7F, 0x45, 0x4C, 0x46, 0x01, 0x01, 0x01, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x02, 0x00, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00,
+    0x54, 0x00, 0x40, 0x00, 0x34, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x34, 0x00, 0x20, 0x00, 0x01, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+
+    0x01, 0x00, 0x00, 0x00, 0x54, 0x00, 0x00, 0x00,
+    0x54, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x33, 0x00, 0x00, 0x00, 0x33, 0x00, 0x00, 0x00,
+    0x05, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00,
+
     0xB8, 0x01, 0x00, 0x00, 0x00,
+    0xBB, 0x77, 0x00, 0x40, 0x00,
+    0xCD, 0x80,
+    0xB8, 0x03, 0x00, 0x00, 0x00,
+    0xCD, 0x80,
+    0xB8, 0x04, 0x00, 0x00, 0x00,
     0xCD, 0x80,
     0xB8, 0x02, 0x00, 0x00, 0x00,
     0xCD, 0x80,
-    0xEB, 0xFE
+    0xEB, 0xFE,
+
+    'H', 'e', 'l', 'l', 'o', ' ', 'f', 'r', 'o', 'm', ' ', 'E', 'L', 'F', '\n', 0x00
 };
 
-// 把内置测试程序拷贝到用户代码页；当前仍是教学验证阶段，没有 ELF loader
-static void user_copy_program(void) {
-    unsigned int i;
-
-    if (user_code_page == (unsigned char*)0) {
-        return;
-    }
-
-    for (i = 0; i < USER_STACK_SIZE; i++) {
-        user_code_page[i] = 0;
-    }
-
-    for (i = 0; i < sizeof(user_program); i++) {
-        user_code_page[i] = user_program[i];
-    }
-}
-
-// 初始化用户空间：分配用户代码页和用户栈页，并建立带 PAGE_USER 的最小映射
+// 初始化最小用户空间：映射用户栈并通过 ELF Loader 准备用户入口
 void user_space_init(void) {
     if (user_space_ready != 0) {
         return;
     }
 
-    user_code_page = (unsigned char*)alloc_page();
+    // 先准备用户栈并建立用户可访问映射
     user_stack_page = (unsigned char*)alloc_page();
-    if (user_code_page == (unsigned char*)0 || user_stack_page == (unsigned char*)0) {
+    if (user_stack_page == (unsigned char*)0) {
         return;
     }
 
-    user_copy_program();
-    map_page(USER_CODE_VA, (unsigned int)user_code_page, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
     map_page(USER_STACK_TOP - USER_STACK_SIZE, (unsigned int)user_stack_page, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+
+    // 从内置内存 ELF 镜像加载用户程序，拿到 e_entry
+    user_entry = elf_load(user_elf_image, sizeof(user_elf_image));
+    if (user_entry == 0) {
+        return;
+    }
+
     user_space_ready = 1;
 }
 
-// shell 命令只负责提出请求，避免在键盘中断上下文里直接做 Ring3 切换
+// 由 shell 命令设置一次“进入用户态”请求标志
 void user_request_enter(void) {
     user_enter_pending = 1;
 }
 
-// 给内核主循环查询是否需要执行用户态测试
+// 提供给内核主循环轮询，判断是否有待执行的用户态切换请求
 int user_has_pending_request(void) {
     return user_enter_pending;
 }
 
-// 使用已经规划好的 USER_CODE_VA 和 USER_STACK_TOP 进入 Ring3
+// 执行一次 Ring3 切换，入口地址来自 ELF Header 的 e_entry
 void user_enter_mode(void) {
     if (user_space_ready == 0) {
         user_space_init();
@@ -86,6 +90,7 @@ void user_enter_mode(void) {
         return;
     }
 
+    // 清除请求标志后，按 ELF 入口进入用户态
     user_enter_pending = 0;
-    enter_user_mode(USER_CODE_VA, USER_STACK_TOP);
+    enter_user_mode(user_entry, USER_STACK_TOP);
 }
