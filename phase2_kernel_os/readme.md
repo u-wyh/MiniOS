@@ -417,6 +417,45 @@ PIT 基础结构：
 - 内核命令扩展
 - 或任务管理雏形
 
+#### Task9：内核控制命令扩展
+
+本轮目标：
+
+- 让控制台命令开始驱动真实内核状态观察与控制
+
+新增命令：
+
+- `about`
+- `tick`
+- `panic`
+
+修改文件：
+
+- 新增 `include/panic.h`
+- 新增 `kernel/panic.c`
+- 修改 `include/pit.h`
+- 修改 `kernel/pit.c`
+- 修改 `kernel/shell.c`
+- 修改 `Makefile`
+- 修改 `readme.md`
+- 新增 `docs/task9_kernel_commands.md`
+
+验证结果：
+
+- `help` 已包含 `about / tick / panic`
+- `about` 可显示内核基本信息
+- `tick` 可显示真实 PIT tick 计数
+- `panic` 可输出 panic 信息并停止系统
+
+当前系统能力提升：
+
+- 控制台从“命令入口”升级为“内核状态观察与控制工具”
+
+下一步计划：
+
+- 任务管理雏形
+- 或内存状态命令
+
 ## 六、当前能力状态
 
 当前系统已具备：

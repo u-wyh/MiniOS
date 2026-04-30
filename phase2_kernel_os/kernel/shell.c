@@ -1,3 +1,5 @@
+#include "panic.h"
+#include "pit.h"
 #include "shell.h"
 #include "vga.h"
 
@@ -45,6 +47,27 @@ static const char* skip_prefix(const char* s, const char* prefix) {
     return s + i;
 }
 
+// 打印无符号整数，用于在裸机环境下输出 tick 等数值
+static void print_uint(unsigned int value) {
+    char digits[16];
+    int index = 0;
+
+    if (value == 0) {
+        print_char('0');
+        return;
+    }
+
+    while (value > 0) {
+        digits[index++] = (char)('0' + (value % 10));
+        value /= 10;
+    }
+
+    while (index > 0) {
+        index--;
+        print_char(digits[index]);
+    }
+}
+
 // Shell 初始化：当前阶段只需要打印首个提示符
 void shell_init(void) {
     shell_print_prompt();
@@ -60,6 +83,10 @@ void shell_execute(const char* line) {
     if (str_equal(line, "help")) {
         print_string("help  - show command list\n");
         print_string("clear - clear screen\n");
+        print_string("test  - reserved command slot\n");
+        print_string("about - show kernel info\n");
+        print_string("tick  - show pit ticks\n");
+        print_string("panic - trigger kernel panic\n");
         print_string("echo  - print text\n");
         shell_print_prompt();
         return;
@@ -75,6 +102,28 @@ void shell_execute(const char* line) {
         print_string(skip_prefix(line, "echo "));
         print_char('\n');
         shell_print_prompt();
+        return;
+    }
+
+    if (str_equal(line, "about")) {
+        print_string("MiniOS Phase2 Kernel\n");
+        print_string("Version: 0.1\n");
+        print_string("Mode: Protected Mode\n");
+        print_string("Features: VGA, GDT, IDT, PIT, Keyboard, Kernel Monitor\n");
+        shell_print_prompt();
+        return;
+    }
+
+    if (str_equal(line, "tick")) {
+        print_string("tick: ");
+        print_uint(pit_get_ticks());
+        print_char('\n');
+        shell_print_prompt();
+        return;
+    }
+
+    if (str_equal(line, "panic")) {
+        kernel_panic("manual panic triggered");
         return;
     }
 

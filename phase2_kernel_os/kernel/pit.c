@@ -34,3 +34,8 @@ void timer_handler(void) {
     tick_count++;
     pic_send_eoi(0);
 }
+
+// 返回当前累计 tick 数，供控制台命令读取真实系统节拍
+unsigned int pit_get_ticks(void) {
+    return tick_count;
+}
