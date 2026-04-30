@@ -682,6 +682,35 @@ PIT IRQ0 -> CPU 自动压栈 -> irq0_stub: pusha -> timer_handler -> schedule
 - 虚拟内存扩展
 - 或缺页异常与更完整内存管理
 
+#### Task16：高地址内核
+
+本轮目标：
+
+- 在保留低地址 identity mapping 的同时，增加 `0xC0000000` 高地址内核别名映射
+- 开启分页后显式跳到高地址别名继续执行
+
+修改文件：
+
+- 修改 `kernel/paging.c`
+- 修改 `kernel/kernel.c`
+- 修改 `kernel/shell.c`
+- 修改 `readme.md`
+- 新增 `docs/task16_higher_half.md`
+
+验证方法：
+
+- `make run` 后系统仍稳定运行
+- `paging` 命令可看到 `kernel high base: 0xC0000000`
+
+当前能力提升：
+
+- 内核已经具备最小高地址映射基础，开始把“内核地址空间”和低地址区域区分开来
+
+下一步计划：
+
+- 更完整的高地址链接布局
+- 或用户空间 / 内核空间进一步划分
+
 ## 六、当前能力状态
 
 当前系统已具备：

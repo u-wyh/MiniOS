@@ -7,11 +7,14 @@
 #define PAGE_FLAGS_PRESENT_RW 0x3
 // 当前最小实现先做前 8MB 的 identity mapping，覆盖内核和早期分配区域
 #define IDENTITY_MAP_SIZE 0x00800000
+// 高地址内核基址：页目录第 768 项对应 0xC0000000 起始的 4MB 窗口
+#define KERNEL_VIRTUAL_BASE 0xC0000000
 
 // 记录分页结构物理地址，便于后续调试和扩展
 static unsigned int* page_directory = (unsigned int*)0;
 static unsigned int* page_table0 = (unsigned int*)0;
 static unsigned int* page_table1 = (unsigned int*)0;
+static unsigned int* page_table_high = (unsigned int*)0;
 static int paging_enabled = 0;
 
 // 手动清空一个页大小的分页结构，不依赖标准库 memset
@@ -39,22 +42,27 @@ void paging_init(void) {
     page_directory = (unsigned int*)alloc_page();
     page_table0 = (unsigned int*)alloc_page();
     page_table1 = (unsigned int*)alloc_page();
+    page_table_high = (unsigned int*)alloc_page();
 
-    if (page_directory == (unsigned int*)0 || page_table0 == (unsigned int*)0 || page_table1 == (unsigned int*)0) {
+    if (page_directory == (unsigned int*)0 || page_table0 == (unsigned int*)0 || page_table1 == (unsigned int*)0 || page_table_high == (unsigned int*)0) {
         return;
     }
 
     paging_zero_page(page_directory);
     paging_zero_page(page_table0);
     paging_zero_page(page_table1);
+    paging_zero_page(page_table_high);
 
     // 第一个页表映射 0~4MB，确保当前内核代码、数据和 VGA 都能继续访问
     paging_fill_identity_table(page_table0, 0x00000000);
     // 第二个页表映射 4MB~8MB，覆盖当前早期页分配器可返回的物理页范围
     paging_fill_identity_table(page_table1, 0x00400000);
+    // 高地址页表把 0xC0000000 起始的前 4MB 虚拟地址映射到 0~4MB 物理内存
+    paging_fill_identity_table(page_table_high, 0x00000000);
 
     page_directory[0] = ((unsigned int)page_table0) | PAGE_FLAGS_PRESENT_RW;
     page_directory[1] = ((unsigned int)page_table1) | PAGE_FLAGS_PRESENT_RW;
+    page_directory[768] = ((unsigned int)page_table_high) | PAGE_FLAGS_PRESENT_RW;
 
     // CR3 指向页目录物理基址；当前是 identity mapping，因此地址可直接使用
     __asm__ __volatile__("mov %0, %%cr3" : : "r"(page_directory));
@@ -89,4 +97,9 @@ unsigned int paging_get_table1(void) {
 // 返回当前 identity mapping 覆盖大小，便于 shell 打印映射范围
 unsigned int paging_get_identity_size(void) {
     return IDENTITY_MAP_SIZE;
+}
+
+// 返回高地址内核虚拟基址，供启动代码在启用分页后跳到高地址别名继续执行
+unsigned int paging_get_kernel_virtual_base(void) {
+    return KERNEL_VIRTUAL_BASE;
 }

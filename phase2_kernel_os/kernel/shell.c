@@ -246,6 +246,9 @@ void shell_execute(const char* line) {
         print_string("page table 1: ");
         print_hex(paging_get_table1());
         print_char('\n');
+        print_string("kernel high base: ");
+        print_hex(paging_get_kernel_virtual_base());
+        print_char('\n');
         print_string("identity size: ");
         print_uint(paging_get_identity_size() / (1024 * 1024));
         print_string(" MB\n");

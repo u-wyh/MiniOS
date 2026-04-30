@@ -13,5 +13,7 @@ unsigned int paging_get_table0(void);
 unsigned int paging_get_table1(void);
 // 返回当前 identity mapping 覆盖的字节范围
 unsigned int paging_get_identity_size(void);
+// 返回内核高地址映射的虚拟基址，便于启动代码在开启分页后跳转到高地址别名
+unsigned int paging_get_kernel_virtual_base(void);
 
 #endif

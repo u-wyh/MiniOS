@@ -1,3 +1,4 @@
+#include "paging.h"
 #include "task.h"
 #include "vga.h"
 
@@ -72,7 +73,8 @@ static unsigned int build_initial_esp(unsigned char* stack_base, void (*entry)(v
     frame->eax = 0;
 
     // iretd 依赖这三个字段恢复执行点和标志位，使任务像一次中断返回那样启动
-    frame->eip = (unsigned int)entry;
+    // 首次启动任务时，把入口地址也切到高地址别名，确保调度后仍留在高地址空间
+    frame->eip = paging_get_kernel_virtual_base() + (unsigned int)entry;
     frame->cs = 0x00000008;
     frame->eflags = 0x00000202;
 
