@@ -918,3 +918,51 @@ limit = 4GB
 - 系统调用参数传递
 - 最小用户程序管理
 - 用户态与内核态更清晰的内存隔离
+
+## ✅ Task18：用户空间与分页完善
+
+本轮目标：
+
+- 为用户态建立明确的虚拟地址布局
+- 显式映射用户代码页和用户栈页
+- 保证用户页带 `PAGE_USER` 权限位
+- 保持内核高地址映射为 supervisor-only
+- 通过 shell 命令触发一次用户态 syscall 测试
+
+新增能力：
+
+- 用户代码区：`0x00400000`
+- 用户栈顶：`0x00800000`
+- 用户栈页：`0x007FF000 ~ 0x007FFFFF`
+- `user` 命令可触发一次 Ring3 测试
+
+修改文件：
+
+- `include/paging.h`
+- `kernel/paging.c`
+- `include/user.h`
+- `kernel/user.c`
+- `kernel/kernel.c`
+- `kernel/shell.c`
+- `docs/task18_user_space.md`
+
+验证结果：
+
+- 系统正常启动到 `MiniOS>` 提示符
+- 输入 `user` 后，屏幕依次显示：
+  - `enter user mode...`
+  - `user mode running`
+  - `syscall from user mode`
+- QEMU 调试寄存器验证显示：用户态可进入 Ring3，之后通过 `int 0x80` 回到 Ring0
+
+当前系统能力提升：
+
+- 用户态不再直接复用“随便一个可运行地址”，而是拥有明确规划的用户代码区和用户栈区
+- 分页权限开始体现“用户页”和“内核页”的差异
+- 高地址内核具备了最小的保护意识基础
+
+下一步计划：
+
+- 系统调用表
+- 最小 `write` syscall
+- 用户程序加载与更清晰的地址空间管理

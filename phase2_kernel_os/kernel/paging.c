@@ -3,10 +3,6 @@
 
 // x86 32 位分页中，一个页目录/页表都包含 1024 个表项
 #define PAGE_ENTRY_COUNT 1024
-// PDE/PTE 的 Present + Read/Write 标志
-#define PAGE_FLAGS_PRESENT_RW 0x3
-// 用户态页还需要把 U/S 位置 1，允许 Ring3 访问该页
-#define PAGE_FLAGS_PRESENT_RW_USER 0x7
 // 当前最小实现先做前 8MB 的 identity mapping，覆盖内核和早期分配区域
 #define IDENTITY_MAP_SIZE 0x00800000
 // 高地址内核基址：页目录第 768 项对应 0xC0000000 起始的 4MB 窗口
@@ -37,6 +33,45 @@ static void paging_fill_identity_table(unsigned int* page_table, unsigned int ba
     }
 }
 
+// 根据虚拟地址索引页目录/页表，并按需为该目录项分配新的页表页
+void map_page(unsigned int virtual_address, unsigned int physical_address, unsigned int flags) {
+    unsigned int directory_index;
+    unsigned int table_index;
+    unsigned int* page_table;
+    unsigned int directory_flags;
+
+    if (page_directory == (unsigned int*)0) {
+        return;
+    }
+
+    directory_index = virtual_address >> 22;
+    table_index = (virtual_address >> 12) & 0x3FF;
+    directory_flags = PAGE_PRESENT | PAGE_WRITABLE;
+
+    // 如果要映射用户态页，对应的 PDE 也必须带上 PAGE_USER
+    if ((flags & PAGE_USER) != 0) {
+        directory_flags |= PAGE_USER;
+    }
+
+    if ((page_directory[directory_index] & PAGE_PRESENT) == 0) {
+        page_table = (unsigned int*)alloc_page();
+        if (page_table == (unsigned int*)0) {
+            return;
+        }
+
+        paging_zero_page(page_table);
+        page_directory[directory_index] = ((unsigned int)page_table) | directory_flags;
+    } else {
+        page_directory[directory_index] |= directory_flags;
+        page_table = (unsigned int*)(page_directory[directory_index] & 0xFFFFF000);
+    }
+
+    page_table[table_index] = (physical_address & 0xFFFFF000) | flags;
+
+    // 当前页表已生效时，刷新单页 TLB，确保后续访问命中新映射
+    __asm__ __volatile__("invlpg (%0)" : : "r"(virtual_address) : "memory");
+}
+
 // 初始化页目录和页表，并通过 CR3/CR0 正式开启分页
 void paging_init(void) {
     unsigned int cr0_value;
@@ -56,15 +91,17 @@ void paging_init(void) {
     paging_zero_page(page_table_high);
 
     // 第一个页表映射 0~4MB，确保当前内核代码、数据和 VGA 都能继续访问
-    paging_fill_identity_table(page_table0, 0x00000000, PAGE_FLAGS_PRESENT_RW_USER);
+    paging_fill_identity_table(page_table0, 0x00000000, PAGE_PRESENT | PAGE_WRITABLE);
     // 第二个页表映射 4MB~8MB，覆盖当前早期页分配器可返回的物理页范围
-    paging_fill_identity_table(page_table1, 0x00400000, PAGE_FLAGS_PRESENT_RW);
+    paging_fill_identity_table(page_table1, 0x00400000, PAGE_PRESENT | PAGE_WRITABLE);
     // 高地址页表把 0xC0000000 起始的前 4MB 虚拟地址映射到 0~4MB 物理内存
-    paging_fill_identity_table(page_table_high, 0x00000000, PAGE_FLAGS_PRESENT_RW_USER);
+    paging_fill_identity_table(page_table_high, 0x00000000, PAGE_PRESENT | PAGE_WRITABLE);
 
-    page_directory[0] = ((unsigned int)page_table0) | PAGE_FLAGS_PRESENT_RW_USER;
-    page_directory[1] = ((unsigned int)page_table1) | PAGE_FLAGS_PRESENT_RW;
-    page_directory[768] = ((unsigned int)page_table_high) | PAGE_FLAGS_PRESENT_RW_USER;
+    page_directory[0] = ((unsigned int)page_table0) | (PAGE_PRESENT | PAGE_WRITABLE);
+    // 第二个 PDE 后续会承载用户代码/用户栈页，因此目录项提前保留 PAGE_USER
+    page_directory[1] = ((unsigned int)page_table1) | (PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+    // 高地址内核映射严格保持 supervisor-only，避免用户态直接触碰内核高地址
+    page_directory[768] = ((unsigned int)page_table_high) | (PAGE_PRESENT | PAGE_WRITABLE);
 
     // CR3 指向页目录物理基址；当前是 identity mapping，因此地址可直接使用
     __asm__ __volatile__("mov %0, %%cr3" : : "r"(page_directory));

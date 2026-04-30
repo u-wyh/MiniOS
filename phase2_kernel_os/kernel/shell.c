@@ -3,6 +3,7 @@
 #include "paging.h"
 #include "pit.h"
 #include "shell.h"
+#include "user.h"
 #include "vga.h"
 
 // 用一个最小地址栈记录 shell 分配过的页，便于连续执行多次 free
@@ -94,7 +95,7 @@ void shell_init(void) {
     shell_print_prompt();
 }
 
-// 执行最小命令集合：help / clear / echo / about / tick / panic / mem / alloc / free / kmalloc / kfree / paging
+// 执行最小命令集合：help / clear / echo / about / tick / panic / mem / alloc / free / kmalloc / kfree / paging / user
 void shell_execute(const char* line) {
     void* page;
     void* block;
@@ -117,6 +118,7 @@ void shell_execute(const char* line) {
         print_string("kmalloc - allocate one small block\n");
         print_string("kfree   - free last small block\n");
         print_string("paging  - show paging status\n");
+        print_string("user   - run ring3 test\n");
         print_string("echo  - print text\n");
         shell_print_prompt();
         return;
@@ -253,6 +255,12 @@ void shell_execute(const char* line) {
         print_uint(paging_get_identity_size() / (1024 * 1024));
         print_string(" MB\n");
         shell_print_prompt();
+        return;
+    }
+
+    if (str_equal(line, "user")) {
+        print_string("enter user mode...\n");
+        user_request_enter();
         return;
     }
 

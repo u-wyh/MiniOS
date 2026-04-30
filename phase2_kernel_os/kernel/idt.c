@@ -73,13 +73,24 @@ struct interrupt_frame {
 void interrupt_handler_80(struct interrupt_frame* frame) {
     // 由中断路径输出提示，区分这次软件中断来自内核自测还是来自 Ring3 用户程序
     if ((frame->cs & 0x3) == 0x3) {
-        print_string("syscall entered kernel from Ring3\n");
-
-        // 本轮只验证“用户态能够通过 int 0x80 进入内核”，因此在这里停机收口
-        __asm__ __volatile__("cli");
-        for (;;) {
-            __asm__ __volatile__("hlt");
+        // eax 作为最小系统调用号：1 表示“用户态已经开始运行”，2 表示“用户态再次进入内核”
+        if (frame->eax == 1) {
+            print_string("user mode running\n");
+            return;
         }
+
+        if (frame->eax == 2) {
+            print_string("syscall from user mode\n");
+
+            // 第二次系统调用说明用户代码已经成功返回用户态并再次进入内核，这里停机收口
+            __asm__ __volatile__("cli");
+            for (;;) {
+                __asm__ __volatile__("hlt");
+            }
+        }
+
+        print_string("unknown user syscall\n");
+        return;
     }
 
     print_string("interrupt triggered\n");
