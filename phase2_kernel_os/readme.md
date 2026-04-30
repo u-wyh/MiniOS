@@ -876,3 +876,45 @@ limit = 4GB
 
 - 从“依赖加载器默认段环境”进入“内核主动建立段环境”
 - 为后续 IDT/PIT/分页模块打基础
+
+## ✅ Task17：用户态 + 系统调用
+
+本轮目标：
+
+- 为 GDT 增加 Ring3 用户代码段和用户数据段
+- 通过 `iret` 从内核主动切换到用户态执行
+- 让用户态通过 `int 0x80` 进入内核
+- 在内核态处理中断并打印验证信息
+
+本轮新增能力：
+
+- 内核已具备最小 Ring3 运行能力
+- `int 0x80` 已允许用户态触发
+- TSS 已提供 Ring3 -> Ring0 中断切换所需的内核栈
+
+修改文件：
+
+- `boot/boot.asm`
+- `boot/interrupt.asm`
+- `kernel/idt.c`
+- `kernel/kernel.c`
+- `kernel/paging.c`
+- `docs/task17_user_mode.md`
+
+验证结果：
+
+- 系统可正常启动
+- 内核会打印 `Switching to Ring3 user mode...`
+- 用户态执行 `int 0x80` 后，内核打印 `syscall entered kernel from Ring3`
+- QEMU 寄存器验证显示：系统调用处理后 CPU 留在 Ring0 停机，链路稳定无重启
+
+当前系统能力提升：
+
+- 从“只有内核态”升级为“已能进入用户态并触发最小系统调用”
+- 为后续用户程序加载、参数传递、系统调用表打下基础
+
+下一步计划：
+
+- 系统调用参数传递
+- 最小用户程序管理
+- 用户态与内核态更清晰的内存隔离

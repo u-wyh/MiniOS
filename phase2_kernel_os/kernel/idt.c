@@ -7,6 +7,8 @@
 #define KERNEL_CODE_SELECTOR 0x08
 // 中断门属性：P=1, DPL=0, Type=1110(32位中断门)
 #define IDT_TYPE_ATTR 0x8E
+// 用户态系统调用门属性：允许 Ring3 使用 int 0x80 主动进入内核
+#define IDT_USER_TYPE_ATTR 0xEE
 
 // 单个 IDT 描述符结构，必须紧凑布局避免编译器填充
 struct idt_entry {
@@ -50,9 +52,36 @@ static void idt_load(void) {
     __asm__ __volatile__("lidt %0" : : "m"(ptr));
 }
 
+// int 0x80 进入内核后，栈上会先放 8 个通用寄存器，再放 CPU 自动压入的返回现场
+struct interrupt_frame {
+    unsigned int edi;
+    unsigned int esi;
+    unsigned int ebp;
+    unsigned int esp_placeholder;
+    unsigned int ebx;
+    unsigned int edx;
+    unsigned int ecx;
+    unsigned int eax;
+    unsigned int eip;
+    unsigned int cs;
+    unsigned int eflags;
+    unsigned int user_esp;
+    unsigned int user_ss;
+};
+
 // C 层中断处理函数：由汇编 ISR stub 调用
-void interrupt_handler_80(void) {
-    // 由中断路径输出提示，验证 IDT + ISR + iret 链路可用
+void interrupt_handler_80(struct interrupt_frame* frame) {
+    // 由中断路径输出提示，区分这次软件中断来自内核自测还是来自 Ring3 用户程序
+    if ((frame->cs & 0x3) == 0x3) {
+        print_string("syscall entered kernel from Ring3\n");
+
+        // 本轮只验证“用户态能够通过 int 0x80 进入内核”，因此在这里停机收口
+        __asm__ __volatile__("cli");
+        for (;;) {
+            __asm__ __volatile__("hlt");
+        }
+    }
+
     print_string("interrupt triggered\n");
 }
 
@@ -68,7 +97,7 @@ void idt_init(void) {
     }
 
     // 注册 0x80 软件中断入口
-    idt_set_gate(0x80, (unsigned int)isr80, KERNEL_CODE_SELECTOR, IDT_TYPE_ATTR);
+    idt_set_gate(0x80, (unsigned int)isr80, KERNEL_CODE_SELECTOR, IDT_USER_TYPE_ATTR);
     // 注册 IRQ0 定时器中断入口（PIC 重映射后对应 0x20）
     idt_set_gate(0x20, (unsigned int)irq0_stub, KERNEL_CODE_SELECTOR, IDT_TYPE_ATTR);
     // 注册 IRQ1 键盘中断入口（PIC 重映射后对应 0x21）

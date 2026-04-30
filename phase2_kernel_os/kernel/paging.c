@@ -5,6 +5,8 @@
 #define PAGE_ENTRY_COUNT 1024
 // PDE/PTE 的 Present + Read/Write 标志
 #define PAGE_FLAGS_PRESENT_RW 0x3
+// 用户态页还需要把 U/S 位置 1，允许 Ring3 访问该页
+#define PAGE_FLAGS_PRESENT_RW_USER 0x7
 // 当前最小实现先做前 8MB 的 identity mapping，覆盖内核和早期分配区域
 #define IDENTITY_MAP_SIZE 0x00800000
 // 高地址内核基址：页目录第 768 项对应 0xC0000000 起始的 4MB 窗口
@@ -27,11 +29,11 @@ static void paging_zero_page(unsigned int* page) {
 }
 
 // 填充单个页表，让虚拟地址和物理地址保持一一对应
-static void paging_fill_identity_table(unsigned int* page_table, unsigned int base_address) {
+static void paging_fill_identity_table(unsigned int* page_table, unsigned int base_address, unsigned int flags) {
     int i;
 
     for (i = 0; i < PAGE_ENTRY_COUNT; i++) {
-        page_table[i] = (base_address + (i * 0x1000)) | PAGE_FLAGS_PRESENT_RW;
+        page_table[i] = (base_address + (i * 0x1000)) | flags;
     }
 }
 
@@ -54,15 +56,15 @@ void paging_init(void) {
     paging_zero_page(page_table_high);
 
     // 第一个页表映射 0~4MB，确保当前内核代码、数据和 VGA 都能继续访问
-    paging_fill_identity_table(page_table0, 0x00000000);
+    paging_fill_identity_table(page_table0, 0x00000000, PAGE_FLAGS_PRESENT_RW_USER);
     // 第二个页表映射 4MB~8MB，覆盖当前早期页分配器可返回的物理页范围
-    paging_fill_identity_table(page_table1, 0x00400000);
+    paging_fill_identity_table(page_table1, 0x00400000, PAGE_FLAGS_PRESENT_RW);
     // 高地址页表把 0xC0000000 起始的前 4MB 虚拟地址映射到 0~4MB 物理内存
-    paging_fill_identity_table(page_table_high, 0x00000000);
+    paging_fill_identity_table(page_table_high, 0x00000000, PAGE_FLAGS_PRESENT_RW_USER);
 
-    page_directory[0] = ((unsigned int)page_table0) | PAGE_FLAGS_PRESENT_RW;
+    page_directory[0] = ((unsigned int)page_table0) | PAGE_FLAGS_PRESENT_RW_USER;
     page_directory[1] = ((unsigned int)page_table1) | PAGE_FLAGS_PRESENT_RW;
-    page_directory[768] = ((unsigned int)page_table_high) | PAGE_FLAGS_PRESENT_RW;
+    page_directory[768] = ((unsigned int)page_table_high) | PAGE_FLAGS_PRESENT_RW_USER;
 
     // CR3 指向页目录物理基址；当前是 identity mapping，因此地址可直接使用
     __asm__ __volatile__("mov %0, %%cr3" : : "r"(page_directory));
