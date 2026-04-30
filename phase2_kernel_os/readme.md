@@ -456,6 +456,34 @@ PIT 基础结构：
 - 任务管理雏形
 - 或内存状态命令
 
+#### Task10-1：任务系统雏形
+
+本轮目标：
+
+- 新增最小任务结构
+- 实现手动任务切换
+
+修改文件：
+
+- 新增 `include/task.h`
+- 新增 `kernel/task.c`
+- 新增 `boot/switch.asm`
+- 修改 `kernel/shell.c`
+- 修改 `kernel/kernel.c`
+- 修改 `Makefile`
+- 修改 `readme.md`
+- 新增 `docs/task10_task_basic.md`
+
+验证结果：
+
+- 输入 `task` 可在两个演示任务之间切换
+- 任务 A 输出 `A`
+- 任务 B 输出 `B`
+
+当前系统能力提升：
+
+- 已具备最小多任务切换基础（手动）
+
 ## 六、当前能力状态
 
 当前系统已具备：

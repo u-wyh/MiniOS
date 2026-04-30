@@ -1,6 +1,7 @@
 #include "panic.h"
 #include "pit.h"
 #include "shell.h"
+#include "task.h"
 #include "vga.h"
 
 // 打印统一命令提示符，便于用户看到下一次输入位置
@@ -73,7 +74,7 @@ void shell_init(void) {
     shell_print_prompt();
 }
 
-// 执行最小命令集合：help / clear / echo
+// 执行最小命令集合：help / clear / echo / task / about / tick / panic
 void shell_execute(const char* line) {
     if (line[0] == '\0') {
         shell_print_prompt();
@@ -84,6 +85,7 @@ void shell_execute(const char* line) {
         print_string("help  - show command list\n");
         print_string("clear - clear screen\n");
         print_string("test  - reserved command slot\n");
+        print_string("task  - switch demo task\n");
         print_string("about - show kernel info\n");
         print_string("tick  - show pit ticks\n");
         print_string("panic - trigger kernel panic\n");
@@ -100,6 +102,13 @@ void shell_execute(const char* line) {
 
     if (str_starts_with(line, "echo ")) {
         print_string(skip_prefix(line, "echo "));
+        print_char('\n');
+        shell_print_prompt();
+        return;
+    }
+
+    if (str_equal(line, "task")) {
+        switch_task();
         print_char('\n');
         shell_print_prompt();
         return;

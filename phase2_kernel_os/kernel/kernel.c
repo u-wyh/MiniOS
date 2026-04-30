@@ -2,6 +2,7 @@
 #include "pic.h"
 #include "pit.h"
 #include "shell.h"
+#include "task.h"
 #include "vga.h"
 
 // 内核主函数：初始化显示、软件中断、PIT 与键盘中断
@@ -13,6 +14,7 @@ void kernel_main(void) {
     idt_init();
     pic_remap();
     pit_init(20);
+    task_init();
 
     // 保留 Task4 验证路径，先手动触发一次软件中断
     __asm__ __volatile__("int $0x80");
