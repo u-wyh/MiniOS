@@ -3,10 +3,13 @@
 
 // 记录当前正在运行的任务编号，最小实现只在 0 和 1 之间轮转
 static int current_task = 0;
+// 标记调度器是否已经真正进入任务切换模式，避免纯 shell 环境下 PIT 误切任务
+static int scheduler_enabled = 0;
 
 // 初始化调度器：启动前默认先从任务 A 开始
 void scheduler_init(void) {
     current_task = 0;
+    scheduler_enabled = 1;
     task_mark_scheduled(current_task);
 }
 
@@ -25,4 +28,9 @@ unsigned int schedule(unsigned int current_esp) {
     task_mark_scheduled(current_task);
 
     return task_get_esp(current_task);
+}
+
+// 给 PIT 查询当前是否允许做任务切换
+int scheduler_is_enabled(void) {
+    return scheduler_enabled;
 }

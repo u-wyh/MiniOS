@@ -1,4 +1,5 @@
 #include "idt.h"
+#include "syscall.h"
 #include "vga.h"
 
 // IDT 总槽位数：x86 保护模式下为 256
@@ -52,44 +53,20 @@ static void idt_load(void) {
     __asm__ __volatile__("lidt %0" : : "m"(ptr));
 }
 
-// int 0x80 进入内核后，栈上会先放 8 个通用寄存器，再放 CPU 自动压入的返回现场
-struct interrupt_frame {
-    unsigned int edi;
-    unsigned int esi;
-    unsigned int ebp;
-    unsigned int esp_placeholder;
-    unsigned int ebx;
-    unsigned int edx;
-    unsigned int ecx;
-    unsigned int eax;
-    unsigned int eip;
-    unsigned int cs;
-    unsigned int eflags;
-    unsigned int user_esp;
-    unsigned int user_ss;
-};
-
 // C 层中断处理函数：由汇编 ISR stub 调用
 void interrupt_handler_80(struct interrupt_frame* frame) {
     // 由中断路径输出提示，区分这次软件中断来自内核自测还是来自 Ring3 用户程序
     if ((frame->cs & 0x3) == 0x3) {
-        // eax 作为最小系统调用号：1 表示“用户态已经开始运行”，2 表示“用户态再次进入内核”
-        if (frame->eax == 1) {
-            print_string("user mode running\n");
-            return;
-        }
+        syscall_handle(frame);
 
-        if (frame->eax == 2) {
-            print_string("syscall from user mode\n");
-
-            // 第二次系统调用说明用户代码已经成功返回用户态并再次进入内核，这里停机收口
+        // 只有用户态显式发出 SYS_EXIT 请求后，才在内核态停机收口
+        if (syscall_should_halt() != 0) {
             __asm__ __volatile__("cli");
             for (;;) {
                 __asm__ __volatile__("hlt");
             }
         }
 
-        print_string("unknown user syscall\n");
         return;
     }
 

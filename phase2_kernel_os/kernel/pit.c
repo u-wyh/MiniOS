@@ -36,8 +36,8 @@ void pit_init(unsigned int frequency) {
 unsigned int timer_handler(unsigned int current_esp) {
     tick_count++;
 
-    // 当前阶段只在固定时间片边界切换任务，保持中断逻辑最小且稳定
-    if ((tick_count % PIT_SCHEDULE_INTERVAL) == 0) {
+    // 只有调度器真正启用后，才在固定时间片边界切换任务；纯 shell 模式只累计 tick
+    if (scheduler_is_enabled() != 0 && (tick_count % PIT_SCHEDULE_INTERVAL) == 0) {
         current_esp = schedule(current_esp);
     }
 

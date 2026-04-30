@@ -7,5 +7,7 @@ void scheduler_init(void);
 void scheduler_start(void);
 // 根据当前中断现场选择下一个任务，并返回应恢复的目标 ESP
 unsigned int schedule(unsigned int current_esp);
+// 返回调度器是否已启用，供 PIT 在 shell 模式下仅累计 tick 而不切换任务
+int scheduler_is_enabled(void);
 
 #endif

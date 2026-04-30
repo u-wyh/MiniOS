@@ -41,8 +41,8 @@ void pic_remap(void) {
     outb(PIC2_DATA, ICW4_8086);
     io_wait();
 
-    // Task18 以用户空间测试为主，只放开 IRQ1 键盘中断，避免定时器频繁打断输入体验
-    outb(PIC1_DATA, 0xFD);
+    // 当前阶段放开 IRQ0 和 IRQ1：既保留键盘输入，也让 SYS_TIME 能读取真实 PIT tick
+    outb(PIC1_DATA, 0xFC);
     outb(PIC2_DATA, 0xFF);
 }
 
