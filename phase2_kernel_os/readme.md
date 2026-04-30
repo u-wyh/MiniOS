@@ -650,6 +650,38 @@ PIT IRQ0 -> CPU 自动压栈 -> irq0_stub: pusha -> timer_handler -> schedule
 - 更灵活的 `kmalloc`
 - 或分页 / 虚拟内存
 
+#### Task15：分页机制
+
+本轮目标：
+
+- 建立最小页目录与页表
+- 开启 CPU 分页机制
+- 对内核早期运行区域做 identity mapping
+
+修改文件：
+
+- 新增 `include/paging.h`
+- 新增 `kernel/paging.c`
+- 修改 `kernel/kernel.c`
+- 修改 `Makefile`
+- 修改 `readme.md`
+- 新增 `docs/task15_paging.md`
+
+验证方法：
+
+- 执行 `make run`
+- 系统在开启分页后仍能正常启动、不中途重启
+- 可通过 `paging` 命令查看分页是否启用，以及页目录/页表地址
+
+当前能力提升：
+
+- 内核已经具备最小地址翻译能力，开始从“直接物理地址访问”过渡到“分页管理”
+
+下一步计划：
+
+- 虚拟内存扩展
+- 或缺页异常与更完整内存管理
+
 ## 六、当前能力状态
 
 当前系统已具备：

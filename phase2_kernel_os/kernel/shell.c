@@ -1,5 +1,6 @@
 #include "mm.h"
 #include "panic.h"
+#include "paging.h"
 #include "pit.h"
 #include "shell.h"
 #include "vga.h"
@@ -93,7 +94,7 @@ void shell_init(void) {
     shell_print_prompt();
 }
 
-// 执行最小命令集合：help / clear / echo / about / tick / panic / mem / alloc / free / kmalloc / kfree
+// 执行最小命令集合：help / clear / echo / about / tick / panic / mem / alloc / free / kmalloc / kfree / paging
 void shell_execute(const char* line) {
     void* page;
     void* block;
@@ -115,6 +116,7 @@ void shell_execute(const char* line) {
         print_string("free  - free last page\n");
         print_string("kmalloc - allocate one small block\n");
         print_string("kfree   - free last small block\n");
+        print_string("paging  - show paging status\n");
         print_string("echo  - print text\n");
         shell_print_prompt();
         return;
@@ -224,6 +226,29 @@ void shell_execute(const char* line) {
             print_hex((unsigned int)block);
             print_char('\n');
         }
+        shell_print_prompt();
+        return;
+    }
+
+    if (str_equal(line, "paging")) {
+        print_string("paging: ");
+        if (paging_is_enabled() != 0) {
+            print_string("enabled\n");
+        } else {
+            print_string("disabled\n");
+        }
+        print_string("page directory: ");
+        print_hex(paging_get_directory());
+        print_char('\n');
+        print_string("page table 0: ");
+        print_hex(paging_get_table0());
+        print_char('\n');
+        print_string("page table 1: ");
+        print_hex(paging_get_table1());
+        print_char('\n');
+        print_string("identity size: ");
+        print_uint(paging_get_identity_size() / (1024 * 1024));
+        print_string(" MB\n");
         shell_print_prompt();
         return;
     }
