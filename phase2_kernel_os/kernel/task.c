@@ -13,6 +13,21 @@ static unsigned char stack_b[4096];
 // 汇编入口：把控制流直接切到准备好的任务中断现场，并通过 iret 进入任务
 extern void task_enter(unsigned int new_esp);
 
+// 这个结构精确描述“任务被恢复前”栈里的保存现场布局
+struct task_stack_frame {
+    unsigned int edi;
+    unsigned int esi;
+    unsigned int ebp;
+    unsigned int esp_placeholder;
+    unsigned int ebx;
+    unsigned int edx;
+    unsigned int ecx;
+    unsigned int eax;
+    unsigned int eip;
+    unsigned int cs;
+    unsigned int eflags;
+};
+
 // 任务 A：每次获得新的时间片时输出一个字符 A，然后 hlt 等待下一次中断
 static void task_a(void) {
     unsigned int last_seen_token = 0;
@@ -41,25 +56,26 @@ static void task_b(void) {
     }
 }
 
-// 构造任务第一次启动所需的最小中断现场，使 popad + iret 能直接进入任务函数
+// 构造任务第一次启动所需的完整现场，使 popad + iret 能正确恢复寄存器并进入任务
 static unsigned int build_initial_esp(unsigned char* stack_base, void (*entry)(void)) {
-    unsigned int* sp = (unsigned int*)(stack_base + 4096);
+    struct task_stack_frame* frame = (struct task_stack_frame*)(stack_base + 4096 - sizeof(struct task_stack_frame));
 
-    // 先伪造 iret 需要恢复的 EFLAGS / CS / EIP，使任务像中断返回一样启动
-    *--sp = 0x00000202; // eflags：保留 IF=1，让任务中的 hlt 能被时钟中断唤醒
-    *--sp = 0x00000008; // cs：沿用当前 GDT 中的内核代码段选择子
-    *--sp = (unsigned int)entry; // eip：任务入口函数地址
-    // 再补上 popad 要恢复的 8 个通用寄存器槽位
-    *--sp = 0; // eax
-    *--sp = 0; // ecx
-    *--sp = 0; // edx
-    *--sp = 0; // ebx
-    *--sp = 0; // esp 占位
-    *--sp = 0; // ebp
-    *--sp = 0; // esi
-    *--sp = 0; // edi
+    // 通用寄存器初值统一置 0，让首次切入时现场可预测
+    frame->edi = 0;
+    frame->esi = 0;
+    frame->ebp = 0;
+    frame->esp_placeholder = 0;
+    frame->ebx = 0;
+    frame->edx = 0;
+    frame->ecx = 0;
+    frame->eax = 0;
 
-    return (unsigned int)sp;
+    // iret 依赖这三个字段恢复执行点和标志位，使任务像一次中断返回那样启动
+    frame->eip = (unsigned int)entry;
+    frame->cs = 0x00000008;
+    frame->eflags = 0x00000202;
+
+    return (unsigned int)frame;
 }
 
 // 初始化两个任务的独立栈和首次运行入口
