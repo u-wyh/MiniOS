@@ -620,6 +620,36 @@ PIT IRQ0 -> CPU 自动压栈 -> irq0_stub: pusha -> timer_handler -> schedule
 - 虚拟内存雏形
 - 或更高层的 `kmalloc`
 
+#### Task14：内核内存分配器
+
+本轮目标：
+
+- 在页分配器之上实现最小 `kmalloc / kfree`
+- 支持小块内核内存分配，而不是只能按 4KB 页整块分配
+
+修改文件：
+
+- 修改 `include/mm.h`
+- 修改 `kernel/mm.c`
+- 修改 `kernel/shell.c`
+- 修改 `readme.md`
+- 新增 `docs/task14_kmalloc.md`
+
+验证方法：
+
+- `kmalloc`：连续分配多个 32B 小块，地址应不同
+- `kfree`：释放后再次 `kmalloc`，可观察地址被重复利用
+
+当前能力提升：
+
+- 内核已经具备最小“小块内存分配”能力，不再只能直接向页分配器要整页
+- 页分配器会自动避开内核镜像自身占用的物理区域，减少自覆盖风险
+
+下一步计划：
+
+- 更灵活的 `kmalloc`
+- 或分页 / 虚拟内存
+
 ## 六、当前能力状态
 
 当前系统已具备：

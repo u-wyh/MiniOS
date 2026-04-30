@@ -8,6 +8,9 @@
 #define SHELL_PAGE_HISTORY 128
 static void* allocated_pages[SHELL_PAGE_HISTORY];
 static int allocated_page_count = 0;
+// kmalloc 也维护一份最小地址栈，便于验证 kfree 后的小块复用效果
+static void* allocated_blocks[SHELL_PAGE_HISTORY];
+static int allocated_block_count = 0;
 
 // 打印统一命令提示符，便于用户看到下一次输入位置
 static void shell_print_prompt(void) {
@@ -90,9 +93,10 @@ void shell_init(void) {
     shell_print_prompt();
 }
 
-// 执行最小命令集合：help / clear / echo / about / tick / panic / mem / alloc / free
+// 执行最小命令集合：help / clear / echo / about / tick / panic / mem / alloc / free / kmalloc / kfree
 void shell_execute(const char* line) {
     void* page;
+    void* block;
 
     if (line[0] == '\0') {
         shell_print_prompt();
@@ -109,6 +113,8 @@ void shell_execute(const char* line) {
         print_string("mem   - show page stats\n");
         print_string("alloc - allocate one page\n");
         print_string("free  - free last page\n");
+        print_string("kmalloc - allocate one small block\n");
+        print_string("kfree   - free last small block\n");
         print_string("echo  - print text\n");
         shell_print_prompt();
         return;
@@ -183,6 +189,39 @@ void shell_execute(const char* line) {
             free_page(page);
             print_string("free page: ");
             print_hex((unsigned int)page);
+            print_char('\n');
+        }
+        shell_print_prompt();
+        return;
+    }
+
+    if (str_equal(line, "kmalloc")) {
+        block = kmalloc(32);
+        if (block == (void*)0) {
+            print_string("kmalloc failed\n");
+        } else {
+            // 用和页分配相同的地址栈方式，支持连续多次 kfree
+            if (allocated_block_count < SHELL_PAGE_HISTORY) {
+                allocated_blocks[allocated_block_count] = block;
+                allocated_block_count++;
+            }
+            print_string("kmalloc block: ");
+            print_hex((unsigned int)block);
+            print_char('\n');
+        }
+        shell_print_prompt();
+        return;
+    }
+
+    if (str_equal(line, "kfree")) {
+        if (allocated_block_count == 0) {
+            print_string("no block to free\n");
+        } else {
+            allocated_block_count--;
+            block = allocated_blocks[allocated_block_count];
+            kfree(block);
+            print_string("kfree block: ");
+            print_hex((unsigned int)block);
             print_char('\n');
         }
         shell_print_prompt();
