@@ -587,6 +587,39 @@ PIT IRQ0 -> CPU 自动压栈 -> irq0_stub: pusha -> timer_handler -> schedule
 - 内存管理雏形
 - 或任务状态管理
 
+#### Task13：物理内存管理（页分配器）
+
+本轮目标：
+
+- 实现最小物理页分配器
+- 支持页分配、释放与统计
+- 通过 shell 命令验证内存资源分配能力
+
+修改文件：
+
+- 新增 `include/mm.h`
+- 新增 `kernel/mm.c`
+- 修改 `kernel/kernel.c`
+- 修改 `kernel/shell.c`
+- 修改 `Makefile`
+- 修改 `readme.md`
+- 新增 `docs/task13_mm.md`
+
+验证方法：
+
+- `mem`：查看总页数、已用页数、空闲页数
+- `alloc`：分配一个 4KB 页并打印地址
+- `free`：释放最近一次分配的页
+
+当前能力提升：
+
+- 内核已具备最小资源分配能力，可管理固定大小的物理页
+
+下一步计划：
+
+- 虚拟内存雏形
+- 或更高层的 `kmalloc`
+
 ## 六、当前能力状态
 
 当前系统已具备：

@@ -1,4 +1,5 @@
 #include "idt.h"
+#include "mm.h"
 #include "pic.h"
 #include "pit.h"
 #include "sched.h"
@@ -17,6 +18,7 @@ void kernel_main(void) {
     pit_init(20);
     task_init();
     scheduler_init();
+    mm_init();
 
     // 保留 Task4 验证路径，先手动触发一次软件中断
     __asm__ __volatile__("int $0x80");

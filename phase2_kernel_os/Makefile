@@ -15,6 +15,7 @@ SHELL_SRC = kernel/shell.c
 PANIC_SRC = kernel/panic.c
 TASK_SRC = kernel/task.c
 SCHED_SRC = kernel/sched.c
+MM_SRC = kernel/mm.c
 VGA_SRC = drivers/vga.c
 SWITCH_SRC = boot/switch.asm
 BOOT_OBJ = $(BUILD_DIR)/boot.o
@@ -29,6 +30,7 @@ SHELL_OBJ = $(BUILD_DIR)/shell.o
 PANIC_OBJ = $(BUILD_DIR)/panic.o
 TASK_OBJ = $(BUILD_DIR)/task.o
 SCHED_OBJ = $(BUILD_DIR)/sched.o
+MM_OBJ = $(BUILD_DIR)/mm.o
 VGA_OBJ = $(BUILD_DIR)/vga.o
 SWITCH_OBJ = $(BUILD_DIR)/switch.o
 KERNEL_ELF = $(BUILD_DIR)/kernel.elf
@@ -82,11 +84,14 @@ $(TASK_OBJ): $(TASK_SRC) | $(BUILD_DIR)
 $(SCHED_OBJ): $(SCHED_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(MM_OBJ): $(MM_SRC) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(VGA_OBJ): $(VGA_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(KERNEL_ELF): $(BOOT_OBJ) $(INTERRUPT_OBJ) $(SWITCH_OBJ) $(KERNEL_OBJ) $(IDT_OBJ) $(IO_OBJ) $(PIC_OBJ) $(PIT_OBJ) $(KEYBOARD_OBJ) $(SHELL_OBJ) $(PANIC_OBJ) $(TASK_OBJ) $(SCHED_OBJ) $(VGA_OBJ) linker.ld
-	$(LD) $(LDFLAGS) $(BOOT_OBJ) $(INTERRUPT_OBJ) $(SWITCH_OBJ) $(KERNEL_OBJ) $(IDT_OBJ) $(IO_OBJ) $(PIC_OBJ) $(PIT_OBJ) $(KEYBOARD_OBJ) $(SHELL_OBJ) $(PANIC_OBJ) $(TASK_OBJ) $(SCHED_OBJ) $(VGA_OBJ) -o $@
+$(KERNEL_ELF): $(BOOT_OBJ) $(INTERRUPT_OBJ) $(SWITCH_OBJ) $(KERNEL_OBJ) $(IDT_OBJ) $(IO_OBJ) $(PIC_OBJ) $(PIT_OBJ) $(KEYBOARD_OBJ) $(SHELL_OBJ) $(PANIC_OBJ) $(TASK_OBJ) $(SCHED_OBJ) $(MM_OBJ) $(VGA_OBJ) linker.ld
+	$(LD) $(LDFLAGS) $(BOOT_OBJ) $(INTERRUPT_OBJ) $(SWITCH_OBJ) $(KERNEL_OBJ) $(IDT_OBJ) $(IO_OBJ) $(PIC_OBJ) $(PIT_OBJ) $(KEYBOARD_OBJ) $(SHELL_OBJ) $(PANIC_OBJ) $(TASK_OBJ) $(SCHED_OBJ) $(MM_OBJ) $(VGA_OBJ) -o $@
 
 run: $(KERNEL_ELF)
 	qemu-system-i386 -kernel $(KERNEL_ELF)

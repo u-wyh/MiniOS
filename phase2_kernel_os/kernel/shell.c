@@ -1,7 +1,13 @@
+#include "mm.h"
 #include "panic.h"
 #include "pit.h"
 #include "shell.h"
 #include "vga.h"
+
+// 用一个最小地址栈记录 shell 分配过的页，便于连续执行多次 free
+#define SHELL_PAGE_HISTORY 128
+static void* allocated_pages[SHELL_PAGE_HISTORY];
+static int allocated_page_count = 0;
 
 // 打印统一命令提示符，便于用户看到下一次输入位置
 static void shell_print_prompt(void) {
@@ -68,13 +74,26 @@ static void print_uint(unsigned int value) {
     }
 }
 
+// 打印 32 位地址，便于观察页分配返回的物理页起始位置
+static void print_hex(unsigned int value) {
+    static const char hex_digits[] = "0123456789ABCDEF";
+    int shift;
+
+    print_string("0x");
+    for (shift = 28; shift >= 0; shift -= 4) {
+        print_char(hex_digits[(value >> shift) & 0xF]);
+    }
+}
+
 // Shell 初始化：当前阶段只需要打印首个提示符
 void shell_init(void) {
     shell_print_prompt();
 }
 
-// 执行最小命令集合：help / clear / echo / about / tick / panic
+// 执行最小命令集合：help / clear / echo / about / tick / panic / mem / alloc / free
 void shell_execute(const char* line) {
+    void* page;
+
     if (line[0] == '\0') {
         shell_print_prompt();
         return;
@@ -87,6 +106,9 @@ void shell_execute(const char* line) {
         print_string("about - show kernel info\n");
         print_string("tick  - show pit ticks\n");
         print_string("panic - trigger kernel panic\n");
+        print_string("mem   - show page stats\n");
+        print_string("alloc - allocate one page\n");
+        print_string("free  - free last page\n");
         print_string("echo  - print text\n");
         shell_print_prompt();
         return;
@@ -124,6 +146,46 @@ void shell_execute(const char* line) {
 
     if (str_equal(line, "panic")) {
         kernel_panic("manual panic triggered");
+        return;
+    }
+
+    if (str_equal(line, "mem")) {
+        mem_stat();
+        shell_print_prompt();
+        return;
+    }
+
+    if (str_equal(line, "alloc")) {
+        page = alloc_page();
+        if (page == (void*)0) {
+            print_string("alloc failed\n");
+        } else {
+            // 只要历史栈还有空间，就把新页地址压栈，供后续连续 free 使用
+            if (allocated_page_count < SHELL_PAGE_HISTORY) {
+                allocated_pages[allocated_page_count] = page;
+                allocated_page_count++;
+            }
+            print_string("alloc page: ");
+            print_hex((unsigned int)page);
+            print_char('\n');
+        }
+        shell_print_prompt();
+        return;
+    }
+
+    if (str_equal(line, "free")) {
+        if (allocated_page_count == 0) {
+            print_string("no page to free\n");
+        } else {
+            // 采用后进先出释放方式，让 shell 可以连续回收多次 alloc 得到的页
+            allocated_page_count--;
+            page = allocated_pages[allocated_page_count];
+            free_page(page);
+            print_string("free page: ");
+            print_hex((unsigned int)page);
+            print_char('\n');
+        }
+        shell_print_prompt();
         return;
     }
 
