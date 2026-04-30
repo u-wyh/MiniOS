@@ -484,6 +484,39 @@ PIT 基础结构：
 
 - 已具备最小多任务切换基础（手动）
 
+#### Task10-2：自动调度器
+
+本轮目标：
+
+- 使用 PIT 定时器中断自动驱动任务切换
+- 在两个演示任务之间实现最小 round-robin 轮转
+
+修改文件：
+
+- 修改 `boot/interrupt.asm`
+- 修改 `boot/switch.asm`
+- 修改 `include/pit.h`
+- 修改 `include/task.h`
+- 新增 `include/sched.h`
+- 修改 `kernel/pit.c`
+- 修改 `kernel/task.c`
+- 新增 `kernel/sched.c`
+- 修改 `kernel/kernel.c`
+- 修改 `kernel/shell.c`
+- 修改 `Makefile`
+- 修改 `readme.md`
+- 新增 `docs/task10_sched.md`
+
+验证结果：
+
+- `make clean` / `make` / `make run` 通过
+- 启动后无需输入 `task` 命令
+- 屏幕会自动出现 `ABABAB...`
+
+当前系统能力提升：
+
+- 已从“手动切换任务”升级为“PIT 驱动的最小自动调度”
+
 ## 六、当前能力状态
 
 当前系统已具备：
@@ -503,11 +536,11 @@ BIOS -> Bootloader -> Kernel -> IDT/ISR -> PIC/PIT
 
 ## 七、下一步计划
 
-下一任务：键盘中断输入
+下一任务：任务系统继续演进
 
-- 接入键盘 IRQ1
-- 读取扫描码并映射基础字符
-- 在 VGA 上显示最小输入结果
+- 扩展调度器策略
+- 引入更明确的时间片管理
+- 为后续任务管理和内存管理做准备
 
 ## 八、长期路线
 

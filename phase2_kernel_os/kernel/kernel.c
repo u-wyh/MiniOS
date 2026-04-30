@@ -1,6 +1,7 @@
 #include "idt.h"
 #include "pic.h"
 #include "pit.h"
+#include "sched.h"
 #include "shell.h"
 #include "task.h"
 #include "vga.h"
@@ -15,18 +16,18 @@ void kernel_main(void) {
     pic_remap();
     pit_init(20);
     task_init();
+    scheduler_init();
 
     // 保留 Task4 验证路径，先手动触发一次软件中断
     __asm__ __volatile__("int $0x80");
 
     // 在中断路径验证完成后打印 Shell 提示符，避免提示符被启动信息打断
     shell_init();
+    print_char('\n');
 
     // 所有中断准备完成后再打开 IF，允许 IRQ0/IRQ1 进入 CPU
     __asm__ __volatile__("sti");
 
-    // 用 hlt 等待下一次定时器中断，避免 CPU 空转
-    for (;;) {
-        __asm__ __volatile__("hlt");
-    }
+    // 中断开启后立即启动第一个任务，后续切换改由 PIT 自动驱动
+    scheduler_start();
 }

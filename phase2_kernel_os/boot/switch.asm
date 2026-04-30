@@ -1,5 +1,6 @@
 section .text
 global context_switch
+global task_enter
 
 context_switch:
     ; 取出 old_esp 指针和 new_esp 值，准备切换前后两个上下文
@@ -18,5 +19,14 @@ context_switch:
     ; 从新任务栈中恢复通用寄存器，然后 ret 到它的执行点
     popad
     ret
+
+task_enter:
+    ; 读取首个任务准备好的中断现场栈顶地址
+    mov eax, [esp + 4]
+
+    ; 直接切到任务栈，并按中断返回格式恢复现场
+    mov esp, eax
+    popad
+    iret
 
 section .note.GNU-stack noalloc noexec nowrite

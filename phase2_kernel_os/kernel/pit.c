@@ -1,7 +1,7 @@
 #include "io.h"
 #include "pic.h"
 #include "pit.h"
-#include "vga.h"
+#include "sched.h"
 
 // PIT 输入时钟频率
 #define PIT_BASE_FREQUENCY 1193182
@@ -9,6 +9,8 @@
 #define PIT_COMMAND_PORT 0x43
 // PIT 通道 0 数据端口
 #define PIT_CHANNEL0_PORT 0x40
+// 每 10 次 tick 触发一次任务切换，避免切换频率过高
+#define PIT_SCHEDULE_INTERVAL 10
 
 // 记录定时器 tick 次数，后续调度器会依赖它
 static volatile unsigned int tick_count = 0;
@@ -29,10 +31,18 @@ void pit_init(unsigned int frequency) {
     outb(PIT_CHANNEL0_PORT, (unsigned char)((divisor >> 8) & 0xFF));
 }
 
-// 定时器中断处理：当前阶段只维护 tick，避免频繁刷屏影响 Shell 观察
-void timer_handler(void) {
+// 定时器中断处理：维护 tick，并按固定时间片触发最小任务调度
+unsigned int timer_handler(unsigned int current_esp) {
     tick_count++;
+
+    // 当前阶段只在固定时间片边界切换任务，保持中断逻辑最小且稳定
+    if ((tick_count % PIT_SCHEDULE_INTERVAL) == 0) {
+        current_esp = schedule(current_esp);
+    }
+
     pic_send_eoi(0);
+
+    return current_esp;
 }
 
 // 返回当前累计 tick 数，供控制台命令读取真实系统节拍
