@@ -46,5 +46,7 @@ struct Elf32_Phdr {
 
 // 从内存中的 ELF 镜像加载用户程序，成功返回入口虚拟地址，失败返回 0
 unsigned int elf_load(const unsigned char* elf_data, unsigned int elf_size);
+// 返回内置 test ELF 镜像及其长度，供 exec("test") 调用
+const unsigned char* elf_get_test_image(unsigned int* elf_size);
 
 #endif

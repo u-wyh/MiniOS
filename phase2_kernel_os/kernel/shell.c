@@ -6,6 +6,9 @@
 #include "user.h"
 #include "vga.h"
 
+// 执行内置用户程序的最小接口，当前仅支持 exec("test")
+void exec(const char* name);
+
 // 用一个最小地址栈记录 shell 分配过的页，便于连续执行多次 free
 #define SHELL_PAGE_HISTORY 128
 static void* allocated_pages[SHELL_PAGE_HISTORY];
@@ -95,7 +98,7 @@ void shell_init(void) {
     shell_print_prompt();
 }
 
-// 执行最小命令集合：help / clear / echo / about / tick / panic / mem / alloc / free / kmalloc / kfree / paging / user
+// 执行最小命令集合：help / clear / echo / about / tick / panic / mem / alloc / free / kmalloc / kfree / paging / user / run test
 void shell_execute(const char* line) {
     void* page;
     void* block;
@@ -108,7 +111,6 @@ void shell_execute(const char* line) {
     if (str_equal(line, "help")) {
         print_string("help  - show command list\n");
         print_string("clear - clear screen\n");
-        print_string("test  - reserved command slot\n");
         print_string("about - show kernel info\n");
         print_string("tick  - show pit ticks\n");
         print_string("panic - trigger kernel panic\n");

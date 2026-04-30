@@ -1087,3 +1087,16 @@ limit = 4GB
 - 通过 `enter_user_mode(entry, user_stack_top)` 进入 Ring3 执行 ELF 入口
 
 验证目标：用户态程序可通过 `int 0x80` 调用 `write`，输出 `Hello from ELF`。
+
+### Task22：exec 机制（shell 运行用户程序）
+
+本任务新增最小 exec 链路：
+
+- 新增 `exec(const char* name)`
+- 维护最小程序分派（当前仅支持 `test`）
+- shell 新增命令 `run test`
+- 执行路径：`shell -> exec -> elf_load -> user mode`
+
+验证目标：
+
+在 shell 输入 `run test`，用户程序成功输出 `Hello from ELF`。
