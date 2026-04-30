@@ -32,6 +32,7 @@ void pit_init(unsigned int frequency) {
 }
 
 // 定时器中断处理：维护 tick，并按固定时间片触发最小任务调度
+// 参数 current_esp 指向“旧任务完整中断现场”的栈顶，返回值则是应恢复的新任务 esp
 unsigned int timer_handler(unsigned int current_esp) {
     tick_count++;
 

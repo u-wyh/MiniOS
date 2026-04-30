@@ -1,7 +1,7 @@
 #include "task.h"
 #include "vga.h"
 
-// 两个最小任务控制块：当前阶段只做 A/B 任务轮换
+// 两个最小任务控制块：TCB 只保存 esp，因为完整现场已经留在各自任务栈里
 static task_t tasks[2];
 // 每个任务独立维护一个运行代号，只有代号变化时才输出一个新字符
 static volatile unsigned int task_run_tokens[2] = {1, 0};
@@ -14,6 +14,7 @@ static unsigned char stack_b[4096];
 extern void task_enter(unsigned int new_esp);
 
 // 这个结构精确描述“任务被恢复前”栈里的保存现场布局
+// 当前自动调度路径要求：popad 先恢复通用寄存器，再由 iretd 恢复 eip/cs/eflags
 struct task_stack_frame {
     unsigned int edi;
     unsigned int esi;
@@ -56,7 +57,7 @@ static void task_b(void) {
     }
 }
 
-// 构造任务第一次启动所需的完整现场，使 popad + iret 能正确恢复寄存器并进入任务
+// 构造任务第一次启动所需的完整现场，使 popad + iretd 能正确恢复寄存器并进入任务
 static unsigned int build_initial_esp(unsigned char* stack_base, void (*entry)(void)) {
     struct task_stack_frame* frame = (struct task_stack_frame*)(stack_base + 4096 - sizeof(struct task_stack_frame));
 
@@ -70,7 +71,7 @@ static unsigned int build_initial_esp(unsigned char* stack_base, void (*entry)(v
     frame->ecx = 0;
     frame->eax = 0;
 
-    // iret 依赖这三个字段恢复执行点和标志位，使任务像一次中断返回那样启动
+    // iretd 依赖这三个字段恢复执行点和标志位，使任务像一次中断返回那样启动
     frame->eip = (unsigned int)entry;
     frame->cs = 0x00000008;
     frame->eflags = 0x00000202;
@@ -94,7 +95,7 @@ unsigned int task_get_esp(int task_index) {
     return tasks[task_index].esp;
 }
 
-// 把被抢占任务的最新 ESP 写回 TCB，便于下次恢复
+// 把被抢占任务的最新 ESP 写回 TCB；只要记住这个入口地址，就能找回整份现场
 void task_set_esp(int task_index, unsigned int esp) {
     tasks[task_index].esp = esp;
 }

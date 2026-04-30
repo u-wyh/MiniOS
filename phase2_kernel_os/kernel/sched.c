@@ -15,7 +15,7 @@ void scheduler_start(void) {
     task_start_first(current_task);
 }
 
-// 最小 round-robin：保存旧任务 ESP，切到另一个任务的 ESP
+// 最小 round-robin：调度器不搬运整份寄存器，只切换“现场入口” esp
 unsigned int schedule(unsigned int current_esp) {
     int old_task = current_task;
     int next_task = (current_task + 1) % task_count();

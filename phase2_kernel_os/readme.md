@@ -541,6 +541,52 @@ PIT 基础结构：
 
 - 任务切换从“能工作”进一步收紧为“上下文布局清晰、寄存器恢复明确”
 
+#### Task12：中断调度现场统一
+
+本轮目标：
+
+- 统一当前 PIT 自动调度所依赖的现场模型
+- 明确 CPU 自动压栈、`pusha/popa`、TCB 保存 `esp`、`iretd` 返回之间的关系
+
+修改文件：
+
+- 修改 `boot/interrupt.asm`
+- 修改 `boot/switch.asm`
+- 修改 `kernel/task.c`
+- 修改 `kernel/pit.c`
+- 修改 `kernel/sched.c`
+- 修改 `readme.md`
+- 新增 `docs/task12_interrupt_schedule.md`
+
+中断现场保存方式：
+
+- CPU 进入 IRQ0 时自动压入 `EIP / CS / EFLAGS`
+- `irq0_stub` 再用 `pusha` 保存 8 个通用寄存器
+- 调度器只需要保存当前任务 `esp`
+
+为什么 TCB 只保存 `esp`：
+
+- 完整现场已经保存在任务自己的栈里
+- `esp` 只是这份完整现场的入口地址
+
+当前调度路径：
+
+```text
+PIT IRQ0 -> CPU 自动压栈 -> irq0_stub: pusha -> timer_handler -> schedule
+-> 保存 old esp / 切换 new esp -> popa -> iretd -> 新任务继续执行
+```
+
+验证结果：
+
+- `make clean` / `make` / `make run` 通过
+- PIT 自动调度仍稳定输出 `ABABAB...`
+- 未出现 triple fault 或随机重启
+
+下一步计划：
+
+- 内存管理雏形
+- 或任务状态管理
+
 ## 六、当前能力状态
 
 当前系统已具备：

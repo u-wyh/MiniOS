@@ -16,11 +16,11 @@ isr80:
     ; 恢复通用寄存器，确保返回后上下文一致
     popa
 
-    ; 使用 iret 从中断返回，恢复 EIP/CS/EFLAGS
-    iret
+    ; 使用 iretd 从中断返回，显式恢复 32 位 EIP/CS/EFLAGS
+    iretd
 
 irq0_stub:
-    ; 保存通用寄存器，避免定时器打断当前执行现场
+    ; CPU 进入中断前已自动压入 EIP/CS/EFLAGS，这里再补上通用寄存器
     pusha
 
     ; 把当前中断现场的栈顶地址传给 C 层，便于调度器保存旧任务 ESP
@@ -32,14 +32,14 @@ irq0_stub:
     ; 清理传入的参数，恢复到中断现场原本的栈布局
     add esp, 4
 
-    ; 若调度器选择了新任务，就把 ESP 切到新任务保存的中断现场
+    ; 调度器返回的不是“函数返回地址”，而是新任务完整中断现场的栈顶
     mov esp, eax
 
-    ; 恢复通用寄存器，使中断返回后继续原流程
+    ; popa 从当前 esp 指向的任务栈中恢复 8 个通用寄存器
     popa
 
-    ; 用 iret 恢复中断前的执行点与标志寄存器
-    iret
+    ; iretd 再继续恢复 EIP/CS/EFLAGS，最终返回到被选中的任务
+    iretd
 
 irq1_stub:
     ; 保存通用寄存器，避免键盘中断破坏当前执行上下文
@@ -51,7 +51,7 @@ irq1_stub:
     ; 恢复通用寄存器，让中断返回后继续原流程
     popa
 
-    ; 使用 iret 从键盘中断返回
-    iret
+    ; 使用 iretd 从键盘中断返回
+    iretd
 
 section .note.GNU-stack noalloc noexec nowrite
