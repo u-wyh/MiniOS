@@ -93,12 +93,33 @@ static void print_hex(unsigned int value) {
     }
 }
 
+// 解析正整数字符串，供 waitpid <pid> 使用；裸机环境不能依赖 atoi
+static int parse_uint(const char* s) {
+    int value = 0;
+    int i = 0;
+
+    if (s == (const char*)0 || s[0] == '\0') {
+        return 0;
+    }
+
+    while (s[i] != '\0') {
+        if (s[i] < '0' || s[i] > '9') {
+            return 0;
+        }
+
+        value = value * 10 + (s[i] - '0');
+        i++;
+    }
+
+    return value;
+}
+
 // Shell 初始化：当前阶段只需要打印首个提示符
 void shell_init(void) {
     shell_print_prompt();
 }
 
-// 执行最小命令集合：help / clear / echo / about / tick / panic / mem / alloc / free / kmalloc / kfree / paging / user / ps / ls / cat <file> / run <file>
+// 执行最小命令集合：help / clear / echo / about / tick / panic / mem / alloc / free / kmalloc / kfree / paging / user / ps / wait / waitpid / ls / cat <file> / run <file>
 void shell_execute(const char* line) {
     void* page;
     void* block;
@@ -122,7 +143,8 @@ void shell_execute(const char* line) {
         print_string("paging  - show paging status\n");
         print_string("user   - run ring3 test\n");
         print_string("ps    - show process list\n");
-        print_string("wait  - reap one zombie process\n");
+        print_string("wait  - reap one zombie child\n");
+        print_string("waitpid <pid> - reap one zombie child by pid\n");
         print_string("ls    - list files in ramfs\n");
         print_string("cat <file> - show file info\n");
         print_string("run <file> - run elf file from ramfs\n");
@@ -281,11 +303,32 @@ void shell_execute(const char* line) {
         int pid = process_wait();
 
         if (pid >= 0) {
-            print_string("reaped pid ");
+            print_string("reaped child pid ");
             print_uint((unsigned int)pid);
             print_char('\n');
         } else {
-            print_string("no zombie process\n");
+            print_string("no zombie child\n");
+        }
+        shell_print_prompt();
+        return;
+    }
+
+    if (str_starts_with(line, "waitpid ")) {
+        int pid = parse_uint(skip_prefix(line, "waitpid "));
+        int result = process_waitpid(pid);
+
+        if (result >= 0) {
+            print_string("reaped child pid ");
+            print_uint((unsigned int)result);
+            print_char('\n');
+        } else if (result == -1) {
+            print_string("no such process\n");
+        } else if (result == -2) {
+            print_string("not a child process\n");
+        } else if (result == -3) {
+            print_string("child still running\n");
+        } else {
+            print_string("no zombie child\n");
         }
         shell_print_prompt();
         return;

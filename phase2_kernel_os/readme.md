@@ -1168,7 +1168,7 @@ MiniOS 可在内存文件系统中查找并执行 ELF 文件。
 - `kernel/fs.c`
 - `kernel/user.c`
 - `kernel/elf.c`
-- `README.md`
+- `readme.md`
 - `docs/task26_process_lifecycle.md`
 
 验证结果：
@@ -1190,3 +1190,50 @@ MiniOS 可在内存文件系统中查找并执行 ELF 文件。
 - 增加父子进程关系。
 - 实现 fork 雏形。
 - 完善页表、用户栈等资源释放。
+
+## ✅ Task27：父子进程关系与 waitpid 雏形
+
+本轮目标：
+
+- 让 MiniOS 从“任意回收 ZOMBIE”升级为“按父子关系回收子进程”。
+
+新增能力：
+
+- PCB 新增 `parent_pid`，记录进程创建者。
+- `process_create(name)` 会在创建进程时保存父进程 PID。
+- shell / kernel monitor 创建的进程暂时使用 `parent_pid = 0`。
+- `process_wait()` 只回收当前父进程名下的 ZOMBIE 子进程。
+- 新增 `process_waitpid(pid)`，支持按指定 PID 尝试回收子进程。
+- shell 新增 `waitpid <pid>` 命令。
+- `ps` 输出升级为 `PID / PPID / STATE / STATUS / NAME`。
+
+修改文件：
+
+- `include/process.h`
+- `kernel/process.c`
+- `kernel/shell.c`
+- `readme.md`
+- `docs/task27_parent_waitpid.md`
+
+验证结果：
+
+- `make clean`
+- `make`
+- `make run`
+- `run hello`
+- `ps`
+- `wait`
+- `run hello`
+- `ps`
+- `waitpid <pid>`
+- `waitpid 999`
+
+当前系统能力提升：
+
+- MiniOS 从“全局扫描并回收任意 zombie”升级为“按照父子归属关系管理进程退出记录”。
+
+下一步计划：
+
+- 实现 fork 雏形。
+- 引入真正的 init 进程。
+- 完善进程资源释放。

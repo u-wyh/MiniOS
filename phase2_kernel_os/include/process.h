@@ -9,9 +9,10 @@
 #define PROCESS_RUNNING 2
 #define PROCESS_ZOMBIE 3
 
-// 最小 PCB：本任务要求字段 pid/state/esp/eip
+// 最小 PCB：保存进程身份、父子关系、状态与用户态入口现场
 struct process {
     int pid;
+    int parent_pid;
     int state;
     uint32_t esp;
     uint32_t eip;
@@ -30,13 +31,15 @@ struct process* process_create(const char* name);
 void process_run(struct process* proc);
 // 将当前进程标记为 ZOMBIE，并保存退出码
 void process_exit(int status);
-// 回收一个 ZOMBIE 进程，成功返回 pid，失败返回 -1
+// 回收一个当前父进程名下的 ZOMBIE 子进程，成功返回 pid，失败返回 -1
 int process_wait(void);
+// 尝试回收指定 pid 的 ZOMBIE 子进程，返回 pid 或错误码
+int process_waitpid(int pid);
 // 状态码转可读字符串，供 ps 和文档对照使用
 const char* process_state_name(int state);
 // 返回当前进程 pid；无当前进程返回 0
 int process_current_pid(void);
-// 输出进程列表（PID / STATE）
+// 输出进程列表（PID / PPID / STATE）
 void process_list(void);
 // 返回已创建的进程数量
 int process_count(void);
