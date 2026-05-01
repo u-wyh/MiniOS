@@ -1,13 +1,11 @@
 #include "mm.h"
+#include "exec.h"
 #include "panic.h"
 #include "paging.h"
 #include "pit.h"
 #include "shell.h"
 #include "user.h"
 #include "vga.h"
-
-// 执行内置用户程序的最小接口，当前仅支持 exec("test")
-void exec(const char* name);
 
 // 用一个最小地址栈记录 shell 分配过的页，便于连续执行多次 free
 #define SHELL_PAGE_HISTORY 128
@@ -98,7 +96,7 @@ void shell_init(void) {
     shell_print_prompt();
 }
 
-// 执行最小命令集合：help / clear / echo / about / tick / panic / mem / alloc / free / kmalloc / kfree / paging / user / run test
+// 执行最小命令集合：help / clear / echo / about / tick / panic / mem / alloc / free / kmalloc / kfree / paging / user / run <name>
 void shell_execute(const char* line) {
     void* page;
     void* block;
@@ -121,6 +119,9 @@ void shell_execute(const char* line) {
         print_string("kfree   - free last small block\n");
         print_string("paging  - show paging status\n");
         print_string("user   - run ring3 test\n");
+        print_string("run hello - run hello user elf\n");
+        print_string("run info  - run info user elf\n");
+        print_string("run loop  - run loop user elf\n");
         print_string("echo  - print text\n");
         shell_print_prompt();
         return;
@@ -263,6 +264,12 @@ void shell_execute(const char* line) {
     if (str_equal(line, "user")) {
         print_string("enter user mode...\n");
         user_request_enter();
+        return;
+    }
+
+    if (str_starts_with(line, "run ")) {
+        const char* name = skip_prefix(line, "run ");
+        exec(name);
         return;
     }
 

@@ -1100,3 +1100,18 @@ limit = 4GB
 验证目标：
 
 在 shell 输入 `run test`，用户程序成功输出 `Hello from ELF`。
+
+## Task23：多用户程序支持
+
+本任务在不引入文件系统的前提下，增加最小 Program Table 机制：
+
+- 新增 program table（程序名 -> 内置 ELF）
+- exec 从“写死单程序”升级为“按名字查表加载”
+- shell 新增 `run <name>` 命令扩展
+- 当前支持：`run hello` / `run info` / `run loop`
+
+当前能力：
+MiniOS 可以运行多个用户程序。
+
+下一步：
+文件系统（程序从外部加载）
