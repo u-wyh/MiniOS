@@ -1115,3 +1115,16 @@ MiniOS 可以运行多个用户程序。
 
 下一步：
 文件系统（程序从外部加载）
+
+## Task24：ramfs 文件系统
+
+本任务实现最小内存文件系统（ramfs），不依赖磁盘：
+
+- 新增 `struct file { name, data, size }`
+- 用数组维护最小文件表（hello/info/loop）
+- 提供 `fs_find / fs_list / fs_read`
+- shell 新增 `ls`、`cat <file>`、`run <file>`
+- exec 从 program_table 改为 `fs_find(name)` 后加载 ELF
+
+当前能力：
+MiniOS 可在内存文件系统中查找并执行 ELF 文件。

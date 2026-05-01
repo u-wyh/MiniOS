@@ -1,5 +1,6 @@
 #include "mm.h"
 #include "exec.h"
+#include "fs.h"
 #include "panic.h"
 #include "paging.h"
 #include "pit.h"
@@ -96,7 +97,7 @@ void shell_init(void) {
     shell_print_prompt();
 }
 
-// 执行最小命令集合：help / clear / echo / about / tick / panic / mem / alloc / free / kmalloc / kfree / paging / user / run <name>
+// 执行最小命令集合：help / clear / echo / about / tick / panic / mem / alloc / free / kmalloc / kfree / paging / user / ls / cat <file> / run <file>
 void shell_execute(const char* line) {
     void* page;
     void* block;
@@ -119,9 +120,9 @@ void shell_execute(const char* line) {
         print_string("kfree   - free last small block\n");
         print_string("paging  - show paging status\n");
         print_string("user   - run ring3 test\n");
-        print_string("run hello - run hello user elf\n");
-        print_string("run info  - run info user elf\n");
-        print_string("run loop  - run loop user elf\n");
+        print_string("ls    - list files in ramfs\n");
+        print_string("cat <file> - show file info\n");
+        print_string("run <file> - run elf file from ramfs\n");
         print_string("echo  - print text\n");
         shell_print_prompt();
         return;
@@ -264,6 +265,29 @@ void shell_execute(const char* line) {
     if (str_equal(line, "user")) {
         print_string("enter user mode...\n");
         user_request_enter();
+        return;
+    }
+
+    if (str_equal(line, "ls")) {
+        fs_list();
+        shell_print_prompt();
+        return;
+    }
+
+    if (str_starts_with(line, "cat ")) {
+        const char* name = skip_prefix(line, "cat ");
+        struct file* f = fs_read(name);
+
+        if (f == (struct file*)0) {
+            print_string("cat: file not found\n");
+        } else {
+            print_string("cat: ");
+            print_string(f->name);
+            print_string(" (binary ELF, size=");
+            print_uint(f->size);
+            print_string(" bytes)\n");
+        }
+        shell_print_prompt();
         return;
     }
 
