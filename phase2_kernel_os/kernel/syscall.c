@@ -1,4 +1,5 @@
 #include "pit.h"
+#include "process.h"
 #include "syscall.h"
 #include "vga.h"
 
@@ -37,12 +38,13 @@ void syscall_handle(struct interrupt_frame* frame) {
     if (frame->eax == SYS_EXIT) {
         print_string("user exit\n");
         frame->eax = 0;
+        process_mark_current_exit();
         syscall_halt_requested = 1;
         return;
     }
 
     if (frame->eax == SYS_GETPID) {
-        frame->eax = 1;
+        frame->eax = (unsigned int)process_current_pid();
         print_string("pid: ");
         syscall_print_uint(frame->eax);
         print_char('\n');

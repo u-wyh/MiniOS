@@ -4,11 +4,17 @@ global irq0_stub
 global irq1_stub
 global enter_user_mode
 extern interrupt_handler_80
+extern syscall_should_halt
+extern syscall_clear_halt
+extern kernel_shell_loop
+extern paging_get_kernel_virtual_base
+extern stack_top
 extern timer_handler
 extern keyboard_handler
 
 USER_CODE_SEL equ 0x1B
 USER_DATA_SEL equ 0x23
+KERNEL_DATA_SEL equ 0x10
 
 isr80:
     ; 进入 ISR 后先保存通用寄存器，避免破坏被中断上下文
@@ -23,7 +29,27 @@ isr80:
     ; 清理传入的中断现场参数
     add esp, 4
 
+    ; 如果用户程序执行了 SYS_EXIT，则直接切回内核 shell 主循环，
+    ; 不再通过 iretd 返回到用户态后续指令。
+    call syscall_should_halt
+    test eax, eax
+    jz .return_from_syscall
+
+    call syscall_clear_halt
+
+    mov bx, KERNEL_DATA_SEL
+    mov ds, bx
+    mov es, bx
+    mov fs, bx
+    mov gs, bx
+    mov ss, bx
+    mov esp, stack_top
+    call paging_get_kernel_virtual_base
+    add eax, kernel_shell_loop
+    jmp eax
+
     ; 恢复通用寄存器，确保返回后上下文一致
+.return_from_syscall:
     popa
 
     ; 使用 iretd 从中断返回，显式恢复 32 位 EIP/CS/EFLAGS

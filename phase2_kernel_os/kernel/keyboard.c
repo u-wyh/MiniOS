@@ -6,6 +6,7 @@
 
 // 最小输入缓冲区：用于把逐个按键积累成一整行字符串
 static char input_buffer[128];
+static char command_buffer[128];
 // 记录当前已经输入到缓冲区的字符数
 static int input_index = 0;
 
@@ -57,6 +58,7 @@ static char scancode_to_ascii(unsigned char scancode) {
 void keyboard_handler(void) {
     unsigned char scancode = inb(0x60);
     char ch;
+    int i;
 
     // 释放码最高位为 1，本轮最小实现直接忽略
     if ((scancode & 0x80) != 0) {
@@ -68,9 +70,15 @@ void keyboard_handler(void) {
     if (scancode == 0x1C) {
         input_buffer[input_index] = '\0';
         print_char('\n');
-        shell_execute(input_buffer);
+
+        for (i = 0; i <= input_index; i++) {
+            command_buffer[i] = input_buffer[i];
+        }
         input_index = 0;
+
+        // 先结束本次键盘 IRQ，再执行命令，避免 run/exit 路径影响后续键盘中断。
         pic_send_eoi(1);
+        shell_execute(command_buffer);
         return;
     }
 

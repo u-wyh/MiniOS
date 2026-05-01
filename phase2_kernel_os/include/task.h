@@ -6,19 +6,19 @@ typedef struct {
     unsigned int esp;
 } task_t;
 
-// 初始化两个演示任务及其独立栈空间
+// Task25 之后该模块作为兼容层保留，初始化由 process 模型主导
 void task_init(void);
-// 启动首个任务，让 CPU 从内核主流程切入任务上下文
+// 兼容接口：当前为空实现
 void task_start_first(int task_index);
-// 读取指定任务当前保存的栈指针，供调度器切换使用
+// 兼容接口：当前返回占位值
 unsigned int task_get_esp(int task_index);
-// 更新指定任务保存的栈指针，把中断现场写回 TCB
+// 兼容接口：当前不做实际保存
 void task_set_esp(int task_index, unsigned int esp);
-// 返回当前系统中的任务数量，供最小轮转调度器使用
+// 返回进程数量，供旧接口复用
 int task_count(void);
-// 标记任务被重新调度到 CPU，上层可用它控制任务一次只输出一个字符
+// 兼容接口：当前为空实现
 void task_mark_scheduled(int task_index);
-// 读取任务的运行代号，任务函数据此判断自己是否进入了新的时间片
+// 兼容接口：当前返回占位值
 unsigned int task_get_run_token(int task_index);
 
 #endif

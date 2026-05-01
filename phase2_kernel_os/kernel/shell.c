@@ -4,6 +4,7 @@
 #include "panic.h"
 #include "paging.h"
 #include "pit.h"
+#include "process.h"
 #include "shell.h"
 #include "user.h"
 #include "vga.h"
@@ -97,7 +98,7 @@ void shell_init(void) {
     shell_print_prompt();
 }
 
-// 执行最小命令集合：help / clear / echo / about / tick / panic / mem / alloc / free / kmalloc / kfree / paging / user / ls / cat <file> / run <file>
+// 执行最小命令集合：help / clear / echo / about / tick / panic / mem / alloc / free / kmalloc / kfree / paging / user / ps / ls / cat <file> / run <file>
 void shell_execute(const char* line) {
     void* page;
     void* block;
@@ -120,6 +121,7 @@ void shell_execute(const char* line) {
         print_string("kfree   - free last small block\n");
         print_string("paging  - show paging status\n");
         print_string("user   - run ring3 test\n");
+        print_string("ps    - show process list\n");
         print_string("ls    - list files in ramfs\n");
         print_string("cat <file> - show file info\n");
         print_string("run <file> - run elf file from ramfs\n");
@@ -268,6 +270,12 @@ void shell_execute(const char* line) {
         return;
     }
 
+    if (str_equal(line, "ps")) {
+        process_list();
+        shell_print_prompt();
+        return;
+    }
+
     if (str_equal(line, "ls")) {
         fs_list();
         shell_print_prompt();
@@ -293,7 +301,7 @@ void shell_execute(const char* line) {
 
     if (str_starts_with(line, "run ")) {
         const char* name = skip_prefix(line, "run ");
-        exec(name);
+        exec_request(name);
         return;
     }
 

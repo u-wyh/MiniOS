@@ -59,14 +59,6 @@ void interrupt_handler_80(struct interrupt_frame* frame) {
     if ((frame->cs & 0x3) == 0x3) {
         syscall_handle(frame);
 
-        // 只有用户态显式发出 SYS_EXIT 请求后，才在内核态停机收口
-        if (syscall_should_halt() != 0) {
-            __asm__ __volatile__("cli");
-            for (;;) {
-                __asm__ __volatile__("hlt");
-            }
-        }
-
         return;
     }
 

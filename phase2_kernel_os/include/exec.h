@@ -1,13 +1,13 @@
 #ifndef EXEC_H
 #define EXEC_H
 
-// 最小程序表项：程序名 + 内置 ELF 镜像地址
-struct program {
-    const char* name;
-    void* elf_data;
-};
-
-// 按程序名执行用户程序，当前通过 program table 查找内置 ELF
+// 按文件名执行用户程序：内部通过 process_create/process_run 进入进程模型
 void exec(const char* name);
+// 登记一次待执行的文件请求，供内核主循环在中断上下文外执行
+void exec_request(const char* name);
+// 查询当前是否存在待执行请求
+int exec_has_pending_request(void);
+// 执行并清理当前待处理请求
+void exec_run_pending(void);
 
 #endif

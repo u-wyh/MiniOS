@@ -1128,3 +1128,17 @@ MiniOS 可以运行多个用户程序。
 
 当前能力：
 MiniOS 可在内存文件系统中查找并执行 ELF 文件。
+
+## Task25：进程模型
+
+本任务引入最小 Process/PCB 模型：
+
+- 新增 PCB：`pid/state/esp/eip`
+- 新增进程状态：`READY/RUNNING/EXIT`
+- 新增 `process_create(name)`：分配 PID、加载 ELF、初始化寄存器入口
+- `exec` 改为通过 `process_create` + `process_run` 执行
+- shell 新增 `ps` 查看进程列表
+- `SYS_GETPID` 改为返回当前进程 pid
+
+当前能力：
+用户程序可在最小 PCB 模型中运行并被 `ps` 观察。
