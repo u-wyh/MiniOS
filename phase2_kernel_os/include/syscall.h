@@ -24,11 +24,11 @@ struct interrupt_frame {
     unsigned int user_ss;
 };
 
-// 处理最小系统调用请求，当前只支持 SYS_WRITE
+// 处理最小系统调用请求，当前支持 write/exit/getpid/time
 void syscall_handle(struct interrupt_frame* frame);
-// 查询当前系统调用是否请求“测试收口停机”
+// 查询当前系统调用是否请求离开用户态回到内核控制台
 int syscall_should_halt(void);
-// 清理上一轮系统调用留下的 halt 请求状态
+// 清理上一轮系统调用留下的退出请求状态
 void syscall_clear_halt(void);
 
 #endif

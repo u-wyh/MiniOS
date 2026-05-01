@@ -3,10 +3,11 @@
 
 #include <stdint.h>
 
-// 进程状态：就绪、运行、退出
-#define PROCESS_READY 0
-#define PROCESS_RUNNING 1
-#define PROCESS_EXIT 2
+// 进程状态：空闲、就绪、运行、僵尸
+#define PROCESS_UNUSED 0
+#define PROCESS_READY 1
+#define PROCESS_RUNNING 2
+#define PROCESS_ZOMBIE 3
 
 // 最小 PCB：本任务要求字段 pid/state/esp/eip
 struct process {
@@ -14,6 +15,7 @@ struct process {
     int state;
     uint32_t esp;
     uint32_t eip;
+    int exit_status;
 
     // 扩展字段：记录程序名与槽位占用，便于 ps 展示与管理
     const char* name;
@@ -26,8 +28,12 @@ void process_init(void);
 struct process* process_create(const char* name);
 // 运行指定进程（切到用户态入口）
 void process_run(struct process* proc);
-// 标记当前进程退出态
-void process_mark_current_exit(void);
+// 将当前进程标记为 ZOMBIE，并保存退出码
+void process_exit(int status);
+// 回收一个 ZOMBIE 进程，成功返回 pid，失败返回 -1
+int process_wait(void);
+// 状态码转可读字符串，供 ps 和文档对照使用
+const char* process_state_name(int state);
 // 返回当前进程 pid；无当前进程返回 0
 int process_current_pid(void);
 // 输出进程列表（PID / STATE）

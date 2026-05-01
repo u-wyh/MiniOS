@@ -122,6 +122,7 @@ void shell_execute(const char* line) {
         print_string("paging  - show paging status\n");
         print_string("user   - run ring3 test\n");
         print_string("ps    - show process list\n");
+        print_string("wait  - reap one zombie process\n");
         print_string("ls    - list files in ramfs\n");
         print_string("cat <file> - show file info\n");
         print_string("run <file> - run elf file from ramfs\n");
@@ -272,6 +273,20 @@ void shell_execute(const char* line) {
 
     if (str_equal(line, "ps")) {
         process_list();
+        shell_print_prompt();
+        return;
+    }
+
+    if (str_equal(line, "wait")) {
+        int pid = process_wait();
+
+        if (pid >= 0) {
+            print_string("reaped pid ");
+            print_uint((unsigned int)pid);
+            print_char('\n');
+        } else {
+            print_string("no zombie process\n");
+        }
         shell_print_prompt();
         return;
     }

@@ -38,7 +38,7 @@ void syscall_handle(struct interrupt_frame* frame) {
     if (frame->eax == SYS_EXIT) {
         print_string("user exit\n");
         frame->eax = 0;
-        process_mark_current_exit();
+        process_exit((int)frame->ebx);
         syscall_halt_requested = 1;
         return;
     }

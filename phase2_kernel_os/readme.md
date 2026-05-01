@@ -1142,3 +1142,51 @@ MiniOS 可在内存文件系统中查找并执行 ELF 文件。
 
 当前能力：
 用户程序可在最小 PCB 模型中运行并被 `ps` 观察。
+
+## ✅ Task26：进程生命周期管理
+
+本轮目标：
+
+- 让进程从“能创建和运行”升级为“能退出、进入 ZOMBIE、再由 wait 回收”。
+
+新增能力：
+
+- 新增 `PROCESS_UNUSED / PROCESS_READY / PROCESS_RUNNING / PROCESS_ZOMBIE` 状态。
+- 新增 `process_exit(status)`，保存退出码并把当前进程标记为 ZOMBIE。
+- 新增 `process_wait()`，回收一个 ZOMBIE PCB 槽位。
+- `SYS_EXIT` 使用 `ebx` 作为退出码，并调用 `process_exit`。
+- shell 新增 `wait` 命令。
+- `ps` 能显示 `READY / RUNNING / ZOMBIE` 与退出状态。
+
+修改文件：
+
+- `include/process.h`
+- `kernel/process.c`
+- `include/syscall.h`
+- `kernel/syscall.c`
+- `kernel/shell.c`
+- `kernel/fs.c`
+- `kernel/user.c`
+- `kernel/elf.c`
+- `README.md`
+- `docs/task26_process_lifecycle.md`
+
+验证结果：
+
+- `make clean`
+- `make`
+- `make run`
+- `run hello`
+- `ps`
+- `wait`
+- `ps`
+
+当前系统能力提升：
+
+- MiniOS 从“能创建进程”升级为“能管理最小进程生命周期”。
+
+下一步计划：
+
+- 增加父子进程关系。
+- 实现 fork 雏形。
+- 完善页表、用户栈等资源释放。
