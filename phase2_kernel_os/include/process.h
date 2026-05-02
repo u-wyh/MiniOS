@@ -2,6 +2,7 @@
 #define PROCESS_H
 
 #include <stdint.h>
+#include "elf.h"
 
 // 进程状态：空闲、就绪、运行、僵尸
 #define PROCESS_UNUSED 0
@@ -17,6 +18,14 @@ struct process {
     uint32_t esp;
     uint32_t eip;
     int exit_status;
+    // 记录用户栈资源：wait/waitpid 回收时释放该页
+    uint32_t user_stack_va;
+    uint32_t user_stack_pa;
+    uint32_t user_stack_pages;
+    // 记录用户代码/数据页资源：由 ELF 装载时填写，回收时逐页释放
+    uint32_t user_page_count;
+    uint32_t user_page_vaddr[ELF_LOAD_MAX_PAGES];
+    uint32_t user_page_paddr[ELF_LOAD_MAX_PAGES];
 
     // 扩展字段：记录程序名与槽位占用，便于 ps 展示与管理
     const char* name;

@@ -75,6 +75,31 @@ void map_page(unsigned int virtual_address, unsigned int physical_address, unsig
     __asm__ __volatile__("invlpg (%0)" : : "r"(aligned_virtual_address) : "memory");
 }
 
+// 按虚拟地址解除单页映射：用于 wait/waitpid 回收进程资源时撤销用户页
+void unmap_page(unsigned int virtual_address) {
+    unsigned int directory_index;
+    unsigned int table_index;
+    unsigned int* page_table;
+    unsigned int aligned_virtual_address;
+
+    if (page_directory == (unsigned int*)0) {
+        return;
+    }
+
+    aligned_virtual_address = virtual_address & 0xFFFFF000;
+    directory_index = aligned_virtual_address >> 22;
+    table_index = (aligned_virtual_address >> 12) & 0x3FF;
+
+    if ((page_directory[directory_index] & PAGE_PRESENT) == 0) {
+        return;
+    }
+
+    page_table = (unsigned int*)(page_directory[directory_index] & 0xFFFFF000);
+    page_table[table_index] = 0;
+
+    __asm__ __volatile__("invlpg (%0)" : : "r"(aligned_virtual_address) : "memory");
+}
+
 // 初始化页目录和页表，并通过 CR3/CR0 正式开启分页
 void paging_init(void) {
     unsigned int cr0_value;

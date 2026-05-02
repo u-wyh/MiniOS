@@ -47,3 +47,13 @@ PCB（Process Control Block）用于描述并管理一个进程。
 - NAME
 
 这样可以观察进程创建和状态变化。
+
+## 6. Task28 补充：进程资源回收
+
+在 Task28 中，MiniOS 把回收时机固定在 `wait/waitpid`：
+
+- `exit` 只把进程标记为 `ZOMBIE`，保留退出记录。
+- `wait/waitpid` 再释放用户栈页和 ELF 映射页。
+- 最后把 PCB 状态重置为 `UNUSED` 供后续复用。
+
+这样可以保证父进程先读取退出信息，再做资源释放，避免“退出即销毁”导致状态丢失。

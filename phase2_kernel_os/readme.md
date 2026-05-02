@@ -1237,3 +1237,45 @@ MiniOS 可在内存文件系统中查找并执行 ELF 文件。
 - 实现 fork 雏形。
 - 引入真正的 init 进程。
 - 完善进程资源释放。
+
+## ✅ Task28：进程资源释放完善
+
+本轮目标：
+
+- 在 wait/waitpid 回收 ZOMBIE 子进程时，释放该进程占用的最小用户态资源，而不是只清 PCB 状态。
+
+已完成：
+
+- PCB 新增最小资源记录字段：用户栈页、ELF 映射页信息。
+- ELF Loader 新增装载信息输出接口，用于记录本次装载出的用户页。
+- 新增最小页解除映射接口 `unmap_page`，供进程回收阶段使用。
+- 在 wait/waitpid 回收路径执行资源释放：先释放用户页，再回收 PCB。
+- 回收后清空资源字段，避免重复释放。
+- 回收后 PCB 恢复 `UNUSED`，可继续复用。
+
+修改文件：
+
+- `include/elf.h`
+- `kernel/elf.c`
+- `include/paging.h`
+- `kernel/paging.c`
+- `include/process.h`
+- `kernel/process.c`
+- `readme.md`
+- `docs/task28_process_reclaim.md`
+
+验证结果（最小场景）：
+
+- `run hello` 后可正常进入 `ZOMBIE`。
+- `waitpid 1` 可回收并返回 pid。
+- `waitpid 999` 返回不存在进程提示。
+- 连续两轮 `run hello` + 回收后仍可继续创建和回收。
+
+当前能力提升：
+
+- MiniOS 从“回收 PCB 记录”升级为“回收 PCB + 释放最小用户页资源”。
+
+TODO：
+
+- 当前仍未实现完整页表对象释放。
+- 当前仍未实现 fork、COW、VMA、文件描述符级资源回收。

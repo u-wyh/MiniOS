@@ -91,11 +91,44 @@ static void copy_bytes(unsigned char* dst, const unsigned char* src, unsigned in
     }
 }
 
+// 记录本次新映射页；若同一页已记录则返回已有下标，避免重复映射造成泄漏
+static int elf_track_page(struct elf_load_info* info, unsigned int page_va, unsigned int page_pa) {
+    unsigned int i;
+
+    if (info == (struct elf_load_info*)0) {
+        return -1;
+    }
+
+    for (i = 0; i < info->page_count; i++) {
+        if (info->page_vaddr[i] == page_va) {
+            return (int)i;
+        }
+    }
+
+    if (info->page_count >= ELF_LOAD_MAX_PAGES) {
+        return -2;
+    }
+
+    info->page_vaddr[info->page_count] = page_va;
+    info->page_paddr[info->page_count] = page_pa;
+    info->page_count++;
+    return (int)(info->page_count - 1);
+}
+
 // 加载内存中的最小 ELF：映射 PT_LOAD 段并返回入口地址
 unsigned int elf_load(const unsigned char* elf_data, unsigned int elf_size) {
+    return elf_load_with_info(elf_data, elf_size, (struct elf_load_info*)0);
+}
+
+// 加载内存中的最小 ELF：映射 PT_LOAD 段并返回入口地址，同时可选记录映射页信息
+unsigned int elf_load_with_info(const unsigned char* elf_data, unsigned int elf_size, struct elf_load_info* info) {
     const struct Elf32_Ehdr* ehdr;
     const struct Elf32_Phdr* phdr;
     unsigned int i;
+
+    if (info != (struct elf_load_info*)0) {
+        info->page_count = 0;
+    }
 
     // 1) 解析并校验 ELF Header
     ehdr = (const struct Elf32_Ehdr*)elf_data;
@@ -142,12 +175,40 @@ unsigned int elf_load(const unsigned char* elf_data, unsigned int elf_size) {
         }
 
         while (page_va < seg_end) {
+            int tracked;
+
+            // 对同一虚拟页重复出现的段，复用已有映射，避免重复分配物理页
+            tracked = -1;
+            if (info != (struct elf_load_info*)0) {
+                tracked = elf_track_page(info, page_va, 0);
+                if (tracked >= 0 && info->page_paddr[(unsigned int)tracked] != 0) {
+                    page_va += PAGE_SIZE;
+                    continue;
+                }
+            }
+
             unsigned char* page = (unsigned char*)alloc_page();
             if (page == (unsigned char*)0) {
                 return 0;
             }
 
             map_page(page_va, (unsigned int)page, user_flags);
+
+            if (info != (struct elf_load_info*)0) {
+                if (tracked == -1) {
+                    tracked = elf_track_page(info, page_va, (unsigned int)page);
+                } else if (tracked >= 0) {
+                    info->page_paddr[(unsigned int)tracked] = (unsigned int)page;
+                }
+
+                if (tracked < 0) {
+                    // 记录失败时及时回滚当前页，防止因为元信息不足导致泄漏
+                    unmap_page(page_va);
+                    free_page(page);
+                    return 0;
+                }
+            }
+
             page_va += PAGE_SIZE;
         }
 

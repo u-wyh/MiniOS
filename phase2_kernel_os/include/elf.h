@@ -44,8 +44,18 @@ struct Elf32_Phdr {
     unsigned int p_align;
 };
 
+// 最小装载统计：记录本次 ELF 映射出的用户页，供进程回收阶段释放
+#define ELF_LOAD_MAX_PAGES 64
+struct elf_load_info {
+    unsigned int page_count;
+    unsigned int page_vaddr[ELF_LOAD_MAX_PAGES];
+    unsigned int page_paddr[ELF_LOAD_MAX_PAGES];
+};
+
 // 从内存中的 ELF 镜像加载用户程序，成功返回入口虚拟地址，失败返回 0
 unsigned int elf_load(const unsigned char* elf_data, unsigned int elf_size);
+// 扩展装载接口：在返回入口地址的同时，输出本次映射页信息
+unsigned int elf_load_with_info(const unsigned char* elf_data, unsigned int elf_size, struct elf_load_info* info);
 // 返回内置 test ELF 镜像及其长度，供 exec("test") 调用
 const unsigned char* elf_get_test_image(unsigned int* elf_size);
 

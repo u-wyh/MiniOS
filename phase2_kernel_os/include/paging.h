@@ -10,6 +10,8 @@
 void paging_init(void);
 // 把指定虚拟页映射到指定物理页，供用户空间等模块按需建立新映射
 void map_page(unsigned int virtual_address, unsigned int physical_address, unsigned int flags);
+// 解除一个虚拟页映射，供进程资源回收阶段释放地址空间占用
+void unmap_page(unsigned int virtual_address);
 // 返回分页是否已经开启，供 shell 做最小状态验证
 int paging_is_enabled(void);
 // 读取页目录物理地址，便于观察分页结构是否已建立
