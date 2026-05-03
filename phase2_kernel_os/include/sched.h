@@ -1,3 +1,4 @@
+// sched.h：声明当前教学版调度器的最小占位接口
 #ifndef SCHED_H
 #define SCHED_H
 

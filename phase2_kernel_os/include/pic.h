@@ -1,3 +1,4 @@
+// pic.h：声明 8259 PIC 的重映射、屏蔽和 EOI 接口
 #ifndef PIC_H
 #define PIC_H
 

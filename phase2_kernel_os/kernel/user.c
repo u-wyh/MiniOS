@@ -1,3 +1,4 @@
+// user.c：提供最小用户态测试镜像与一次性进入用户态的辅助逻辑
 #include "elf.h"
 #include "mm.h"
 #include "paging.h"

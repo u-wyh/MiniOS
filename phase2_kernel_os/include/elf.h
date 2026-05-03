@@ -1,3 +1,4 @@
+// elf.h：定义最小 ELF 结构、装载元信息和 ELF Loader 对外接口
 #ifndef ELF_H
 #define ELF_H
 

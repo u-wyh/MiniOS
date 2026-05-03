@@ -1,3 +1,4 @@
+// exec.c：实现 run <file> 请求到 process_create/process_run 的执行桥接
 #include "exec.h"
 #include "process.h"
 #include "vga.h"

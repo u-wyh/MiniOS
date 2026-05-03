@@ -1,3 +1,4 @@
+// pit.c：实现 PIT 周期中断初始化与最小 tick/调度钩子
 #include "io.h"
 #include "pic.h"
 #include "pit.h"

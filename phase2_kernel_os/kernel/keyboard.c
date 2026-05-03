@@ -1,3 +1,4 @@
+// keyboard.c：处理中断驱动的键盘输入，并把整行命令交给 shell
 #include "io.h"
 #include "keyboard.h"
 #include "pic.h"

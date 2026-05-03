@@ -1,3 +1,4 @@
+// kernel.c：实现内核主入口、基础初始化和 shell 主循环
 #include "idt.h"
 #include "mm.h"
 #include "paging.h"

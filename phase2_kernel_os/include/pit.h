@@ -1,3 +1,4 @@
+// pit.h：声明 PIT 定时器初始化、tick 查询和 IRQ0 处理接口
 #ifndef PIT_H
 #define PIT_H
 

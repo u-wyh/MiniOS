@@ -1,3 +1,4 @@
+// syscall.h：定义最小系统调用号、用户态中断现场和 syscall 分发接口
 #ifndef SYSCALL_H
 #define SYSCALL_H
 

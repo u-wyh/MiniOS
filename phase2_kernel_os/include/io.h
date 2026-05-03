@@ -1,3 +1,4 @@
+// io.h：声明端口 IO 的最小读写与等待接口
 #ifndef IO_H
 #define IO_H
 

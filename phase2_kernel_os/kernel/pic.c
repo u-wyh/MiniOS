@@ -1,3 +1,4 @@
+// pic.c：实现 8259 PIC 的初始化、屏蔽和发送中断结束信号
 #include "io.h"
 #include "pic.h"
 

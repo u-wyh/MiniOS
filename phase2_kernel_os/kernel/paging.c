@@ -1,3 +1,4 @@
+// paging.c：实现最小页目录/页表初始化以及按页映射管理
 #include "mm.h"
 #include "paging.h"
 

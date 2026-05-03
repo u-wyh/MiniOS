@@ -1,3 +1,4 @@
+// exec.h：声明按文件名发起用户程序执行请求的最小接口
 #ifndef EXEC_H
 #define EXEC_H
 

@@ -1,3 +1,4 @@
+// user.h：声明最小用户态测试入口和挂起请求接口
 #ifndef USER_H
 #define USER_H
 

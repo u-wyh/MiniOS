@@ -1,3 +1,4 @@
+// elf.c：实现最小 ELF 解析与 PT_LOAD 段装载逻辑
 #include "elf.h"
 #include "mm.h"
 #include "paging.h"

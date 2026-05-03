@@ -1,3 +1,4 @@
+// keyboard.h：声明键盘中断处理和命令行输入相关接口
 #ifndef KEYBOARD_H
 #define KEYBOARD_H
 

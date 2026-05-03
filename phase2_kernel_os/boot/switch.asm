@@ -1,3 +1,4 @@
+; switch.asm：保留最小任务切换相关的汇编占位入口
 section .text
 global context_switch
 global task_enter

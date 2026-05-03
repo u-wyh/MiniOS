@@ -1,3 +1,4 @@
+// task.c：保留旧 task 抽象的兼容层，实际已转到 process 模型
 #include "process.h"
 #include "task.h"
 

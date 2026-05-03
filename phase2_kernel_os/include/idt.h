@@ -1,3 +1,4 @@
+// idt.h：声明最小 IDT 初始化入口
 #ifndef IDT_H
 #define IDT_H
 

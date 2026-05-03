@@ -1,3 +1,4 @@
+// shell.c：实现内核命令行解析，并串联内存、分页、进程和文件系统命令
 #include "mm.h"
 #include "exec.h"
 #include "fs.h"

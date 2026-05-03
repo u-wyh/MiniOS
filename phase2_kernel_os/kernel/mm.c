@@ -1,3 +1,4 @@
+// mm.c：实现最小物理页分配器和固定大小内核小块分配器
 #include "mm.h"
 #include "vga.h"
 

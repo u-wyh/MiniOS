@@ -1,3 +1,4 @@
+// vga.h：声明 VGA 文本模式输出接口
 #ifndef VGA_H
 #define VGA_H
 

@@ -1,3 +1,4 @@
+// panic.h：声明内核 panic 入口，供严重错误时停止系统
 #ifndef PANIC_H
 #define PANIC_H
 

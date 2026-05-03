@@ -1,3 +1,4 @@
+// panic.c：实现最小内核 panic 输出与停机逻辑
 #include "panic.h"
 #include "vga.h"
 

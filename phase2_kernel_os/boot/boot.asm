@@ -16,6 +16,7 @@ USER_DATA_SEL equ 0x20
 ; GDT TSS 选择子（第 5 项）
 TSS_SEL     equ 0x28
 
+; boot.asm：完成最小引导、进入保护模式并跳转到内核 C 入口
 section .multiboot
 align 4
     dd MB_MAGIC

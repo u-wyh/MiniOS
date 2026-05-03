@@ -1,3 +1,4 @@
+// task.h：保留旧 task 模型的兼容接口，内部已由 process 模型承载
 #ifndef TASK_H
 #define TASK_H
 

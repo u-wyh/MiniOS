@@ -1,3 +1,4 @@
+// mm.h：声明最小物理页分配器和内核小块分配器接口
 #ifndef MM_H
 #define MM_H
 

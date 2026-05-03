@@ -1,3 +1,4 @@
+// paging.h：声明最小分页映射、解除映射与分页状态查询接口
 #ifndef PAGING_H
 #define PAGING_H
 

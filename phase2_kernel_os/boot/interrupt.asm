@@ -1,3 +1,4 @@
+; interrupt.asm：提供系统调用、时钟中断、键盘中断和用户态切换的汇编入口
 section .text
 global isr80
 global irq0_stub

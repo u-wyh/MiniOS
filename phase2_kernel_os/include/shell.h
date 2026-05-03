@@ -1,3 +1,4 @@
+// shell.h：声明内核命令行初始化与命令执行入口
 #ifndef SHELL_H
 #define SHELL_H
 

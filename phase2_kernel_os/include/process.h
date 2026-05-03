@@ -1,3 +1,4 @@
+// process.h：定义最小 PCB、进程状态和 create/exec/fork/wait 相关接口
 #ifndef PROCESS_H
 #define PROCESS_H
 

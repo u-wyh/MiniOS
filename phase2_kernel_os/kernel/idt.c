@@ -1,3 +1,4 @@
+// idt.c：构建最小 IDT，并把 int 0x80 与外设中断注册到 CPU
 #include "idt.h"
 #include "syscall.h"
 #include "vga.h"

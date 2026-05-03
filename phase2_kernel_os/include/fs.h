@@ -1,3 +1,4 @@
+// fs.h：声明内存文件系统的文件结构与查找/读取接口
 #ifndef FS_H
 #define FS_H
 
