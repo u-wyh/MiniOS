@@ -34,8 +34,12 @@ struct process {
 
 // 初始化进程表与 PID 分配器
 void process_init(void);
-// 按文件名创建进程：分配 PID、加载 ELF、初始化 PCB
+// 按文件名创建并装载一个用户进程
 struct process* process_create(const char* name);
+// 把一份 ELF 镜像装载到指定进程中，成功后更新入口、用户栈和资源记录
+int process_exec(struct process* proc, const unsigned char* elf_data, unsigned int elf_size);
+// 按文件名装载或替换指定进程的用户镜像，供后续 exec 语义复用
+int process_exec_file(struct process* proc, const char* name);
 // 运行指定进程（切到用户态入口）
 void process_run(struct process* proc);
 // 将当前进程标记为 ZOMBIE，并保存退出码

@@ -1279,3 +1279,46 @@ TODO：
 
 - 当前仍未实现完整页表对象释放。
 - 当前仍未实现 fork、COW、VMA、文件描述符级资源回收。
+
+## ✅ Task29：exec 资源替换语义整理
+
+本轮目标：
+
+- 把“创建进程对象”和“装载/替换用户程序镜像”的职责进一步拆开，为后续 `fork + exec` 做准备。
+
+已完成：
+
+- 新增 `process_exec(proc, elf_data, elf_size)`，集中处理 ELF 装载、用户栈建立、`eip/esp` 写回。
+- 新增 `process_exec_file(proc, name)`，统一处理“按文件名查程序”与“首次装载/重复 exec”入口。
+- 把 Task28 的用户资源释放逻辑整理为镜像级释放入口，供 `wait/waitpid` 和未来重复 `exec` 复用。
+- `process_create(name)` 现在优先负责 PCB、pid、parent_pid 创建，再调用 exec 装载镜像。
+- exec 成功后，PCB 统一记录入口地址、用户栈和 ELF 用户页范围。
+- 启动流程改为按需准备旧的 `user` 测试镜像，避免内核启动时提前占用 exec 使用的用户地址空间。
+
+修改文件：
+
+- `include/process.h`
+- `kernel/process.c`
+- `kernel/kernel.c`
+- `readme.md`
+- `docs/task25_process.md`
+- `docs/task29_exec_semantics.md`
+
+验证结果（最小场景）：
+
+- `run hello` 仍可正常创建进程、运行用户态并退出。
+- `waitpid <pid>` 仍可回收 `ZOMBIE` 子进程并释放用户镜像资源。
+- 连续多次 `run hello` / `run info` + `waitpid` 后，进程槽位可继续复用。
+- `run missing` 可稳定返回失败，不会导致内核崩溃。
+
+当前能力提升：
+
+- MiniOS 已经初步区分“创建进程对象”和“替换用户程序镜像”。
+- 为后续同一进程重复 exec 的资源释放语义预留了统一入口。
+
+TODO：
+
+- 暂不支持 `argv/envp`。
+- 暂不支持 PATH 搜索。
+- 暂不支持完整 exec 失败回滚。
+- 暂不支持 fork、copy-on-write、复杂 VMA。

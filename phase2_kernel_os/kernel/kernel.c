@@ -41,12 +41,11 @@ void kernel_main(void) {
     clear_screen();
     print_string("MiniOS Kernel Boot Success\n");
 
-    // 恢复中断与 shell 基础环境，再额外准备用户空间页映射
+    // 恢复中断与 shell 基础环境；用户镜像改为按需装载，避免启动时提前占用 exec 地址空间
     idt_init();
     pic_remap();
     pit_init(20);
     process_init();
-    user_space_init();
     __asm__ __volatile__("sti");
 
     kernel_shell_loop();

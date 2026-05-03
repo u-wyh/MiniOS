@@ -57,3 +57,13 @@ PCB（Process Control Block）用于描述并管理一个进程。
 - 最后把 PCB 状态重置为 `UNUSED` 供后续复用。
 
 这样可以保证父进程先读取退出信息，再做资源释放，避免“退出即销毁”导致状态丢失。
+
+## 7. Task29 补充：process_create 与 exec 分工
+
+Task29 继续把“创建进程”和“装载用户程序”拆开：
+
+- `process_create(name)` 负责创建 PCB、分配 pid、记录 parent_pid。
+- `process_exec(...)` 负责装载 ELF、建立用户栈、写回 `eip/esp`。
+- `process_exec_file(...)` 负责把“按名字找程序”和“装载/替换镜像”连接起来。
+
+这样后续进入 `fork + exec` 时，就不会再把“创建一个新进程”和“替换当前进程镜像”混成同一个概念。

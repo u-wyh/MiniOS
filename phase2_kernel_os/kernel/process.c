@@ -17,6 +17,9 @@ static struct process process_table[PROCESS_MAX];
 static struct process* current_process = (struct process*)0;
 static int next_pid = 1;
 
+// 前向声明：最小 PCB 分配逻辑在后文定义，供创建阶段复用
+static struct process* process_alloc_slot(void);
+
 // 裸机环境下手动打印无符号整数
 static void process_print_uint(unsigned int value) {
     char digits[16];
@@ -68,6 +71,27 @@ static int process_parent_pid_for_current_context(void) {
     return 0;
 }
 
+// 判断进程当前是否已经持有一份用户镜像，供 exec 替换语义决定是否先释放旧资源
+static int process_has_user_image(struct process* proc) {
+    if (proc == (struct process*)0) {
+        return 0;
+    }
+
+    if (proc->user_stack_pages != 0) {
+        return 1;
+    }
+
+    if (proc->user_page_count != 0) {
+        return 1;
+    }
+
+    if (proc->eip != 0 || proc->esp != 0) {
+        return 1;
+    }
+
+    return 0;
+}
+
 // 清空一个 PCB 槽位；本阶段只回收记录，不释放页表和用户栈等完整资源
 static void process_clear_slot(struct process* proc) {
     unsigned int i;
@@ -90,8 +114,8 @@ static void process_clear_slot(struct process* proc) {
     proc->used = 0;
 }
 
-// 释放进程占用的最小用户资源：用户栈页 + ELF 映射页
-static void process_free_resources(struct process* proc) {
+// 释放进程占用的最小用户镜像资源：用户栈页 + ELF 映射页
+static void process_release_user_image(struct process* proc) {
     unsigned int i;
 
     if (proc == (struct process*)0) {
@@ -119,6 +143,47 @@ static void process_free_resources(struct process* proc) {
         proc->user_page_paddr[i] = 0;
     }
     proc->user_page_count = 0;
+    proc->eip = 0;
+    proc->esp = 0;
+}
+
+// 创建一个最小进程对象：只分配 PCB、PID 和父子关系，不负责装载 ELF
+static struct process* process_create_object(void) {
+    struct process* proc = process_alloc_slot();
+
+    if (proc == (struct process*)0) {
+        return (struct process*)0;
+    }
+
+    process_clear_slot(proc);
+    proc->used = 1;
+    proc->pid = next_pid++;
+    proc->parent_pid = process_parent_pid_for_current_context();
+    proc->state = PROCESS_UNUSED;
+    return proc;
+}
+
+// 把 ELF 装载结果写回 PCB，统一记录入口、栈和用户页资源范围
+static void process_commit_exec_image(struct process* proc, unsigned int entry, unsigned char* stack_page, struct elf_load_info* load_info) {
+    unsigned int i;
+
+    proc->eip = entry;
+    proc->esp = USER_STACK_TOP;
+    proc->user_stack_va = USER_STACK_TOP - USER_STACK_SIZE;
+    proc->user_stack_pa = (unsigned int)stack_page;
+    proc->user_stack_pages = 1;
+    proc->user_page_count = load_info->page_count;
+
+    for (i = 0; i < load_info->page_count && i < ELF_LOAD_MAX_PAGES; i++) {
+        proc->user_page_vaddr[i] = load_info->page_vaddr[i];
+        proc->user_page_paddr[i] = load_info->page_paddr[i];
+    }
+}
+
+// 执行一次教学版镜像替换：先释放旧用户空间，再加载新的 ELF；失败时暂不回滚旧镜像
+static int process_replace_image(struct process* proc, const unsigned char* elf_data, unsigned int elf_size) {
+    process_release_user_image(proc);
+    return process_exec(proc, elf_data, elf_size);
 }
 
 // 按 pid 查找进程，waitpid 需要先确认目标是否仍在进程表中
@@ -160,67 +225,96 @@ void process_init(void) {
     next_pid = 1;
 }
 
-// 按文件名创建进程：分配 PID，加载 ELF，初始化 PCB
-struct process* process_create(const char* name) {
-    struct file* target;
-    struct process* proc;
+// 把一份 ELF 镜像装载到指定进程中：负责用户栈、ELF 页和入口现场初始化
+int process_exec(struct process* proc, const unsigned char* elf_data, unsigned int elf_size) {
     struct elf_load_info load_info;
     unsigned char* stack_page;
     unsigned int entry;
-    unsigned int i;
+
+    if (proc == (struct process*)0 || elf_data == (const unsigned char*)0 || elf_size == 0) {
+        return -1;
+    }
+
+    // process_exec 只负责把一份新镜像装到空进程对象；已有镜像时必须先走替换语义
+    if (process_has_user_image(proc) != 0) {
+        return -4;
+    }
+
+    // exec 成功后必须有一份新的用户栈，因此先准备栈页再加载 ELF
+    stack_page = (unsigned char*)alloc_page();
+    if (stack_page == (unsigned char*)0) {
+        return -2;
+    }
+
+    map_page(USER_STACK_TOP - USER_STACK_SIZE, (unsigned int)stack_page, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+    entry = elf_load_with_info(elf_data, elf_size, &load_info);
+    if (entry == 0) {
+        // 装载失败时只回滚本次新建的栈页；旧镜像是否还能恢复由上层语义决定
+        unmap_page(USER_STACK_TOP - USER_STACK_SIZE);
+        free_page((void*)stack_page);
+        return -3;
+    }
+
+    process_commit_exec_image(proc, entry, stack_page, &load_info);
+    proc->exit_status = 0;
+    return 0;
+}
+
+// 按文件名装载或替换指定进程的用户镜像，供 process_create 与未来 syscall exec 复用
+int process_exec_file(struct process* proc, const char* name) {
+    struct file* target;
+
+    if (proc == (struct process*)0 || name == (const char*)0 || name[0] == '\0') {
+        return -1;
+    }
+
+    target = fs_find(name);
+    if (target == (struct file*)0) {
+        return -2;
+    }
+
+    if (process_has_user_image(proc) != 0) {
+        if (process_replace_image(proc, (const unsigned char*)target->data, (unsigned int)target->size) != 0) {
+            return -3;
+        }
+    } else {
+        if (process_exec(proc, (const unsigned char*)target->data, (unsigned int)target->size) != 0) {
+            return -3;
+        }
+    }
+
+    proc->name = target->name;
+    return 0;
+}
+
+// 按文件名创建进程：先创建 PCB，再调用 exec 语义装载用户镜像
+struct process* process_create(const char* name) {
+    struct process* proc;
+    int exec_result;
 
     if (name == (const char*)0 || name[0] == '\0') {
         print_string("process: empty name\n");
         return (struct process*)0;
     }
 
-    target = fs_find(name);
-    if (target == (struct file*)0) {
-        print_string("process: file not found\n");
-        return (struct process*)0;
-    }
-
-    proc = process_alloc_slot();
+    proc = process_create_object();
     if (proc == (struct process*)0) {
         print_string("process: table full\n");
         return (struct process*)0;
     }
 
-    // 每个进程独立分配一页用户栈，供 wait/waitpid 回收阶段释放
-    stack_page = (unsigned char*)alloc_page();
-    if (stack_page == (unsigned char*)0) {
+    exec_result = process_exec_file(proc, name);
+    if (exec_result != 0) {
+        if (exec_result == -2) {
+            print_string("process: file not found\n");
+        } else {
+            print_string("process: exec load failed\n");
+        }
+        process_release_user_image(proc);
         process_clear_slot(proc);
-        print_string("process: alloc stack failed\n");
         return (struct process*)0;
     }
-    map_page(USER_STACK_TOP - USER_STACK_SIZE, (unsigned int)stack_page, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
-
-    entry = elf_load_with_info((const unsigned char*)target->data, (unsigned int)target->size, &load_info);
-    if (entry == 0) {
-        unmap_page(USER_STACK_TOP - USER_STACK_SIZE);
-        free_page((void*)stack_page);
-        process_clear_slot(proc);
-        print_string("process: elf load failed\n");
-        return (struct process*)0;
-    }
-
-    proc->pid = next_pid++;
-    // 记录创建者：shell/内核上下文创建的进程暂时归属于 pid 0
-    proc->parent_pid = process_parent_pid_for_current_context();
     proc->state = PROCESS_READY;
-    proc->eip = entry;
-    proc->esp = USER_STACK_TOP;
-    proc->exit_status = 0;
-    proc->user_stack_va = USER_STACK_TOP - USER_STACK_SIZE;
-    proc->user_stack_pa = (unsigned int)stack_page;
-    proc->user_stack_pages = 1;
-    proc->user_page_count = load_info.page_count;
-    for (i = 0; i < load_info.page_count && i < ELF_LOAD_MAX_PAGES; i++) {
-        proc->user_page_vaddr[i] = load_info.page_vaddr[i];
-        proc->user_page_paddr[i] = load_info.page_paddr[i];
-    }
-    proc->name = target->name;
-
     return proc;
 }
 
@@ -268,7 +362,7 @@ int process_wait(void) {
 
         pid = process_table[i].pid;
         // wait 时先释放子进程资源，再回收 PCB
-        process_free_resources(&process_table[i]);
+        process_release_user_image(&process_table[i]);
         process_clear_slot(&process_table[i]);
         return pid;
     }
@@ -294,7 +388,7 @@ int process_waitpid(int pid) {
     }
 
     // waitpid 回收前释放用户页资源，确保 PCB 复用时不会累计泄漏
-    process_free_resources(target);
+    process_release_user_image(target);
     process_clear_slot(target);
     return pid;
 }
