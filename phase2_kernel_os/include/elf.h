@@ -50,6 +50,7 @@ struct elf_load_info {
     unsigned int page_count;
     unsigned int page_vaddr[ELF_LOAD_MAX_PAGES];
     unsigned int page_paddr[ELF_LOAD_MAX_PAGES];
+    unsigned int page_flags[ELF_LOAD_MAX_PAGES];
 };
 
 // 从内存中的 ELF 镜像加载用户程序，成功返回入口虚拟地址，失败返回 0

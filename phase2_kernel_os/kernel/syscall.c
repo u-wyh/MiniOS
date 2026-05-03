@@ -5,6 +5,8 @@
 
 // 记录用户态是否已经请求 exit，本轮把它作为一次性测试完成后的收口条件
 static int syscall_halt_requested = 0;
+// 若 syscall 期间需要把 CPU 直接切换到另一个用户态现场，则在这里登记目标 frame
+static struct interrupt_frame* syscall_resume_frame = (struct interrupt_frame*)0;
 
 // 裸机环境下手动打印无符号整数，便于输出 pid/time
 static void syscall_print_uint(unsigned int value) {
@@ -27,8 +29,10 @@ static void syscall_print_uint(unsigned int value) {
     }
 }
 
-// 根据 eax 分发最小系统调用；当前支持 write/exit/getpid/time
+// 根据 eax 分发最小系统调用；当前支持 write/exit/getpid/time/fork/waitpid
 void syscall_handle(struct interrupt_frame* frame) {
+    struct interrupt_frame* next_frame;
+
     if (frame->eax == SYS_WRITE) {
         print_string((const char*)frame->ebx);
         frame->eax = 0;
@@ -39,6 +43,12 @@ void syscall_handle(struct interrupt_frame* frame) {
         print_string("user exit\n");
         frame->eax = 0;
         process_exit((int)frame->ebx);
+        next_frame = process_resume_after_exit();
+        if (next_frame != (struct interrupt_frame*)0) {
+            syscall_set_resume_frame(next_frame);
+            return;
+        }
+
         syscall_halt_requested = 1;
         return;
     }
@@ -59,6 +69,23 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    if (frame->eax == SYS_FORK) {
+        frame->eax = (unsigned int)process_fork(frame);
+        return;
+    }
+
+    if (frame->eax == SYS_WAITPID) {
+        int result = process_waitpid_syscall((int)frame->ebx, frame, &next_frame);
+
+        if (result == -4) {
+            syscall_set_resume_frame(next_frame);
+            return;
+        }
+
+        frame->eax = (unsigned int)result;
+        return;
+    }
+
     print_string("unknown syscall\n");
     frame->eax = (unsigned int)-1;
 }
@@ -71,4 +98,17 @@ int syscall_should_halt(void) {
 // 每次进入用户态测试前清理一次状态，避免上轮 exit 影响下一轮
 void syscall_clear_halt(void) {
     syscall_halt_requested = 0;
+}
+
+// 记录 syscall 返回时应恢复到哪个用户态 frame，供汇编中断尾部切换执行主体
+void syscall_set_resume_frame(struct interrupt_frame* frame) {
+    syscall_resume_frame = frame;
+}
+
+// 取出一次待恢复 frame，并立刻清空，避免下一个 syscall 误复用旧切换目标
+struct interrupt_frame* syscall_take_resume_frame(void) {
+    struct interrupt_frame* frame = syscall_resume_frame;
+
+    syscall_resume_frame = (struct interrupt_frame*)0;
+    return frame;
 }

@@ -1,11 +1,13 @@
 #ifndef SYSCALL_H
 #define SYSCALL_H
 
-// 当前最小系统调用编号集合：write/exit/getpid/time
+// 当前最小系统调用编号集合：write/exit/getpid/time/fork/waitpid
 #define SYS_WRITE 1
 #define SYS_EXIT 2
 #define SYS_GETPID 3
 #define SYS_TIME 4
+#define SYS_FORK 5
+#define SYS_WAITPID 6
 
 // int 0x80 进入内核后，栈上会按 pusha + CPU 自动压栈的顺序保存现场
 struct interrupt_frame {
@@ -30,5 +32,9 @@ void syscall_handle(struct interrupt_frame* frame);
 int syscall_should_halt(void);
 // 清理上一轮系统调用留下的退出请求状态
 void syscall_clear_halt(void);
+// 登记下一次 syscall 返回时应切换到的新用户态现场
+void syscall_set_resume_frame(struct interrupt_frame* frame);
+// 取出待切换的用户态现场；返回后内部会清空该记录
+struct interrupt_frame* syscall_take_resume_frame(void);
 
 #endif

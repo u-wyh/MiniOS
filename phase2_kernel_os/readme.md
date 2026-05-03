@@ -1322,3 +1322,53 @@ TODO：
 - 暂不支持 PATH 搜索。
 - 暂不支持完整 exec 失败回滚。
 - 暂不支持 fork、copy-on-write、复杂 VMA。
+
+## ✅ Task30：fork 雏形
+
+本轮目标：
+
+- 实现一个教学版最小 fork：父进程复制当前用户态执行现场，子进程从同一位置继续执行，并通过 waitpid 形成最小回收闭环。
+
+已完成：
+
+- 新增 `SYS_FORK` 和 `SYS_WAITPID` 系统调用入口。
+- fork 后父进程返回子进程 pid，子进程返回 0。
+- 子进程拥有独立 PCB，并正确记录 `parent_pid`。
+- 在共享页表模型下，新增按进程重新安装用户页映射的最小切换逻辑。
+- 初步复制用户代码页、用户数据页和用户栈页，避免父子直接共享同一用户栈物理页。
+- 新增阻塞式用户态 `waitpid` 最小语义：父进程等待时切换到子进程运行，子进程 exit 后恢复父进程。
+- 新增 `fork` 测试程序，验证 fork、exit、waitpid 的闭环。
+
+修改文件：
+
+- `boot/interrupt.asm`
+- `include/elf.h`
+- `include/process.h`
+- `include/syscall.h`
+- `kernel/elf.c`
+- `kernel/fs.c`
+- `kernel/process.c`
+- `kernel/syscall.c`
+- `readme.md`
+- `docs/task25_process.md`
+- `docs/task30_fork.md`
+
+验证结果（最小场景）：
+
+- `run hello` 仍可正常运行、退出，并由 shell `waitpid` 回收。
+- `run fork` 可输出 `parent after fork`、`child after fork`、`parent wait done`。
+- fork 子进程退出后，父进程可从用户态 `waitpid(child_pid)` 返回。
+- 连续两次执行 `run fork` 均可正常完成，不出现明显 page fault 或重复释放。
+
+当前能力提升：
+
+- MiniOS 已具备最小教学版 fork 闭环：fork -> child exit -> parent waitpid。
+- 在尚未实现独立页目录和 COW 前，已经把“复制进程”和“重新 exec 程序”从语义上区分开。
+
+TODO：
+
+- 暂不支持 copy-on-write。
+- 暂不支持文件描述符复制。
+- 暂不支持复杂 VMA。
+- 暂不支持通用时间片调度下的多进程压力测试。
+- 当前仍采用共享内核页表 + 按进程重装用户页的教学版模型，不是完整多地址空间实现。

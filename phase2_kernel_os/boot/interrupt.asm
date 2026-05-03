@@ -6,6 +6,7 @@ global enter_user_mode
 extern interrupt_handler_80
 extern syscall_should_halt
 extern syscall_clear_halt
+extern syscall_take_resume_frame
 extern kernel_shell_loop
 extern paging_get_kernel_virtual_base
 extern stack_top
@@ -29,8 +30,17 @@ isr80:
     ; 清理传入的中断现场参数
     add esp, 4
 
+    ; 若本次 syscall 需要直接切换到另一份用户态现场，则改用目标 frame 做 popa + iretd
+    call syscall_take_resume_frame
+    test eax, eax
+    jz .check_halt_after_syscall
+
+    mov esp, eax
+    jmp .return_from_syscall
+
     ; 如果用户程序执行了 SYS_EXIT，则直接切回内核 shell 主循环，
     ; 不再通过 iretd 返回到用户态后续指令。
+.check_halt_after_syscall:
     call syscall_should_halt
     test eax, eax
     jz .return_from_syscall

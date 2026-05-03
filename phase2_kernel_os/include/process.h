@@ -3,12 +3,14 @@
 
 #include <stdint.h>
 #include "elf.h"
+#include "syscall.h"
 
 // 进程状态：空闲、就绪、运行、僵尸
 #define PROCESS_UNUSED 0
 #define PROCESS_READY 1
 #define PROCESS_RUNNING 2
 #define PROCESS_ZOMBIE 3
+#define PROCESS_BLOCKED 4
 
 // 最小 PCB：保存进程身份、父子关系、状态与用户态入口现场
 struct process {
@@ -22,10 +24,16 @@ struct process {
     uint32_t user_stack_va;
     uint32_t user_stack_pa;
     uint32_t user_stack_pages;
+    uint32_t user_stack_flags;
     // 记录用户代码/数据页资源：由 ELF 装载时填写，回收时逐页释放
     uint32_t user_page_count;
     uint32_t user_page_vaddr[ELF_LOAD_MAX_PAGES];
     uint32_t user_page_paddr[ELF_LOAD_MAX_PAGES];
+    uint32_t user_page_flags[ELF_LOAD_MAX_PAGES];
+    // 保存需要恢复到用户态的最小中断现场，供 fork 子进程与阻塞 waitpid 恢复执行
+    struct interrupt_frame saved_frame;
+    int has_saved_frame;
+    int waiting_pid;
 
     // 扩展字段：记录程序名与槽位占用，便于 ps 展示与管理
     const char* name;
@@ -52,6 +60,12 @@ int process_waitpid(int pid);
 const char* process_state_name(int state);
 // 返回当前进程 pid；无当前进程返回 0
 int process_current_pid(void);
+// 基于当前系统调用现场复制一个教学版子进程，成功返回子进程 pid
+int process_fork(struct interrupt_frame* frame);
+// 用户态 waitpid：目标未退出时阻塞父进程并切换到子进程运行
+int process_waitpid_syscall(int pid, struct interrupt_frame* frame, struct interrupt_frame** next_frame);
+// 处理当前进程 exit 后的后续恢复：若存在阻塞父进程则返回其用户态现场
+struct interrupt_frame* process_resume_after_exit(void);
 // 输出进程列表（PID / PPID / STATE）
 void process_list(void);
 // 返回已创建的进程数量
