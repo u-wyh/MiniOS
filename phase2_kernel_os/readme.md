@@ -1451,3 +1451,54 @@ TODO：
 - 暂不支持文件描述符继承。
 - 暂不支持真实文件系统中的可执行文件。
 - 暂不支持更完整的多进程调度压力测试。
+
+## ✅ Task33：最小用户态 init 进程
+
+本轮目标：
+
+- 在内核完成基础初始化后，自动启动第一个固定用户态 `init` 进程。
+- 由 `init` 在用户态执行最小 `fork + exec + waitpid` 逻辑，逐步替代内核直接驱动这条测试路径。
+
+已完成：
+
+- 在 `kernel_main` 完成分页、中断、PIT 和进程表初始化后，直接启动固定用户态 `init` 程序。
+- `init` 成为当前系统里第一个用户进程，因此默认获得 `pid 1`。
+- `init` 在用户态输出 `init start`，随后执行 `fork`。
+- `init` 的子进程 `exec` 到固定内置程序 `execchild`，并保持原有 `pid / parent_pid` 不变。
+- `execchild` 输出 `exec child running` 后执行 `exit(7)`。
+- `init` 通过 `waitpid(child_pid)` 回收子进程，并输出 `init wait done`。
+- `init` 完成测试后执行 `exit(0)`，系统稳定返回原有内核 shell，保留后续调试入口。
+
+修改文件：
+
+- `kernel/kernel.c`
+- `kernel/fs.c`
+- `readme.md`
+- `docs/task25_process.md`
+- `docs/task33_init_process.md`
+
+验证结果（最小场景）：
+
+- 开机后可直接看到：
+  - `kernel: start init`
+  - `init start`
+  - `init child: call exec`
+  - `exec child running`
+  - `init wait done`
+- fork 调试日志显示：
+  - `init` 父进程 `pid = 1`
+  - 子进程 `pid = 2`
+  - 子进程 `parent_pid = 1`
+- exec 调试日志显示子进程在替换前后保持相同 `pid = 2` 与 `parent_pid = 1`。
+- `init` 退出后系统稳定回到 `MiniOS>` shell 提示符。
+- 回归验证：
+  - `run forkexec` 仍可正常跑通。
+  - `run hello` 后 shell `waitpid` 仍可正常回收。
+
+TODO：
+
+- 暂不支持用户态 shell。
+- 暂不支持命令解析。
+- 暂不支持 `argv/envp`。
+- 暂不支持路径字符串 `exec`。
+- 暂不支持真实文件系统加载 ELF。

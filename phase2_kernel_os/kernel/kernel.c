@@ -31,6 +31,12 @@ static void jump_to_higher_half(void) {
     __asm__ __volatile__("jmp *%0" : : "r"(high_address));
 }
 
+// 启动第一个用户态 init 进程；若创建失败则退回到原有内核 shell 调试入口
+static void kernel_start_init_process(void) {
+    print_string("kernel: start init\n");
+    exec("init");
+}
+
 // 内核主函数：恢复 shell / PIT / 键盘环境，并允许通过 user 命令触发一次 Ring3 测试
 void kernel_main(void) {
     if (higher_half_active == 0) {
@@ -48,6 +54,9 @@ void kernel_main(void) {
     pit_init(20);
     process_init();
     __asm__ __volatile__("sti");
+
+    // Task33 起由内核先启动第一个固定用户态 init，逐步把进程管理逻辑迁到用户态。
+    kernel_start_init_process();
 
     kernel_shell_loop();
 }
