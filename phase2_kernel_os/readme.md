@@ -106,8 +106,8 @@ make run
 当前最小语义：
 
 - 键盘 IRQ1 在拿到可打印字符后，会先把字符写入内核环形缓冲区。
-- `SYS_READ_CHAR` 每次从缓冲区取一个字符；若当前没有输入，则返回 `0`。
-- shell 采用忙等方式轮询 `read_char`，读到字符后打印 `got: <ch>`。
+- `SYS_READ_CHAR` 有字符时返回一个字符；无字符时先在内核里休眠等待后续中断，再继续检查输入缓冲区。
+- 这样用户态 shell 仍然按“逐字符读取”的方式工作，但不会因为空转轮询把 CPU 长时间打满。
 
 TODO：
 
@@ -115,6 +115,25 @@ TODO：
 - 暂不支持方向键和复杂特殊键。
 - 暂不支持阻塞等待队列。
 - 暂不支持完整 TTY / stdin 抽象。
+
+### Task36：最小交互式 Shell 命令解析
+
+已完成：
+
+- 用户态 shell 可以通过 `read_char` syscall 轮询读取一整行输入。
+- shell 在用户态维护固定长度行缓冲区，并以 `'\0'` 结尾形成最小命令字符串。
+- shell 支持 `help` / `hello` / `exit` 三个固定命令。
+- `hello` 命令通过 `fork -> child exec(hello) -> parent waitpid` 路径执行固定用户程序。
+- `exit` 命令会让 shell 退出，并由 `init` 执行 `waitpid(shell_pid)` 回收。
+- 初步形成 `init -> shell -> user program` 的最小交互式用户态闭环。
+
+TODO：
+
+- 暂不支持参数解析。
+- 暂不支持 PATH 搜索。
+- 暂不支持 `argv/envp`。
+- 暂不支持管道和重定向。
+- 暂不支持完整行编辑和历史记录。
 
 ## 五、阶段进度（已完成）
 
@@ -1576,3 +1595,49 @@ TODO：
 - 暂不支持 `argv/envp`。
 - 暂不支持 PATH 搜索。
 - 暂不支持真实文件系统加载 ELF。
+
+## ✅ Task36：最小交互式 Shell 命令解析
+
+本轮目标：
+
+- 让用户态 `shell` 从固定脚本式流程升级为最小交互式流程。
+- 保持 `fork/exec/waitpid` 主路径不变，只增加最小读行和固定命令分发。
+
+已完成：
+
+- `shell` 启动后打印 `shell start`，随后进入交互循环并显示 `MiniOS$ ` 提示符。
+- `shell` 通过 `read_char` syscall 在用户态忙等读取字符，并在本地固定长度缓冲区中拼出一行命令。
+- 当前支持三个固定命令：`help`、`hello`、`exit`。
+- `help` 由 `shell` 自己处理，输出可用命令列表。
+- `hello` 由 `shell` 先 `fork`，子进程再 `exec` 到固定内置 `hello` 程序，父进程 `waitpid` 回收。
+- `exit` 会让 `shell` 退出；父进程 `init` 通过 `waitpid(shell_pid)` 回收它，并输出 `init shell exited`。
+- 未知命令会输出 `Unknown command`，空输入则直接重新显示提示符。
+
+修改文件：
+
+- `kernel/fs.c`
+- `readme.md`
+- `docs/task7_input.md`
+- `docs/task25_process.md`
+- `docs/task36_interactive_shell.md`
+
+验证结果（最小场景）：
+
+- 启动后可看到：
+  - `kernel: start init`
+  - `init start`
+  - `shell start`
+  - `MiniOS$ `
+- 输入 `help` 后会输出 `commands: help hello exit`，随后返回提示符。
+- 输入 `hello` 后会输出 `Hello from user ELF`，并回到提示符。
+- 输入未知命令如 `abc` 后会输出 `Unknown command`，系统保持稳定。
+- 直接回车时不会崩溃，而是重新显示提示符。
+- 连续执行 `help`、`hello`、`hello`、`exit` 后，`init` 能正常回收 `shell`，未观察到 page fault 或重复释放。
+
+TODO：
+
+- 暂不支持参数解析。
+- 暂不支持 PATH 搜索。
+- 暂不支持 `argv/envp`。
+- 暂不支持管道、重定向和文件描述符表。
+- 暂不支持完整 readline、方向键和历史记录。

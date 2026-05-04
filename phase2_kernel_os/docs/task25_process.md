@@ -161,3 +161,76 @@ Task34 再往前推进一层，把当前固定用户态层次变成：
 但它已经足够展示一个关键点：
 
 shell 本质上也只是普通用户进程，只不过它承担了“启动别的用户程序”的管理角色。
+
+## 13. Task36 补充：交互式 shell 为什么仍然要走 fork / exec / waitpid
+
+Task36 让 `shell` 从固定脚本式变成了最小交互式，但它执行 `hello` 命令时，核心进程语义并没有变。
+
+原因是：
+
+- 如果 `shell` 直接 `exec` 成 `hello`，那 `shell` 自己就消失了
+- 命令执行完后，也就没人继续显示提示符、接受下一条命令
+
+所以当前最小正确路径仍然是：
+
+1. `shell` 先 `fork`
+2. 子进程 `exec` 成 `hello`
+3. 父进程 `waitpid(child_pid)`
+4. `hello` 退出后，父进程 `shell` 继续回到交互循环
+
+这就是为什么即使只有一个 `hello` 命令，也必须坚持走 `fork/exec/waitpid`。
+
+## 14. init、shell、hello 三者的父子关系是什么
+
+Task36 完成后，最小用户态层次是：
+
+`init -> shell -> hello`
+
+形成方式是：
+
+- 内核先启动 `init`
+- `init` `fork` 出子进程，再让子进程 `exec` 成 `shell`
+- `shell` 收到 `hello` 命令后，再 `fork` 出自己的子进程
+- 这个子进程再 `exec` 成 `hello`
+
+因此：
+
+- `shell.parent_pid == init.pid`
+- `hello.parent_pid == shell.pid`
+
+这也解释了为什么 `init` 只负责回收 `shell`，而 `shell` 自己负责回收 `hello`。
+
+## 15. 当前 shell 和 Phase1 Shell 的相似点与差异
+
+相似点：
+
+- 都有提示符
+- 都要把一行输入解释成一个命令
+- 都需要根据命令名做分发
+
+差异点：
+
+- Phase1 shell 主要是内核里的命令解释器
+- Task36 的 shell 是普通用户进程
+- Task36 shell 通过 syscall 读取输入、启动程序和等待子进程
+
+所以 Task36 更接近真实 OS 语义，而不是单纯的命令字符串演示。
+
+## 16. 当前最小交互式 shell 还缺什么
+
+本轮故意只支持固定字符串匹配：
+
+- `help`
+- `hello`
+- `exit`
+
+仍然没有：
+
+- 参数解析
+- PATH 搜索
+- `argv/envp`
+- 管道
+- 重定向
+- 文件描述符表
+
+这说明当前 shell 已经具备“交互闭环”，但还不是完整 Unix shell。
