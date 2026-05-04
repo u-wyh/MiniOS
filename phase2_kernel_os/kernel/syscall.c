@@ -39,7 +39,7 @@ static void syscall_debug_result(const char* tag, unsigned int value) {
     print_char('\n');
 }
 
-// 根据 eax 分发最小系统调用；当前支持 write/exit/getpid/time/fork/waitpid
+// 根据 eax 分发最小系统调用；当前支持 write/exit/getpid/time/fork/waitpid/exec
 void syscall_handle(struct interrupt_frame* frame) {
     struct interrupt_frame* next_frame;
 
@@ -96,6 +96,19 @@ void syscall_handle(struct interrupt_frame* frame) {
 
         frame->eax = (unsigned int)result;
         syscall_debug_result("waitpid return", frame->eax);
+        return;
+    }
+
+    if (frame->eax == SYS_EXEC) {
+        int result = process_exec_program((int)frame->ebx, frame);
+
+        if (result == 0) {
+            print_string("[syscall] exec replaced image\n");
+            return;
+        }
+
+        frame->eax = (unsigned int)result;
+        syscall_debug_result("exec return", frame->eax);
         return;
     }
 

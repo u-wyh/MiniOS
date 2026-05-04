@@ -1409,3 +1409,45 @@ TODO：
 - 当前仍未覆盖复杂多子进程竞争回收场景。
 - 当前仍未覆盖 fork 后更复杂的用户栈数据读写自检。
 - 当前仍未实现真正的独立页目录与通用调度器验证。
+
+## ✅ Task32：fork + exec + waitpid 最小组合路径
+
+本轮目标：
+
+- 验证父进程 fork 出子进程后，子进程可以 exec 到另一个固定内置用户程序，随后由父进程 waitpid 回收。
+
+已完成：
+
+- 新增最小 `SYS_EXEC(program_id)`，复用现有 `process_exec_file` 完成用户镜像替换。
+- 新增 `execchild` 测试程序，作为子进程 exec 后的新程序入口。
+- 新增 `forkexec` 测试程序，验证 `fork -> child exec -> child exit -> parent waitpid` 闭环。
+- 验证 exec 前后子进程 `pid` 保持不变，`parent_pid` 保持不变。
+- 验证 exec 成功后直接进入新程序入口，不继续执行旧程序中的 fallback `exit(99)`。
+- 验证新程序 `exit(7)` 后，父进程 `waitpid(child_pid)` 能正确回收子进程。
+
+修改文件：
+
+- `include/process.h`
+- `include/syscall.h`
+- `kernel/process.c`
+- `kernel/syscall.c`
+- `kernel/fs.c`
+- `readme.md`
+- `docs/task25_process.md`
+- `docs/task32_fork_exec_waitpid.md`
+
+验证结果（最小场景）：
+
+- `run forkexec` 可看到 `child: call exec` 后进入 `exec child running`。
+- exec 前后子进程 `pid` 与 `parent_pid` 保持不变。
+- `parent: waitpid done` 可稳定输出，说明 waitpid 回收成功。
+- 连续两次执行 `run forkexec` 不崩溃。
+- 原有 `run fork` 与 `run hello` 路径仍可正常工作。
+
+TODO：
+
+- 暂不支持 `argv/envp`。
+- 暂不支持路径字符串与 PATH 搜索。
+- 暂不支持文件描述符继承。
+- 暂不支持真实文件系统中的可执行文件。
+- 暂不支持更完整的多进程调度压力测试。

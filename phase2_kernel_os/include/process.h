@@ -65,6 +65,8 @@ int process_current_pid(void);
 int process_fork(struct interrupt_frame* frame);
 // 用户态 waitpid：目标未退出时阻塞父进程并切换到子进程运行
 int process_waitpid_syscall(int pid, struct interrupt_frame* frame, struct interrupt_frame** next_frame);
+// 当前运行进程按固定 program_id 执行最小 exec 替换，成功时直接改写返回现场
+int process_exec_program(int program_id, struct interrupt_frame* frame);
 // 处理当前进程 exit 后的后续恢复：若存在阻塞父进程则返回其用户态现场
 struct interrupt_frame* process_resume_after_exit(void);
 // 输出进程列表（PID / PPID / STATE）

@@ -10,6 +10,7 @@
 #define USER_STACK_TOP 0x00800000
 #define USER_STACK_SIZE 4096
 #define DEBUG_FORK 1
+#define DEBUG_EXEC 1
 
 // 汇编入口：通过 iret 切换到用户态并从指定入口开始执行
 extern void enter_user_mode(unsigned int user_entry, unsigned int user_stack_top);
@@ -26,6 +27,8 @@ static struct process* process_alloc_slot(void);
 static void process_activate_user_image(struct process* proc);
 // 前向声明：fork 调试辅助函数会复用基础整数输出
 static void process_print_uint(unsigned int value);
+// 前向声明：program_id 到内置程序名的最小映射，仅供教学版 exec 复用
+static const char* process_exec_program_name(int program_id);
 
 // 仅在 fork 调试开启时打印无符号整数，便于验证父子 pid 和 waitpid 目标
 static void process_debug_uint(unsigned int value) {
@@ -55,6 +58,26 @@ static void process_debug_hex(unsigned int value) {
 static void process_debug_fork_event(const char* tag, unsigned int value1, unsigned int value2, unsigned int value3) {
 #if DEBUG_FORK
     print_string("[fork] ");
+    print_string(tag);
+    print_string(" a=");
+    process_debug_uint(value1);
+    print_string(" b=");
+    process_debug_uint(value2);
+    print_string(" c=");
+    process_debug_uint(value3);
+    print_char('\n');
+#else
+    (void)tag;
+    (void)value1;
+    (void)value2;
+    (void)value3;
+#endif
+}
+
+// 统一输出最小 exec 调试日志，便于观察 exec 前后 pid、parent_pid 和目标程序编号
+static void process_debug_exec_event(const char* tag, unsigned int value1, unsigned int value2, unsigned int value3) {
+#if DEBUG_EXEC
+    print_string("[exec] ");
     print_string(tag);
     print_string(" a=");
     process_debug_uint(value1);
@@ -278,6 +301,19 @@ static int process_replace_image(struct process* proc, const unsigned char* elf_
     return process_exec(proc, elf_data, elf_size);
 }
 
+// 把最小 exec 的 program_id 翻译成内置程序名，避免当前阶段引入路径解析
+static const char* process_exec_program_name(int program_id) {
+    if (program_id == 1) {
+        return "execchild";
+    }
+
+    if (program_id == 2) {
+        return "fork";
+    }
+
+    return (const char*)0;
+}
+
 // 按 pid 查找进程，waitpid 需要先确认目标是否仍在进程表中
 static struct process* process_find_by_pid(int pid) {
     int i;
@@ -441,6 +477,45 @@ int process_exec_file(struct process* proc, const char* name) {
     }
 
     proc->name = target->name;
+    return 0;
+}
+
+// 当前运行进程执行教学版最小 exec：仅支持固定 program_id，对应内置用户程序
+int process_exec_program(int program_id, struct interrupt_frame* frame) {
+    struct process* proc = current_process;
+    const char* target_name;
+    int exec_result;
+
+    if (proc == (struct process*)0 || frame == (struct interrupt_frame*)0) {
+        return -1;
+    }
+
+    target_name = process_exec_program_name(program_id);
+    if (target_name == (const char*)0) {
+        return -2;
+    }
+
+    process_debug_exec_event("begin", (unsigned int)proc->pid, (unsigned int)proc->parent_pid, (unsigned int)program_id);
+    exec_result = process_exec_file(proc, target_name);
+    if (exec_result != 0) {
+        process_debug_exec_event("failed", (unsigned int)proc->pid, (unsigned int)proc->parent_pid, (unsigned int)program_id);
+        return -3;
+    }
+
+    process_activate_user_image(proc);
+
+    // exec 成功后直接改写本次 syscall 返回现场，确保不会回到旧程序的 fork 后续逻辑
+    frame->eax = 0;
+    frame->ebx = 0;
+    frame->ecx = 0;
+    frame->edx = 0;
+    frame->esi = 0;
+    frame->edi = 0;
+    frame->ebp = 0;
+    frame->eip = proc->eip;
+    frame->user_esp = proc->esp;
+
+    process_debug_exec_event("replace", (unsigned int)proc->pid, (unsigned int)proc->parent_pid, (unsigned int)program_id);
     return 0;
 }
 
