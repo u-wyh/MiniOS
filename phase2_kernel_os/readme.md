@@ -135,6 +135,24 @@ TODO：
 - 暂不支持管道和重定向。
 - 暂不支持完整行编辑和历史记录。
 
+### Task37：用户态 Shell 参数解析雏形
+
+已完成：
+
+- shell 可以将输入行按空格拆分为有限数量参数。
+- 新增 `echo <text>` 内建命令。
+- 新增 `run <program>` 命令。
+- `run hello` 通过 `fork / exec / waitpid` 启动固定内置程序。
+- `help` 输出更新为当前支持的命令列表，并保留 `hello` 作为 `run hello` 的快捷方式。
+
+TODO：
+
+- 暂不支持引号和转义。
+- 暂不支持 `argv/envp` 传递给被执行程序。
+- 暂不支持 PATH 搜索。
+- 暂不支持管道和重定向。
+- 暂不支持真实文件系统加载 ELF。
+
 ## 五、阶段进度（已完成）
 
 ### A. 基础启动阶段（Task1 + Task2）
@@ -1641,3 +1659,48 @@ TODO：
 - 暂不支持 `argv/envp`。
 - 暂不支持管道、重定向和文件描述符表。
 - 暂不支持完整 readline、方向键和历史记录。
+
+## ✅ Task37：用户态 Shell 参数解析雏形
+
+本轮目标：
+
+- 在已有用户态交互式 shell 上增加最小参数解析能力。
+- 保持 `fork/exec/waitpid` 主路径不变，只增加 token 拆分、`echo` 内建命令和 `run <program>` 分发。
+
+已完成：
+
+- shell 会先读取一整行命令，再按空格拆成有限数量 token。
+- 当前支持命令：`help`、`echo <text>`、`run hello`、`hello`、`exit`。
+- `echo` 作为 shell 内建命令在用户态直接拼接并输出参数，不需要 `fork`。
+- `run <program>` 当前采用固定内置程序映射，已支持 `run hello`。
+- `hello` 被保留为 `run hello` 的快捷方式，兼容上一轮最小交互测试。
+- `run` 缺少参数时会输出 `Usage: run <program>`。
+- `run` 目标未知时会输出 `Unknown program`；未知命令仍输出 `Unknown command`。
+
+修改文件：
+
+- `kernel/fs.c`
+- `readme.md`
+- `docs/task7_input.md`
+- `docs/task25_process.md`
+- `docs/task37_shell_args.md`
+
+验证结果（最小场景）：
+
+- 启动后仍可看到 `shell start` 和 `MiniOS$ ` 提示符。
+- `help` 会输出当前支持的命令列表。
+- `echo hello` 会输出 `hello`。
+- `echo hello minios` 会输出 `hello minios`。
+- `run hello` 会输出 `Hello from user ELF`，随后回到提示符。
+- `run abc` 会输出 `Unknown program`。
+- `abc` 会输出 `Unknown command`。
+- 空输入不会崩溃；`echo    hello` 和 `run     hello` 也能正确跳过多余空格。
+- `exit` 后 `init` 仍能回收 `shell`。
+
+TODO：
+
+- 暂不支持引号和转义。
+- 暂不支持 `argv/envp` 传递给被执行程序。
+- 暂不支持 PATH 搜索。
+- 暂不支持管道、重定向和文件描述符表。
+- 暂不支持真实文件系统加载 ELF。

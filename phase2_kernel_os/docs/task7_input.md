@@ -100,3 +100,39 @@ Task36 打通的是：
 - 真正的 TTY / stdin 抽象
 
 所以这一步的意义是：先把用户态“能读一行命令并解释”跑通，而不是把终端一次做完。
+
+## 11. Task37 补充：`read_line` 和 tokenizer 的关系是什么
+
+Task36 解决的是“如何得到一整行命令”。
+
+Task37 往前再走一步，解决的是“拿到这一行之后怎么拆开”。
+
+两者关系可以理解成两层：
+
+- `read_line`：负责把键盘输入收集成一整行字符串
+- tokenizer：负责把这行字符串按空格切成多个 token
+
+所以处理顺序是：
+
+`read_char -> read_line -> split_line -> command dispatch`
+
+也就是说，`read_line` 解决输入边界，tokenizer 解决命令结构。
+
+## 12. `argv[0]` 在 shell 命令分发中的作用
+
+当前最小 shell 里，tokenizer 拆出来的第一个 token 就是命令名，也就是最小意义上的 `argv[0]`。
+
+例如：
+
+- `echo hello minios`
+- `argv[0] = "echo"`
+- `argv[1] = "hello"`
+- `argv[2] = "minios"`
+
+然后 shell 只需要先看 `argv[0]`：
+
+- 是 `help` 就走 help 分支
+- 是 `echo` 就走 echo 分支
+- 是 `run` 就走 run 分支
+
+这就是最小命令分发器的核心。
