@@ -1,3 +1,4 @@
+// process.c：实现最小进程表、exec/fork、exit 和 wait/waitpid 生命周期管理
 #include "elf.h"
 #include "fs.h"
 #include "mm.h"
@@ -8,6 +9,7 @@
 #define PROCESS_MAX 16
 #define USER_STACK_TOP 0x00800000
 #define USER_STACK_SIZE 4096
+#define DEBUG_FORK 1
 
 // 汇编入口：通过 iret 切换到用户态并从指定入口开始执行
 extern void enter_user_mode(unsigned int user_entry, unsigned int user_stack_top);
@@ -22,6 +24,52 @@ static int next_pid = 1;
 static struct process* process_alloc_slot(void);
 // 前向声明：按进程重新安装用户页映射，供 fork/waitpid 恢复运行时切换用户镜像
 static void process_activate_user_image(struct process* proc);
+// 前向声明：fork 调试辅助函数会复用基础整数输出
+static void process_print_uint(unsigned int value);
+
+// 仅在 fork 调试开启时打印无符号整数，便于验证父子 pid 和 waitpid 目标
+static void process_debug_uint(unsigned int value) {
+#if DEBUG_FORK
+    process_print_uint(value);
+#else
+    (void)value;
+#endif
+}
+
+// 仅在 fork 调试开启时打印 32 位十六进制地址，便于观察 eip/esp 和用户栈物理页
+static void process_debug_hex(unsigned int value) {
+#if DEBUG_FORK
+    static const char digits[] = "0123456789ABCDEF";
+    int shift;
+
+    print_string("0x");
+    for (shift = 28; shift >= 0; shift -= 4) {
+        print_char(digits[(value >> shift) & 0xF]);
+    }
+#else
+    (void)value;
+#endif
+}
+
+// 统一输出最小 fork 调试日志，避免在关键路径里散落太多重复打印
+static void process_debug_fork_event(const char* tag, unsigned int value1, unsigned int value2, unsigned int value3) {
+#if DEBUG_FORK
+    print_string("[fork] ");
+    print_string(tag);
+    print_string(" a=");
+    process_debug_uint(value1);
+    print_string(" b=");
+    process_debug_uint(value2);
+    print_string(" c=");
+    process_debug_uint(value3);
+    print_char('\n');
+#else
+    (void)tag;
+    (void)value1;
+    (void)value2;
+    (void)value3;
+#endif
+}
 
 // 裸机环境下手动打印无符号整数
 static void process_print_uint(unsigned int value) {
@@ -550,6 +598,23 @@ int process_fork(struct interrupt_frame* frame) {
     child->saved_frame.eax = 0;
     child->has_saved_frame = 1;
     child->state = PROCESS_READY;
+
+    // fork 调试输出：验证父子 pid、parent_pid、返回点 eip 和用户栈物理页都符合预期
+    process_debug_fork_event("clone", (unsigned int)parent->pid, (unsigned int)child->pid, (unsigned int)child->parent_pid);
+#if DEBUG_FORK
+    print_string("[fork] return parent=");
+    process_debug_uint((unsigned int)child->pid);
+    print_string(" child=0 eip=");
+    process_debug_hex(child->saved_frame.eip);
+    print_string(" esp=");
+    process_debug_hex(child->saved_frame.user_esp);
+    print_char('\n');
+    print_string("[fork] stack parent_pa=");
+    process_debug_hex(parent->user_stack_pa);
+    print_string(" child_pa=");
+    process_debug_hex(child->user_stack_pa);
+    print_char('\n');
+#endif
     return child->pid;
 }
 
@@ -569,6 +634,7 @@ int process_waitpid_syscall(int pid, struct interrupt_frame* frame, struct inter
 
     result = process_waitpid(pid);
     if (result >= 0) {
+        process_debug_fork_event("waitpid fast reap", (unsigned int)parent->pid, (unsigned int)pid, (unsigned int)result);
         return result;
     }
 
@@ -586,6 +652,8 @@ int process_waitpid_syscall(int pid, struct interrupt_frame* frame, struct inter
     parent->has_saved_frame = 1;
     parent->waiting_pid = pid;
     parent->state = PROCESS_BLOCKED;
+
+    process_debug_fork_event("waitpid block", (unsigned int)parent->pid, (unsigned int)pid, (unsigned int)child->pid);
 
     current_process = child;
     child->state = PROCESS_RUNNING;
@@ -629,6 +697,8 @@ struct interrupt_frame* process_resume_after_exit(void) {
         parent = &process_table[i];
         parent->saved_frame.eax = (unsigned int)child_pid;
         parent->waiting_pid = 0;
+
+        process_debug_fork_event("resume parent", (unsigned int)parent->pid, (unsigned int)child_pid, (unsigned int)child->exit_status);
 
         process_release_user_image(child);
         process_clear_slot(child);

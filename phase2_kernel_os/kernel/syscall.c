@@ -1,3 +1,4 @@
+// syscall.c：实现最小系统调用分发，并处理 fork/waitpid/exit 返回路径
 #include "pit.h"
 #include "process.h"
 #include "syscall.h"
@@ -27,6 +28,15 @@ static void syscall_print_uint(unsigned int value) {
         index--;
         print_char(digits[index]);
     }
+}
+
+// 仅用于 Task31 调试：打印 waitpid/fork 相关返回值，便于观察父子执行路径
+static void syscall_debug_result(const char* tag, unsigned int value) {
+    print_string("[syscall] ");
+    print_string(tag);
+    print_string("=");
+    syscall_print_uint(value);
+    print_char('\n');
 }
 
 // 根据 eax 分发最小系统调用；当前支持 write/exit/getpid/time/fork/waitpid
@@ -71,6 +81,7 @@ void syscall_handle(struct interrupt_frame* frame) {
 
     if (frame->eax == SYS_FORK) {
         frame->eax = (unsigned int)process_fork(frame);
+        syscall_debug_result("fork return to parent", frame->eax);
         return;
     }
 
@@ -78,11 +89,13 @@ void syscall_handle(struct interrupt_frame* frame) {
         int result = process_waitpid_syscall((int)frame->ebx, frame, &next_frame);
 
         if (result == -4) {
+            print_string("[syscall] waitpid blocked\n");
             syscall_set_resume_frame(next_frame);
             return;
         }
 
         frame->eax = (unsigned int)result;
+        syscall_debug_result("waitpid return", frame->eax);
         return;
     }
 

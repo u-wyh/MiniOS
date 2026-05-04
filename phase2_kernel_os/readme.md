@@ -1372,3 +1372,40 @@ TODO：
 - 暂不支持复杂 VMA。
 - 暂不支持通用时间片调度下的多进程压力测试。
 - 当前仍采用共享内核页表 + 按进程重装用户页的教学版模型，不是完整多地址空间实现。
+
+## ✅ Task31：fork 后的调度与父子执行顺序验证
+
+本轮目标：
+
+- 通过最小用户态测试程序和轻量级内核调试输出，验证 fork 后父子进程的返回值、继续执行位置、waitpid 回收路径和用户栈独立性。
+
+已完成：
+
+- 调整 `fork` 测试程序，新增 `before fork`、`parent: child pid`、`child: fork returned 0`、`parent: waitpid done` 输出。
+- 新增轻量级 fork 调试日志，输出父 pid、子 pid、`parent_pid`、用户态 `eip/esp`、父子用户栈物理页地址。
+- 验证父进程 fork 返回 `child_pid`，子进程 fork 返回 `0`。
+- 验证父子都从 fork 返回点之后继续执行，且子进程不会从程序入口重新开始。
+- 验证 waitpid 可以回收正确的 fork 子进程。
+- 初步验证父子用户栈虚拟地址相同但物理页不同。
+
+修改文件：
+
+- `kernel/process.c`
+- `kernel/syscall.c`
+- `kernel/fs.c`
+- `readme.md`
+- `docs/task25_process.md`
+- `docs/task31_fork_validation.md`
+
+验证结果（最小场景）：
+
+- `run fork` 输出中 `before fork` 只出现一次，说明子进程不是从程序入口重启。
+- `run fork` 可稳定看到父分支、子分支和 `waitpid` 完成提示。
+- 连续两次执行 `run fork` 仍可正常完成，不出现明显 page fault 或 PCB 泄漏。
+- `run hello` + shell `waitpid 1` 仍可正常回收，原有 exec/exit/waitpid 流程未被破坏。
+
+TODO：
+
+- 当前仍未覆盖复杂多子进程竞争回收场景。
+- 当前仍未覆盖 fork 后更复杂的用户栈数据读写自检。
+- 当前仍未实现真正的独立页目录与通用调度器验证。
