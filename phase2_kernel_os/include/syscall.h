@@ -2,7 +2,7 @@
 #ifndef SYSCALL_H
 #define SYSCALL_H
 
-// 当前最小系统调用编号集合：write/exit/getpid/time/fork/waitpid/exec
+// 当前最小系统调用编号集合：write/exit/getpid/time/fork/waitpid/exec/read_char
 #define SYS_WRITE 1
 #define SYS_EXIT 2
 #define SYS_GETPID 3
@@ -10,6 +10,7 @@
 #define SYS_FORK 5
 #define SYS_WAITPID 6
 #define SYS_EXEC 7
+#define SYS_READ_CHAR 8
 
 // int 0x80 进入内核后，栈上会按 pusha + CPU 自动压栈的顺序保存现场
 struct interrupt_frame {

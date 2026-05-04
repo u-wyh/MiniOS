@@ -8,5 +8,7 @@ void clear_screen(void);
 void print_char(char c);
 // 从当前光标位置连续输出字符串
 void print_string(const char* str);
+// 删除当前光标前一个字符，并把屏幕上的该位置清空
+void print_backspace(void);
 
 #endif

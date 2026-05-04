@@ -1,8 +1,11 @@
 // syscall.c：实现最小系统调用分发，并处理 fork/waitpid/exit 返回路径
 #include "pit.h"
+#include "keyboard.h"
 #include "process.h"
 #include "syscall.h"
 #include "vga.h"
+
+#define DEBUG_SYSCALL 0
 
 // 记录用户态是否已经请求 exit，本轮把它作为一次性测试完成后的收口条件
 static int syscall_halt_requested = 0;
@@ -32,14 +35,19 @@ static void syscall_print_uint(unsigned int value) {
 
 // 仅用于 Task31 调试：打印 waitpid/fork 相关返回值，便于观察父子执行路径
 static void syscall_debug_result(const char* tag, unsigned int value) {
+#if DEBUG_SYSCALL
     print_string("[syscall] ");
     print_string(tag);
     print_string("=");
     syscall_print_uint(value);
     print_char('\n');
+#else
+    (void)tag;
+    (void)value;
+#endif
 }
 
-// 根据 eax 分发最小系统调用；当前支持 write/exit/getpid/time/fork/waitpid/exec
+// 根据 eax 分发最小系统调用；当前支持 write/exit/getpid/time/fork/waitpid/exec/read_char
 void syscall_handle(struct interrupt_frame* frame) {
     struct interrupt_frame* next_frame;
 
@@ -89,7 +97,9 @@ void syscall_handle(struct interrupt_frame* frame) {
         int result = process_waitpid_syscall((int)frame->ebx, frame, &next_frame);
 
         if (result == -4) {
+#if DEBUG_SYSCALL
             print_string("[syscall] waitpid blocked\n");
+#endif
             syscall_set_resume_frame(next_frame);
             return;
         }
@@ -103,12 +113,19 @@ void syscall_handle(struct interrupt_frame* frame) {
         int result = process_exec_program((int)frame->ebx, frame);
 
         if (result == 0) {
+#if DEBUG_SYSCALL
             print_string("[syscall] exec replaced image\n");
+#endif
             return;
         }
 
         frame->eax = (unsigned int)result;
         syscall_debug_result("exec return", frame->eax);
+        return;
+    }
+
+    if (frame->eax == SYS_READ_CHAR) {
+        frame->eax = (unsigned int)(unsigned char)keyboard_read_char();
         return;
     }
 

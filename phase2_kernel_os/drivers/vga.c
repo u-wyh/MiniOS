@@ -62,3 +62,19 @@ void print_string(const char* str) {
         i++;
     }
 }
+
+// 删除当前光标前一个字符：仅处理当前最小单行命令输入场景
+void print_backspace(void) {
+    if (cursor_col == 0) {
+        if (cursor_row == 0) {
+            return;
+        }
+
+        cursor_row--;
+        cursor_col = VGA_WIDTH - 1;
+    } else {
+        cursor_col--;
+    }
+
+    VGA_BUFFER[vga_index(cursor_row, cursor_col)] = ((unsigned short)VGA_COLOR << 8) | (unsigned char)' ';
+}

@@ -2,6 +2,7 @@
 #include "io.h"
 #include "keyboard.h"
 #include "pic.h"
+#include "process.h"
 #include "shell.h"
 #include "vga.h"
 
@@ -10,6 +11,38 @@ static char input_buffer[128];
 static char command_buffer[128];
 // 记录当前已经输入到缓冲区的字符数
 static int input_index = 0;
+
+#define KBD_BUF_SIZE 128
+
+// 最小键盘环形缓冲区：IRQ 产出字符，sys_read_char 从这里消费字符
+static char kbd_buf[KBD_BUF_SIZE];
+static unsigned int kbd_head = 0;
+static unsigned int kbd_tail = 0;
+
+// 向最小键盘缓冲区写入一个字符；缓冲区满时丢弃新字符，保持已有输入不被覆盖
+static void keyboard_buffer_put(char ch) {
+    unsigned int next_head = (kbd_head + 1U) % KBD_BUF_SIZE;
+
+    if (next_head == kbd_tail) {
+        return;
+    }
+
+    kbd_buf[kbd_head] = ch;
+    kbd_head = next_head;
+}
+
+// 从最小键盘缓冲区读取一个字符；当前为空时返回 0 表示暂无输入
+char keyboard_read_char(void) {
+    char ch;
+
+    if (kbd_head == kbd_tail) {
+        return 0;
+    }
+
+    ch = kbd_buf[kbd_tail];
+    kbd_tail = (kbd_tail + 1U) % KBD_BUF_SIZE;
+    return ch;
+}
 
 // 将最小 Set 1 扫描码映射成小写字母或数字
 static char scancode_to_ascii(unsigned char scancode) {
@@ -60,6 +93,7 @@ void keyboard_handler(void) {
     unsigned char scancode = inb(0x60);
     char ch;
     int i;
+    int user_process_running = process_current_pid();
 
     // 释放码最高位为 1，本轮最小实现直接忽略
     if ((scancode & 0x80) != 0) {
@@ -69,6 +103,13 @@ void keyboard_handler(void) {
 
     // Enter 键表示一行输入结束：补 '\0' 后交给 Shell 执行
     if (scancode == 0x1C) {
+        if (user_process_running != 0) {
+            keyboard_buffer_put('\n');
+            print_char('\n');
+            pic_send_eoi(1);
+            return;
+        }
+
         input_buffer[input_index] = '\0';
         print_char('\n');
 
@@ -83,15 +124,39 @@ void keyboard_handler(void) {
         return;
     }
 
+    // Backspace 退格键：同步删除输入缓冲中的最后一个字符，并清除屏幕回显
+    if (scancode == 0x0E) {
+        if (user_process_running != 0) {
+            print_backspace();
+            pic_send_eoi(1);
+            return;
+        }
+
+        if (input_index > 0) {
+            input_index--;
+            input_buffer[input_index] = '\0';
+            print_backspace();
+        }
+
+        pic_send_eoi(1);
+        return;
+    }
+
     ch = scancode_to_ascii(scancode);
     if (ch != '\0') {
-        // 将普通字符写入缓冲区，同时回显到屏幕
-        input_buffer[input_index++] = ch;
+        // 先把可打印字符放入最小输入缓冲区，后续用户态 read_char syscall 从这里消费。
+        // 当前阶段 IRQ 与 syscall 共享该缓冲区，暂未加锁，后续可用关中断或锁进一步完善。
+        keyboard_buffer_put(ch);
         print_char(ch);
 
-        // 保证缓冲区末尾始终留给 '\0'，避免后续字符串越界
-        if (input_index >= 127) {
-            input_index = 0;
+        // 只有内核 shell 在前台时，才继续把字符写入命令行缓冲区，避免污染用户态 shell 的输入。
+        if (user_process_running == 0) {
+            input_buffer[input_index++] = ch;
+
+            // 保证缓冲区末尾始终留给 '\0'，避免后续字符串越界
+            if (input_index >= 127) {
+                input_index = 0;
+            }
         }
     }
 
