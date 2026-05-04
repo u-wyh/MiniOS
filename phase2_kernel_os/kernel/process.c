@@ -9,8 +9,8 @@
 #define PROCESS_MAX 16
 #define USER_STACK_TOP 0x00800000
 #define USER_STACK_SIZE 4096
-#define DEBUG_FORK 1
-#define DEBUG_EXEC 1
+#define DEBUG_FORK 0
+#define DEBUG_EXEC 0
 
 // 汇编入口：通过 iret 切换到用户态并从指定入口开始执行
 extern void enter_user_mode(unsigned int user_entry, unsigned int user_stack_top);
@@ -308,7 +308,11 @@ static const char* process_exec_program_name(int program_id) {
     }
 
     if (program_id == 2) {
-        return "fork";
+        return "shell";
+    }
+
+    if (program_id == 3) {
+        return "hello";
     }
 
     return (const char*)0;

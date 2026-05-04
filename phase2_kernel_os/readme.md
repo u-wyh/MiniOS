@@ -1502,3 +1502,55 @@ TODO：
 - 暂不支持 `argv/envp`。
 - 暂不支持路径字符串 `exec`。
 - 暂不支持真实文件系统加载 ELF。
+
+## ✅ Task34：最小用户态 Shell 雏形
+
+本轮目标：
+
+- 在 `init` 之下新增一个最小用户态 `shell` 程序。
+- `shell` 暂时不是交互式，而是固定脚本式：启动后打印标记，自动执行一个固定命令，再退出。
+
+已完成：
+
+- 新增固定内置 `shell` 用户程序。
+- `init` 不再直接 `exec` 普通测试子程序，而是先 `fork` 出子进程并 `exec` 到 `shell`。
+- `shell` 在用户态输出 `shell start` 和 `MiniOS$ run hello`。
+- `shell` 自己再执行一轮 `fork -> exec -> waitpid`，把子进程替换成固定的 `hello` 用户程序。
+- `hello` 运行后输出 `Hello from user ELF` 并 `exit`。
+- `shell` 通过 `waitpid` 回收 `hello` 子进程，输出 `MiniOS$ done`，随后退出。
+- `init` 再通过 `waitpid(shell_pid)` 回收 `shell`，输出 `init shell exited`。
+
+修改文件：
+
+- `kernel/process.c`
+- `kernel/fs.c`
+- `readme.md`
+- `docs/task25_process.md`
+- `docs/task34_user_shell.md`
+
+验证结果（最小场景）：
+
+- 开机自动路径中可观察到：
+  - `kernel: start init`
+  - `init child: call shell`
+  - `shell start`
+  - `MiniOS$ run hello`
+  - `Hello from user ELF`
+  - `MiniOS$ done`
+  - `init shell exited`
+- 父子关系调试日志显示：
+  - `init -> shell`：`[fork] clone a=1 b=2 c=1`
+  - `shell -> hello`：`[fork] clone a=2 b=3 c=2`
+- `shell` 的子进程 `exec` 到 `hello` 时，日志显示 `pid = 3`、`parent_pid = 2` 保持不变。
+- 回归验证：
+  - `run forkexec` 仍可正常执行。
+  - 原有 `fork/exec/waitpid` 单独路径没有被破坏。
+
+TODO：
+
+- 暂不支持交互式 shell。
+- 暂不支持键盘输入接入用户态 shell。
+- 暂不支持命令解析。
+- 暂不支持 `argv/envp`。
+- 暂不支持 PATH 搜索。
+- 暂不支持真实文件系统加载 ELF。
