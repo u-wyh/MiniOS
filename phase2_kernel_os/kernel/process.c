@@ -29,6 +29,9 @@ static void process_activate_user_image(struct process* proc);
 static void process_print_uint(unsigned int value);
 // 前向声明：program_id 到内置程序名的最小映射，仅供教学版 exec 复用
 static const char* process_exec_program_name(int program_id);
+// 前向声明：教学版 argv 操作辅助函数，负责清空/复制 PCB 参数暂存区
+static void process_clear_user_args(struct process* proc);
+static int process_copy_user_args(struct process* proc, int argc, const char* const* argv);
 
 // 仅在 fork 调试开启时打印无符号整数，便于验证父子 pid 和 waitpid 目标
 static void process_debug_uint(unsigned int value) {
@@ -192,8 +195,78 @@ static void process_clear_slot(struct process* proc) {
     }
     proc->has_saved_frame = 0;
     proc->waiting_pid = 0;
+    process_clear_user_args(proc);
     proc->name = (const char*)0;
     proc->used = 0;
+}
+
+// 清空 PCB 中保存的教学版 argv，避免旧程序参数泄漏到新程序上下文
+static void process_clear_user_args(struct process* proc) {
+    unsigned int i;
+    unsigned int j;
+
+    if (proc == (struct process*)0) {
+        return;
+    }
+
+    proc->user_argc = 0;
+    for (i = 0; i < PROCESS_MAX_USER_ARGS; i++) {
+        for (j = 0; j < PROCESS_MAX_ARG_LEN; j++) {
+            proc->user_argv[i][j] = '\0';
+        }
+    }
+}
+
+// 复制教学版 argv：当前只支持少量短字符串，超限时返回错误码而不是继续破坏内核状态
+static int process_copy_user_args(struct process* proc, int argc, const char* const* argv) {
+    int i;
+    int j;
+
+    if (proc == (struct process*)0) {
+        return -1;
+    }
+
+    process_clear_user_args(proc);
+
+    if (argc < 0 || argc > PROCESS_MAX_USER_ARGS) {
+        return -2;
+    }
+
+    if (argc == 0) {
+        return 0;
+    }
+
+    if (argv == (const char* const*)0) {
+        return -3;
+    }
+
+    for (i = 0; i < argc; i++) {
+        const char* src = argv[i];
+
+        if (src == (const char*)0) {
+            process_clear_user_args(proc);
+            return -4;
+        }
+
+        for (j = 0; j < PROCESS_MAX_ARG_LEN - 1; j++) {
+            char ch = src[j];
+
+            proc->user_argv[i][j] = ch;
+            if (ch == '\0') {
+                break;
+            }
+        }
+
+        if (j == PROCESS_MAX_ARG_LEN - 1 && src[j] != '\0') {
+            process_clear_user_args(proc);
+            return -5;
+        }
+
+        proc->user_argv[i][PROCESS_MAX_ARG_LEN - 1] = '\0';
+    }
+
+    proc->user_argc = argc;
+    return 0;
 }
 
 // 在共享页表模型里，把某个进程记录的用户页重新安装到固定用户虚拟地址
@@ -313,6 +386,10 @@ static const char* process_exec_program_name(int program_id) {
 
     if (program_id == 3) {
         return "hello";
+    }
+
+    if (program_id == 4) {
+        return "echo";
     }
 
     return (const char*)0;
@@ -486,8 +563,14 @@ int process_exec_file(struct process* proc, const char* name) {
 
 // 当前运行进程执行教学版最小 exec：仅支持固定 program_id，对应内置用户程序
 int process_exec_program(int program_id, struct interrupt_frame* frame) {
+    return process_exec_program_args(program_id, 0, (const char* const*)0, frame);
+}
+
+// 当前运行进程执行教学版最小 exec：参数先拷贝到 PCB，再把当前用户镜像替换成目标程序
+int process_exec_program_args(int program_id, int argc, const char* const* argv, struct interrupt_frame* frame) {
     struct process* proc = current_process;
     const char* target_name;
+    int arg_result;
     int exec_result;
 
     if (proc == (struct process*)0 || frame == (struct interrupt_frame*)0) {
@@ -499,9 +582,15 @@ int process_exec_program(int program_id, struct interrupt_frame* frame) {
         return -2;
     }
 
+    arg_result = process_copy_user_args(proc, argc, argv);
+    if (arg_result != 0) {
+        return -4;
+    }
+
     process_debug_exec_event("begin", (unsigned int)proc->pid, (unsigned int)proc->parent_pid, (unsigned int)program_id);
     exec_result = process_exec_file(proc, target_name);
     if (exec_result != 0) {
+        process_clear_user_args(proc);
         process_debug_exec_event("failed", (unsigned int)proc->pid, (unsigned int)proc->parent_pid, (unsigned int)program_id);
         return -3;
     }
@@ -521,6 +610,49 @@ int process_exec_program(int program_id, struct interrupt_frame* frame) {
 
     process_debug_exec_event("replace", (unsigned int)proc->pid, (unsigned int)proc->parent_pid, (unsigned int)program_id);
     return 0;
+}
+
+// 返回当前进程保存的教学版 argc，供用户程序在最小 syscall ABI 下读取启动参数数量
+int process_get_argc(void) {
+    if (current_process == (struct process*)0) {
+        return -1;
+    }
+
+    return current_process->user_argc;
+}
+
+// 把当前进程保存的一项教学版 argv 复制到用户缓冲区；当前阶段依赖共享映射，指针校验仍很有限
+int process_get_arg(int index, char* user_buf, int max_len) {
+    int i;
+    struct process* proc = current_process;
+
+    if (proc == (struct process*)0 || user_buf == (char*)0) {
+        return -1;
+    }
+
+    if (index < 0 || index >= proc->user_argc) {
+        return -2;
+    }
+
+    if (max_len <= 0 || max_len > PROCESS_MAX_ARG_LEN) {
+        return -3;
+    }
+
+    for (i = 0; i < max_len - 1; i++) {
+        char ch = proc->user_argv[index][i];
+
+        user_buf[i] = ch;
+        if (ch == '\0') {
+            return i;
+        }
+    }
+
+    user_buf[max_len - 1] = '\0';
+    if (proc->user_argv[index][max_len - 1] != '\0') {
+        return -4;
+    }
+
+    return max_len - 1;
 }
 
 // 按文件名创建进程：先创建 PCB，再调用 exec 语义装载用户镜像
@@ -664,6 +796,8 @@ int process_fork(struct interrupt_frame* frame) {
     child->parent_pid = parent->pid;
     child->name = parent->name;
     child->exit_status = 0;
+    child->user_argc = parent->user_argc;
+    process_copy_bytes((unsigned char*)child->user_argv, (const unsigned char*)parent->user_argv, sizeof(child->user_argv));
 
     copy_result = process_copy_user_image(child, parent);
     if (copy_result != 0) {

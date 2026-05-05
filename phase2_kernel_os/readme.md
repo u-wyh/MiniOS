@@ -153,6 +153,24 @@ TODO：
 - 暂不支持管道和重定向。
 - 暂不支持真实文件系统加载 ELF。
 
+### Task38：用户态程序 argv 传递雏形
+
+已完成：
+
+- shell 的 `run` 命令可以向被执行的固定用户程序传递少量参数。
+- 在 PCB 中新增教学版 `argc/argv` 暂存区，并通过最小 syscall 暴露给用户程序读取。
+- 新增用户态 `echo` 程序。
+- `run echo hello` / `run echo hello minios` 可通过 `fork / exec / waitpid` 执行并输出参数。
+- `run hello` 保持兼容，原有 `init -> shell -> user program` 路径未被破坏。
+
+TODO：
+
+- 当前 `argv` 采用 PCB 暂存区，不是真实用户栈 ABI。
+- 暂不支持 `envp`。
+- 暂不支持引号和转义。
+- 暂不支持 PATH 搜索。
+- 暂不支持真实文件系统 exec。
+
 ## 五、阶段进度（已完成）
 
 ### A. 基础启动阶段（Task1 + Task2）
@@ -1703,4 +1721,52 @@ TODO：
 - 暂不支持 `argv/envp` 传递给被执行程序。
 - 暂不支持 PATH 搜索。
 - 暂不支持管道、重定向和文件描述符表。
+- 暂不支持真实文件系统加载 ELF。
+
+## ✅ Task38：用户态程序 argv 传递雏形
+
+本轮目标：
+
+- 在当前最小 `run <program>` 的基础上，让 shell 可以把少量参数传给被执行的用户程序。
+- 保持 `fork / exec / waitpid` 执行链不变，只补上教学版 `argc/argv` 传递能力。
+
+已完成：
+
+- 在 PCB 中新增教学版 `user_argc + user_argv[][]` 暂存区。
+- 新增 `SYS_GET_ARGC` / `SYS_GET_ARG`，供用户程序读取自己的启动参数。
+- 新增 `SYS_EXEC_ARGS`，让 shell 可以把 `run` 后面的少量参数传给目标程序。
+- 新增用户态 `echo` 程序，能够读取自己的 `argc/argv` 并输出 `argv[1..argc-1]`。
+- shell 现在支持 `run echo`、`run echo hello`、`run echo hello minios`。
+- `run hello` 仍保持兼容，继续通过 `fork / exec / waitpid` 运行。
+- 参数过多或参数过长时，shell 会给出简单错误提示，不会导致内核崩溃。
+
+修改文件：
+
+- `include/process.h`
+- `include/syscall.h`
+- `kernel/process.c`
+- `kernel/syscall.c`
+- `kernel/fs.c`
+- `readme.md`
+- `docs/task7_input.md`
+- `docs/task25_process.md`
+- `docs/task38_argv.md`
+
+验证结果（最小场景）：
+
+- `run hello`
+- `run echo hello`
+- `run echo hello minios`
+- `run echo`
+- `run abc`
+- 参数过多
+- 参数过长
+- `exit`
+
+当前限制：
+
+- 当前 `argv` 暂存在 PCB 中，不是真实用户栈上的 `argc/argv` ABI。
+- 暂不支持 `envp`。
+- 暂不支持引号和转义。
+- 暂不支持 PATH 搜索。
 - 暂不支持真实文件系统加载 ELF。

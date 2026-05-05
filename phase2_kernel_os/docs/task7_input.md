@@ -136,3 +136,41 @@ Task37 往前再走一步，解决的是“拿到这一行之后怎么拆开”�
 - 是 `run` 就走 run 分支
 
 这就是最小命令分发器的核心。
+
+## 13. Task38 补充：shell 自己的 `argv` 和被执行程序的 `argv` 有什么区别？
+
+它们不是同一层数据。
+
+以命令：
+
+`run echo hello`
+
+为例，shell 先看到的是：
+
+- `argv[0] = "run"`
+- `argv[1] = "echo"`
+- `argv[2] = "hello"`
+
+这是 shell 用来决定“执行哪条命令、启动哪个程序”的参数。
+
+当 shell 决定通过 `run` 启动外部程序后，会重新整理出子程序自己的启动参数：
+
+- `child_argv[0] = "echo"`
+- `child_argv[1] = "hello"`
+
+所以 shell 的 `argv` 属于“命令解释阶段”，而被执行程序的 `argv` 属于“新程序启动阶段”。
+
+## 14. Task38 补充：`run echo hello` 的参数在 shell 和 echo 中分别如何理解？
+
+对于 shell 来说：
+
+- `run` 是命令名
+- `echo` 是目标程序名
+- `hello` 是要转交给目标程序的参数
+
+对于被 `exec` 启动的 `echo` 程序来说：
+
+- `argv[0] = "echo"`
+- `argv[1] = "hello"`
+
+也就是说，同一行命令在 shell 看来是“控制命令 + 程序名 + 程序参数”，在目标程序看来只剩下“自己的程序名 + 自己的参数”。

@@ -47,7 +47,7 @@ static void syscall_debug_result(const char* tag, unsigned int value) {
 #endif
 }
 
-// 根据 eax 分发最小系统调用；当前支持 write/exit/getpid/time/fork/waitpid/exec/read_char
+// 根据 eax 分发最小系统调用；当前支持 write/exit/getpid/time/fork/waitpid/exec/read_char/get_argc/get_arg/exec_args
 void syscall_handle(struct interrupt_frame* frame) {
     struct interrupt_frame* next_frame;
 
@@ -125,7 +125,30 @@ void syscall_handle(struct interrupt_frame* frame) {
     }
 
     if (frame->eax == SYS_READ_CHAR) {
-        frame->eax = (unsigned int)(unsigned char)keyboard_read_char();
+        // read_char 当前改为最小阻塞语义：没有输入时先在内核里休眠，避免用户态 shell 忙等轮询。
+        frame->eax = (unsigned int)(unsigned char)keyboard_read_char_blocking();
+        return;
+    }
+
+    if (frame->eax == SYS_GET_ARGC) {
+        frame->eax = (unsigned int)process_get_argc();
+        return;
+    }
+
+    if (frame->eax == SYS_GET_ARG) {
+        frame->eax = (unsigned int)process_get_arg((int)frame->ebx, (char*)frame->ecx, (int)frame->edx);
+        return;
+    }
+
+    if (frame->eax == SYS_EXEC_ARGS) {
+        int result = process_exec_program_args((int)frame->ebx, (int)frame->ecx, (const char* const*)frame->edx, frame);
+
+        if (result == 0) {
+            return;
+        }
+
+        frame->eax = (unsigned int)result;
+        syscall_debug_result("exec_args return", frame->eax);
         return;
     }
 

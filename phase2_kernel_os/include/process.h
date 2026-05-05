@@ -13,6 +13,10 @@
 #define PROCESS_ZOMBIE 3
 #define PROCESS_BLOCKED 4
 
+// 教学版 argv 上限：当前先把启动参数暂存在 PCB 里，后续再迁移到真实用户栈 ABI
+#define PROCESS_MAX_USER_ARGS 8
+#define PROCESS_MAX_ARG_LEN 32
+
 // 最小 PCB：保存进程身份、父子关系、状态与用户态入口现场
 struct process {
     int pid;
@@ -35,6 +39,9 @@ struct process {
     struct interrupt_frame saved_frame;
     int has_saved_frame;
     int waiting_pid;
+    // 教学版 argv 暂存区：exec_args 先把参数复制到 PCB，中小规模参数足够支撑当前实验
+    int user_argc;
+    char user_argv[PROCESS_MAX_USER_ARGS][PROCESS_MAX_ARG_LEN];
 
     // 扩展字段：记录程序名与槽位占用，便于 ps 展示与管理
     const char* name;
@@ -67,6 +74,12 @@ int process_fork(struct interrupt_frame* frame);
 int process_waitpid_syscall(int pid, struct interrupt_frame* frame, struct interrupt_frame** next_frame);
 // 当前运行进程按固定 program_id 执行最小 exec 替换，成功时直接改写返回现场
 int process_exec_program(int program_id, struct interrupt_frame* frame);
+// 当前运行进程执行带教学版 argv 的最小 exec：参数先复制到 PCB 暂存区，再替换用户镜像
+int process_exec_program_args(int program_id, int argc, const char* const* argv, struct interrupt_frame* frame);
+// 返回当前进程保存的教学版 argc；当前无进程时返回错误
+int process_get_argc(void);
+// 将当前进程保存的 argv[index] 复制到用户缓冲区，成功返回字符串长度
+int process_get_arg(int index, char* user_buf, int max_len);
 // 处理当前进程 exit 后的后续恢复：若存在阻塞父进程则返回其用户态现场
 struct interrupt_frame* process_resume_after_exit(void);
 // 输出进程列表（PID / PPID / STATE）
