@@ -16,6 +16,15 @@
 // 教学版 argv 上限：当前先把启动参数暂存在 PCB 里，后续再迁移到真实用户栈 ABI
 #define PROCESS_MAX_USER_ARGS 8
 #define PROCESS_MAX_ARG_LEN 32
+#define PROCESS_NAME_MAX_LEN 16
+
+// 用户态 ps 使用的进程只读摘要：避免直接暴露内核 PCB 结构
+struct process_info {
+    int pid;
+    int ppid;
+    int state;
+    char name[PROCESS_NAME_MAX_LEN];
+};
 
 // 最小 PCB：保存进程身份、父子关系、状态与用户态入口现场
 struct process {
@@ -84,6 +93,8 @@ int process_get_arg(int index, char* user_buf, int max_len);
 struct interrupt_frame* process_resume_after_exit(void);
 // 输出进程列表（PID / PPID / STATE）
 void process_list(void);
+// 按活动进程序号读取一条只读摘要；成功返回 0，越界返回 -1
+int process_get_info_by_index(int index, struct process_info* out);
 // 返回已创建的进程数量
 int process_count(void);
 

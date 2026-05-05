@@ -299,6 +299,29 @@ static void process_copy_bytes(unsigned char* dst, const unsigned char* src, uns
     }
 }
 
+// 裸机环境下最小字符串拷贝：用于把 PCB 程序名复制到用户态可见摘要结构
+static void process_copy_name(char* dst, const char* src, unsigned int max_len) {
+    unsigned int i;
+
+    if (dst == (char*)0 || max_len == 0) {
+        return;
+    }
+
+    if (src == (const char*)0) {
+        dst[0] = '\0';
+        return;
+    }
+
+    for (i = 0; i < max_len - 1; i++) {
+        dst[i] = src[i];
+        if (src[i] == '\0') {
+            return;
+        }
+    }
+
+    dst[max_len - 1] = '\0';
+}
+
 // 释放进程占用的最小用户镜像资源：用户栈页 + ELF 映射页
 static void process_release_user_image(struct process* proc) {
     unsigned int i;
@@ -951,6 +974,34 @@ void process_list(void) {
         }
         print_char('\n');
     }
+}
+
+// 按活动进程序号导出只读摘要：用户态 ps 通过 syscall 逐条读取，避免直接暴露 PCB 指针
+int process_get_info_by_index(int index, struct process_info* out) {
+    int i;
+    int current = 0;
+
+    if (index < 0 || out == (struct process_info*)0) {
+        return -1;
+    }
+
+    for (i = 0; i < PROCESS_MAX; i++) {
+        if (process_table[i].state == PROCESS_UNUSED) {
+            continue;
+        }
+
+        if (current == index) {
+            out->pid = process_table[i].pid;
+            out->ppid = process_table[i].parent_pid;
+            out->state = process_table[i].state;
+            process_copy_name(out->name, process_table[i].name, PROCESS_NAME_MAX_LEN);
+            return 0;
+        }
+
+        current++;
+    }
+
+    return -1;
 }
 
 // 返回已创建的进程数量

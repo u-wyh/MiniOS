@@ -152,6 +152,12 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    if (frame->eax == SYS_PS) {
+        // SYS_PS 最小语义：ebx=活动进程序号，ecx=用户缓冲区(struct process_info*)，成功返回0
+        frame->eax = (unsigned int)process_get_info_by_index((int)frame->ebx, (struct process_info*)frame->ecx);
+        return;
+    }
+
     print_string("unknown syscall\n");
     frame->eax = (unsigned int)-1;
 }
