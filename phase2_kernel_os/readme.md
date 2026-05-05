@@ -171,6 +171,24 @@ TODO：
 - 暂不支持 PATH 搜索。
 - 暂不支持真实文件系统 exec。
 
+### Task41：前台 / 后台任务雏形
+
+已完成：
+
+- 明确 `run <program>` 为前台执行路径：shell 在父进程中 `waitpid` 子进程。
+- 提供 `start <program>` 后台启动语义：shell 在 `fork/exec` 后不等待，立即返回提示符。
+- 提供 `wait <pid>` 手动回收入口：用于回收后台子进程（含被 kill 后的 zombie）。
+- `ps / kill / wait` 可以组合使用，用于观察、终止和回收后台任务。
+- 保持 `init -> shell -> user program` 父子链路不变，避免破坏既有 `run/exit` 流程。
+
+TODO：
+
+- 暂不支持 `&` 语法。
+- 暂不支持 `jobs`。
+- 暂不支持 `fg/bg`。
+- 暂不支持进程组与终端控制。
+- shell 退出后的 orphan/reparent 机制仍是后续增强点。
+
 ## 五、阶段进度（已完成）
 
 ### A. 基础启动阶段（Task1 + Task2）
