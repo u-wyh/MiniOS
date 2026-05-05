@@ -20,6 +20,8 @@ static struct process process_table[PROCESS_MAX];
 static struct process* current_process = (struct process*)0;
 static struct process* last_exited_process = (struct process*)0;
 static int next_pid = 1;
+// 记录教学版 init 进程 pid：用于孤儿进程 reparent，默认 -1 表示尚未建立 init
+static int init_pid = -1;
 
 // 前向声明：最小 PCB 分配逻辑在后文定义，供创建阶段复用
 static struct process* process_alloc_slot(void);
@@ -32,6 +34,9 @@ static const char* process_exec_program_name(int program_id);
 // 前向声明：教学版 argv 操作辅助函数，负责清空/复制 PCB 参数暂存区
 static void process_clear_user_args(struct process* proc);
 static int process_copy_user_args(struct process* proc, int argc, const char* const* argv);
+static int process_name_equals(const char* a, const char* b);
+static void process_restore_current_user_mapping(void);
+static void process_reparent_children(int old_parent_pid);
 
 // 仅在 fork 调试开启时打印无符号整数，便于验证父子 pid 和 waitpid 目标
 static void process_debug_uint(unsigned int value) {
@@ -322,6 +327,69 @@ static void process_copy_name(char* dst, const char* src, unsigned int max_len) 
     dst[max_len - 1] = '\0';
 }
 
+// 最小字符串比较：用于区分当前是否处于 init 启动链路，避免在 shell wait 中走高风险阻塞切换
+static int process_name_equals(const char* a, const char* b) {
+    int i = 0;
+
+    if (a == (const char*)0 || b == (const char*)0) {
+        return 0;
+    }
+
+    while (a[i] != '\0' && b[i] != '\0') {
+        if (a[i] != b[i]) {
+            return 0;
+        }
+        i++;
+    }
+
+    return a[i] == '\0' && b[i] == '\0';
+}
+
+// 共享页表模型下，回收“非当前进程”会短暂解除同一组用户虚拟地址映射。
+// 这里在回收后立刻把当前运行进程的用户页重装，避免 shell 后续访问触发页故障。
+static void process_restore_current_user_mapping(void) {
+    if (current_process == (struct process*)0) {
+        return;
+    }
+
+    if (current_process->state != PROCESS_RUNNING) {
+        return;
+    }
+
+    process_activate_user_image(current_process);
+}
+
+// 父进程退出时把其仍有效的子进程交给 init：只改 parent_pid，不改变子进程状态与资源
+static void process_reparent_children(int old_parent_pid) {
+    int i;
+
+    if (old_parent_pid <= 0) {
+        return;
+    }
+
+    // init 尚未建立时不做迁移，避免把 parent_pid 写成无效值
+    if (init_pid <= 0) {
+        return;
+    }
+
+    // init 自己退出时跳过 reparent，避免出现“把子进程重新挂回自己”的无效操作
+    if (old_parent_pid == init_pid) {
+        return;
+    }
+
+    for (i = 0; i < PROCESS_MAX; i++) {
+        if (process_table[i].state == PROCESS_UNUSED) {
+            continue;
+        }
+
+        if (process_table[i].parent_pid != old_parent_pid) {
+            continue;
+        }
+
+        process_table[i].parent_pid = init_pid;
+    }
+}
+
 // 释放进程占用的最小用户镜像资源：用户栈页 + ELF 映射页
 static void process_release_user_image(struct process* proc) {
     unsigned int i;
@@ -523,6 +591,7 @@ void process_init(void) {
     current_process = (struct process*)0;
     last_exited_process = (struct process*)0;
     next_pid = 1;
+    init_pid = -1;
 }
 
 // 把一份 ELF 镜像装载到指定进程中：负责用户栈、ELF 页和入口现场初始化
@@ -710,6 +779,10 @@ struct process* process_create(const char* name) {
         return (struct process*)0;
     }
     proc->state = PROCESS_READY;
+    // 记录第一个 init 进程 pid，作为教学版孤儿进程 reparent 的目标父进程。
+    if (init_pid <= 0 && process_name_equals(name, "init") != 0) {
+        init_pid = proc->pid;
+    }
     return proc;
 }
 
@@ -732,9 +805,15 @@ void process_run(struct process* proc) {
 
 // 将当前进程标记为 ZOMBIE，等待 shell wait 命令回收 PCB 槽位
 void process_exit(int status) {
+    int exiting_pid;
+
     if (current_process == (struct process*)0) {
         return;
     }
+
+    exiting_pid = current_process->pid;
+    // 当前进程退出前先处理孤儿进程：把它的子进程交给 init，避免子进程失去可回收父进程。
+    process_reparent_children(exiting_pid);
 
     current_process->exit_status = status;
     current_process->state = PROCESS_ZOMBIE;
@@ -760,6 +839,7 @@ int process_wait(void) {
         pid = process_table[i].pid;
         // wait 时先释放子进程资源，再回收 PCB
         process_release_user_image(&process_table[i]);
+        process_restore_current_user_mapping();
         if (last_exited_process == &process_table[i]) {
             last_exited_process = (struct process*)0;
         }
@@ -789,6 +869,7 @@ int process_waitpid(int pid) {
 
     // waitpid 回收前释放用户页资源，确保 PCB 复用时不会累计泄漏
     process_release_user_image(target);
+    process_restore_current_user_mapping();
     if (last_exited_process == target) {
         last_exited_process = (struct process*)0;
     }
@@ -880,6 +961,12 @@ int process_waitpid_syscall(int pid, struct interrupt_frame* frame, struct inter
 
     if (result != -3) {
         return result;
+    }
+
+    // 关键稳定性保护：除 init 启动链路外，用户态 waitpid 只做“已退出即回收”。
+    // 这样 shell 执行 wait <pid> 不会再进入阻塞切换路径，从而避免现场错乱导致重启。
+    if (process_name_equals(parent->name, "init") == 0) {
+        return -3;
     }
 
     child = process_find_child_for_parent(pid, parent->pid);

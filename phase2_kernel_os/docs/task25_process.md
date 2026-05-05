@@ -563,3 +563,50 @@ shell 等待子进程结束后再回到命令循环，可以保证“命令执�
 - 前后台切换协议
 - 终端控制与输入归属管理
 - 更完整的 signal 与状态同步机制
+
+## 29. Task42：孤儿进程 reparent 到 init
+
+### 什么是孤儿进程
+
+当子进程还存活，但它的父进程先退出时，这个子进程就是孤儿进程。
+
+### 为什么 shell 退出后后台任务会变成孤儿进程
+
+`start <program>` 启动的后台任务本质上是 shell 子进程。  
+如果 shell 先退出，后台任务还在运行或尚未回收，就会失去原父进程。
+
+### 为什么需要把孤儿进程交给 init
+
+当前 MiniOS 的最小模型里，init 是根用户进程。  
+把孤儿进程交给 init，可以保证后续仍有父进程语义用于 `waitpid` 回收。
+
+### reparent 具体修改了什么
+
+在父进程退出路径中扫描进程表，把 `parent_pid == exiting_pid` 的有效子进程改成 `parent_pid = init_pid`。
+
+### reparent 为什么不等于 kill
+
+reparent 不会结束子进程，也不会写退出码。  
+它只改变父子关系，子进程状态保持原样（READY/RUNNING/ZOMBIE）。
+
+### reparent 为什么不释放资源
+
+资源释放仍属于退出回收链路：子进程退出后由父进程 `waitpid` 回收。  
+reparent 只负责“把父进程关系改正确”。
+
+### init 在当前 MiniOS 中承担什么角色
+
+当前 init 负责：
+
+- 系统首个用户进程
+- shell 的父进程
+- 孤儿进程接管目标（最小 reaper 角色）
+
+### 当前实现和真实 Linux reparent 还有哪些差距
+
+当前仍是教学版最小实现，不包含：
+
+- 进程组/session
+- 终端控制
+- 完整 signal 与 job control
+- 完整自动 reaper 策略

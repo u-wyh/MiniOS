@@ -189,6 +189,22 @@ TODO：
 - 暂不支持进程组与终端控制。
 - shell 退出后的 orphan/reparent 机制仍是后续增强点。
 
+### Task42：孤儿进程 reparent 到 init 雏形
+
+已完成：
+
+- 在进程模块中记录教学版 `init_pid`。
+- 父进程退出时扫描进程表，将其仍有效的子进程 `parent_pid` 迁移到 `init_pid`。
+- reparent 只改变父子关系，不改变子进程运行状态，不直接释放子进程资源。
+- shell 退出后，其后台子进程不会失去父进程，可被 init 接管。
+
+TODO：
+
+- init 暂未实现完整自动 wait/reaper 循环。
+- 暂不支持 `wait -1`。
+- 暂不支持进程组、session 与终端控制。
+- 暂不支持完整 job control（`jobs/fg/bg`）。
+
 ## 五、阶段进度（已完成）
 
 ### A. 基础启动阶段（Task1 + Task2）
