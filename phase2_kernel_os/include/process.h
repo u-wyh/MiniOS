@@ -73,6 +73,8 @@ void process_exit(int status);
 int process_wait(void);
 // 尝试回收指定 pid 的 ZOMBIE 子进程，返回 pid 或错误码
 int process_waitpid(int pid);
+// 非阻塞回收任意一个当前进程名下的 ZOMBIE 子进程；成功返回 pid，无可回收时返回 0
+int process_wait_any(void);
 // 状态码转可读字符串，供 ps 和文档对照使用
 const char* process_state_name(int state);
 // 返回当前进程 pid；无当前进程返回 0

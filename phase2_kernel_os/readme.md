@@ -205,6 +205,22 @@ TODO：
 - 暂不支持进程组、session 与终端控制。
 - 暂不支持完整 job control（`jobs/fg/bg`）。
 
+### Task43：init reaper 循环雏形
+
+已完成：
+
+- 新增 `wait_any`（`SYS_WAIT_ANY`）非阻塞回收接口。
+- `init` 在回收 shell 后进入最小 reaper 循环，周期性尝试回收自己的 ZOMBIE 子进程。
+- 被 reparent 到 init 的孤儿进程退出后，可被 init 的 `wait_any` 回收。
+- 打通 `reparent -> zombie -> init reap` 的最小闭环。
+
+TODO：
+
+- `wait_any` 暂不支持阻塞等待语义。
+- 暂不支持 `SIGCHLD`。
+- 暂不支持完整 `wait(-1)` 语义与 wait 队列。
+- 暂不支持复杂 init 服务管理与完整 job control。
+
 ## 五、阶段进度（已完成）
 
 ### A. 基础启动阶段（Task1 + Task2）

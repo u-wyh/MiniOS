@@ -610,3 +610,53 @@ reparent 只负责“把父进程关系改正确”。
 - 终端控制
 - 完整 signal 与 job control
 - 完整自动 reaper 策略
+
+## 30. Task43：init reaper 循环雏形
+
+### reparent 和 reap 的区别是什么
+
+- reparent：只改父子关系（`parent_pid`），不结束进程、不释放资源。
+- reap：回收已退出子进程（`ZOMBIE`）的资源并释放 PCB 槽位。
+
+### 为什么 ZOMBIE 必须由父进程 wait 回收
+
+`ZOMBIE` 代表“已退出但未回收”。  
+只有父进程执行 wait 路径时，内核才安全释放其用户镜像和 PCB。
+
+### init 为什么适合作为孤儿进程 reaper
+
+在当前 MiniOS 里，init 是根用户进程。  
+孤儿进程 reparent 给 init 后，init 天然就是最小统一回收者。
+
+### wait_any 的最小语义是什么
+
+`wait_any` 当前采用教学版非阻塞语义：
+
+- 返回 `>0`：成功回收一个子进程并返回其 pid
+- 返回 `0`：当前没有可回收的 zombie 子进程
+- 返回 `<0`：错误
+
+### 为什么本轮采用非阻塞 wait_any
+
+当前阶段不引入复杂 wait 队列与阻塞调度细节。  
+非阻塞轮询语义足够打通“init 周期性回收”闭环，同时保持系统结构简单。
+
+### init reaper 为什么不能误回收非 init 子进程
+
+`wait_any` 只扫描 `parent_pid == current_process->pid` 且 `state == ZOMBIE` 的进程。  
+这样不会误回收仍属于 shell 或其他父进程的活动子进程。
+
+### 当前实现和真实 Linux init / wait / SIGCHLD 的差距
+
+当前仍是教学版最小实现，不包含：
+
+- `SIGCHLD` 通知机制
+- 完整 `wait(-1)` 与阻塞语义
+- 完整 init 服务管理
+- 进程组/session 与终端控制
+
+### 后续如果做完整 wait(-1) 需要补什么
+
+- 可阻塞 wait 队列
+- 子进程状态变化通知机制
+- 更完整的父子同步与并发保护

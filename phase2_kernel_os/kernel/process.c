@@ -877,6 +877,40 @@ int process_waitpid(int pid) {
     return pid;
 }
 
+// 非阻塞回收任意 ZOMBIE 子进程：仅扫描当前进程名下的子进程，没有可回收目标时返回 0
+int process_wait_any(void) {
+    int i;
+    int parent_pid;
+    int reaped_pid;
+
+    if (current_process == (struct process*)0) {
+        return -1;
+    }
+
+    parent_pid = current_process->pid;
+    for (i = 0; i < PROCESS_MAX; i++) {
+        if (process_table[i].state != PROCESS_ZOMBIE) {
+            continue;
+        }
+
+        if (process_table[i].parent_pid != parent_pid) {
+            continue;
+        }
+
+        // 复用既有回收路径：先释放用户镜像资源，再回收 PCB 槽位
+        process_release_user_image(&process_table[i]);
+        process_restore_current_user_mapping();
+        if (last_exited_process == &process_table[i]) {
+            last_exited_process = (struct process*)0;
+        }
+        reaped_pid = process_table[i].pid;
+        process_clear_slot(&process_table[i]);
+        return reaped_pid;
+    }
+
+    return 0;
+}
+
 // 返回当前进程 pid；没有当前进程时返回 0
 int process_current_pid(void) {
     if (current_process == (struct process*)0 || current_process->state != PROCESS_RUNNING) {

@@ -163,6 +163,12 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    if (frame->eax == SYS_WAIT_ANY) {
+        // 非阻塞 wait_any：有可回收 zombie 返回 pid；无可回收子进程返回 0
+        frame->eax = (unsigned int)process_wait_any();
+        return;
+    }
+
     print_string("unknown syscall\n");
     frame->eax = (unsigned int)-1;
 }
