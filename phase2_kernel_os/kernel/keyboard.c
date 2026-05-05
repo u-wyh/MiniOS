@@ -44,6 +44,21 @@ char keyboard_read_char(void) {
     return ch;
 }
 
+// 在最小教学版里用“sti + hlt”阻塞等待字符，避免用户态 shell 反复 syscall 忙等打满 CPU。
+// 当前没有输入时，CPU 会先休眠；任意中断到来后再醒来重新检查缓冲区，直到拿到字符再返回。
+char keyboard_read_char_blocking(void) {
+    char ch;
+
+    for (;;) {
+        ch = keyboard_read_char();
+        if (ch != 0) {
+            return ch;
+        }
+
+        __asm__ __volatile__("sti; hlt; cli");
+    }
+}
+
 // 将最小 Set 1 扫描码映射成小写字母或数字
 static char scancode_to_ascii(unsigned char scancode) {
     switch (scancode) {

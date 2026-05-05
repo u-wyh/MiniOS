@@ -6,5 +6,7 @@
 void keyboard_handler(void);
 // 从最小键盘输入缓冲区读取一个字符；无输入时返回 0
 char keyboard_read_char(void);
+// 阻塞等待一个字符；当前无输入时先让 CPU 休眠，直到后续中断把它唤醒
+char keyboard_read_char_blocking(void);
 
 #endif
