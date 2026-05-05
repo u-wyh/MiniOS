@@ -1793,3 +1793,36 @@ TODO：
 - 暂不支持进程树显示。
 - 暂不支持 CPU 时间、内存占用等统计。
 - 暂无 `/proc` 文件系统。
+
+## ✅ Task40：用户态 kill 命令雏形
+
+本轮目标：
+
+- 在用户态 shell 增加 `kill <pid>`，通过最小 syscall 请求内核终止普通用户进程。
+- 保持当前 `fork/exec/waitpid/ps` 主路径稳定，不引入完整 signal 子系统。
+
+已完成：
+
+- 新增 `SYS_KILL`，内核调用 `process_kill(pid, -9)` 执行教学版终止。
+- 新增 `process_kill`：
+  - 支持按 pid 查找并将目标置为 `ZOMBIE`。
+  - 设置退出码为固定值（`-9`）。
+  - 不在 kill 时直接释放资源，保留给后续 `waitpid` 回收。
+  - 最小保护：拒绝杀 `init(pid=1)` 和当前进程（当前 shell）。
+- shell 新增 `kill <pid>` 命令：
+  - 参数缺失输出 `Usage: kill <pid>`
+  - 非法 pid 输出 `Invalid pid`
+  - 成功输出 `Killed`
+  - 失败输出 `Kill failed`
+- 为便于验证 kill 新增最小辅助命令：
+  - `start <program> [args...]`：只 `fork/exec`，不 `waitpid`
+  - `wait <pid>`：最小包装 `waitpid(pid)`
+- 程序映射新增 `loop`（可通过 `start loop` 启动后再 kill 观察）。
+- `help` 已同步包含 `ps`、`kill`、`start`、`wait`。
+
+当前限制：
+
+- 当前 kill 不是 Linux signal 系统。
+- 不支持 `SIGKILL/SIGTERM` 编号、handler、进程组、权限模型。
+- 不支持 `killall` 和完整后台任务管理。
+- kill 后 zombie 的完整资源释放仍依赖父进程 `waitpid`。

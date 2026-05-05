@@ -158,6 +158,11 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    if (frame->eax == SYS_KILL) {
+        frame->eax = (unsigned int)process_kill((int)frame->ebx, -9);
+        return;
+    }
+
     print_string("unknown syscall\n");
     frame->eax = (unsigned int)-1;
 }

@@ -415,6 +415,10 @@ static const char* process_exec_program_name(int program_id) {
         return "echo";
     }
 
+    if (program_id == 5) {
+        return "loop";
+    }
+
     return (const char*)0;
 }
 
@@ -899,6 +903,40 @@ int process_waitpid_syscall(int pid, struct interrupt_frame* frame, struct inter
     }
 
     return -4;
+}
+
+// 教学版 kill：按 pid 把目标普通用户进程标记为 ZOMBIE，资源释放仍交给父进程 wait/waitpid 回收
+int process_kill(int pid, int exit_code) {
+    struct process* target = process_find_by_pid(pid);
+
+    if (target == (struct process*)0) {
+        return -1;
+    }
+
+    // 当前阶段最小保护：不允许杀 init(约定 pid=1)，避免系统失去根父进程
+    if (target->pid == 1) {
+        return -2;
+    }
+
+    // 不允许直接杀当前正在执行的进程，避免在本轮引入自杀路径的复杂恢复逻辑
+    if (current_process != (struct process*)0 && target->pid == current_process->pid) {
+        return -3;
+    }
+
+    if (target->state == PROCESS_UNUSED) {
+        return -4;
+    }
+
+    if (target->state == PROCESS_ZOMBIE) {
+        return -5;
+    }
+
+    target->exit_status = exit_code;
+    target->state = PROCESS_ZOMBIE;
+    target->has_saved_frame = 0;
+    target->waiting_pid = 0;
+    last_exited_process = target;
+    return 0;
 }
 
 // 子进程 exit 后，若父进程正阻塞等待它，则直接回收子进程并恢复父进程

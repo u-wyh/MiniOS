@@ -81,6 +81,8 @@ int process_current_pid(void);
 int process_fork(struct interrupt_frame* frame);
 // 用户态 waitpid：目标未退出时阻塞父进程并切换到子进程运行
 int process_waitpid_syscall(int pid, struct interrupt_frame* frame, struct interrupt_frame** next_frame);
+// 教学版 kill：将目标普通用户进程标记为 ZOMBIE，退出码由调用方给定（如 -9）
+int process_kill(int pid, int exit_code);
 // 当前运行进程按固定 program_id 执行最小 exec 替换，成功时直接改写返回现场
 int process_exec_program(int program_id, struct interrupt_frame* frame);
 // 当前运行进程执行带教学版 argv 的最小 exec：参数先复制到 PCB 暂存区，再替换用户镜像

@@ -15,6 +15,7 @@
 #define SYS_GET_ARG 10
 #define SYS_EXEC_ARGS 11
 #define SYS_PS 12
+#define SYS_KILL 13
 
 // int 0x80 进入内核后，栈上会按 pusha + CPU 自动压栈的顺序保存现场
 struct interrupt_frame {
