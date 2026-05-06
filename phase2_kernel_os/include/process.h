@@ -12,6 +12,7 @@
 #define PROCESS_RUNNING 2
 #define PROCESS_ZOMBIE 3
 #define PROCESS_BLOCKED 4
+#define PROCESS_SLEEPING 5
 
 // 教学版 argv 上限：当前先把启动参数暂存在 PCB 里，后续再迁移到真实用户栈 ABI
 #define PROCESS_MAX_USER_ARGS 8
@@ -48,12 +49,15 @@ struct process {
     struct interrupt_frame saved_frame;
     int has_saved_frame;
     int waiting_pid;
+    // 仅在 SLEEPING 状态下生效：记录该进程应被唤醒的最小 tick
+    uint32_t wakeup_tick;
     // 教学版 argv 暂存区：exec_args 先把参数复制到 PCB，中小规模参数足够支撑当前实验
     int user_argc;
     char user_argv[PROCESS_MAX_USER_ARGS][PROCESS_MAX_ARG_LEN];
 
     // 扩展字段：记录程序名与槽位占用，便于 ps 展示与管理
     const char* name;
+    int is_background;
     int used;
 };
 
@@ -75,10 +79,26 @@ int process_wait(void);
 int process_waitpid(int pid);
 // 非阻塞回收任意一个当前进程名下的 ZOMBIE 子进程；成功返回 pid，无可回收时返回 0
 int process_wait_any(void);
+// 用户态 yield：当前进程主动让出 CPU，成功切换返回 -4，未切换返回 0
+int process_yield_syscall(struct interrupt_frame* frame, struct interrupt_frame** next_frame);
+// 用户态 sleep：当前进程睡眠指定 tick，到期前不参与调度
+int process_sleep_syscall(unsigned int ticks, struct interrupt_frame* frame, struct interrupt_frame** next_frame);
+// 在 PIT tick 驱动下唤醒到期睡眠进程：仅把 SLEEPING 进程改回 READY
+void process_wakeup_sleeping(unsigned int now_tick);
+// 按 pid 将目标进程设置为 SLEEPING，供 shell 的 sleep <pid> <ticks> 调试命令使用
+int process_sleep_pid(int pid, unsigned int ticks);
+// 用户态 read_char 在无输入时进入最小阻塞语义：保存现场并切换到其他 READY 进程
+int process_read_char_syscall(struct interrupt_frame* frame, struct interrupt_frame** next_frame);
+// 键盘 IRQ 到来时唤醒一个正在等待输入的进程，并把字符写入其 syscall 返回值
+int process_wake_read_char_waiter(char ch);
+// 按 pid 设置后台标记：教学版 start 用它表示“后台运行但不占用前台输出”
+int process_set_background_by_pid(int pid, int is_background);
 // 状态码转可读字符串，供 ps 和文档对照使用
 const char* process_state_name(int state);
 // 返回当前进程 pid；无当前进程返回 0
 int process_current_pid(void);
+// 返回当前进程是否被标记为后台任务
+int process_current_is_background(void);
 // 基于当前系统调用现场复制一个教学版子进程，成功返回子进程 pid
 int process_fork(struct interrupt_frame* frame);
 // 用户态 waitpid：目标未退出时阻塞父进程并切换到子进程运行

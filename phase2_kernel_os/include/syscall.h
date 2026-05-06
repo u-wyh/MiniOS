@@ -17,6 +17,10 @@
 #define SYS_PS 12
 #define SYS_KILL 13
 #define SYS_WAIT_ANY 14
+#define SYS_YIELD 15
+#define SYS_SLEEP 16
+#define SYS_SLEEP_PID 17
+#define SYS_SET_BACKGROUND 18
 
 // int 0x80 进入内核后，栈上会按 pusha + CPU 自动压栈的顺序保存现场
 struct interrupt_frame {

@@ -119,8 +119,10 @@ void keyboard_handler(void) {
     // Enter 键表示一行输入结束：补 '\0' 后交给 Shell 执行
     if (scancode == 0x1C) {
         if (user_process_running != 0) {
-            keyboard_buffer_put('\n');
-            print_char('\n');
+            if (process_wake_read_char_waiter('\n') == 0) {
+                keyboard_buffer_put('\n');
+            }
+            // 用户态 shell 会自己处理并回显换行，这里只入缓冲，避免重复回显和显示错位。
             pic_send_eoi(1);
             return;
         }
@@ -142,7 +144,10 @@ void keyboard_handler(void) {
     // Backspace 退格键：同步删除输入缓冲中的最后一个字符，并清除屏幕回显
     if (scancode == 0x0E) {
         if (user_process_running != 0) {
-            print_backspace();
+            // 用户态下把退格键作为字符事件交给 shell 处理，保证“屏幕效果”和“命令缓冲”一致。
+            if (process_wake_read_char_waiter('\b') == 0) {
+                keyboard_buffer_put('\b');
+            }
             pic_send_eoi(1);
             return;
         }
@@ -161,8 +166,13 @@ void keyboard_handler(void) {
     if (ch != '\0') {
         // 先把可打印字符放入最小输入缓冲区，后续用户态 read_char syscall 从这里消费。
         // 当前阶段 IRQ 与 syscall 共享该缓冲区，暂未加锁，后续可用关中断或锁进一步完善。
-        keyboard_buffer_put(ch);
-        print_char(ch);
+        if (process_wake_read_char_waiter(ch) == 0) {
+            keyboard_buffer_put(ch);
+        }
+        // 用户态 shell 会自己回显字符，这里只在内核 shell 前台时回显，避免双回显。
+        if (user_process_running == 0) {
+            print_char(ch);
+        }
 
         // 只有内核 shell 在前台时，才继续把字符写入命令行缓冲区，避免污染用户态 shell 的输入。
         if (user_process_running == 0) {

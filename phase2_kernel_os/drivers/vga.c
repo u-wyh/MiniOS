@@ -32,11 +32,16 @@ void clear_screen(void) {
     cursor_col = 0;
 }
 
-// 输出单字符并维护光标，支持换行符 '\n'
+// 输出单字符并维护光标，支持换行 '\n'、回车 '\r' 与退格 '\b'
 void print_char(char c) {
     if (c == '\n') {
         cursor_row++;
         cursor_col = 0;
+    } else if (c == '\r') {
+        cursor_col = 0;
+    } else if (c == '\b') {
+        print_backspace();
+        return;
     } else {
         if (cursor_row < VGA_HEIGHT) {
             VGA_BUFFER[vga_index(cursor_row, cursor_col)] = ((unsigned short)VGA_COLOR << 8) | (unsigned char)c;

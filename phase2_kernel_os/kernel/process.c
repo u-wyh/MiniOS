@@ -3,6 +3,7 @@
 #include "fs.h"
 #include "mm.h"
 #include "paging.h"
+#include "pit.h"
 #include "process.h"
 #include "vga.h"
 
@@ -31,12 +32,16 @@ static void process_activate_user_image(struct process* proc);
 static void process_print_uint(unsigned int value);
 // 前向声明：program_id 到内置程序名的最小映射，仅供教学版 exec 复用
 static const char* process_exec_program_name(int program_id);
+static const char* process_exec_program_name_from_argv0(const char* arg0);
+static const char* process_exec_program_name_from_argv(int argc, const char* const* argv);
 // 前向声明：教学版 argv 操作辅助函数，负责清空/复制 PCB 参数暂存区
 static void process_clear_user_args(struct process* proc);
 static int process_copy_user_args(struct process* proc, int argc, const char* const* argv);
 static int process_name_equals(const char* a, const char* b);
 static void process_restore_current_user_mapping(void);
 static void process_reparent_children(int old_parent_pid);
+static struct process* process_pick_next_ready(struct process* current);
+static struct process* process_find_by_pid(int pid);
 
 // 仅在 fork 调试开启时打印无符号整数，便于验证父子 pid 和 waitpid 目标
 static void process_debug_uint(unsigned int value) {
@@ -145,6 +150,10 @@ const char* process_state_name(int state) {
         return "BLOCKED";
     }
 
+    if (state == PROCESS_SLEEPING) {
+        return "SLEEPING";
+    }
+
     return "UNKNOWN";
 }
 
@@ -200,8 +209,10 @@ static void process_clear_slot(struct process* proc) {
     }
     proc->has_saved_frame = 0;
     proc->waiting_pid = 0;
+    proc->wakeup_tick = 0;
     process_clear_user_args(proc);
     proc->name = (const char*)0;
+    proc->is_background = 0;
     proc->used = 0;
 }
 
@@ -390,6 +401,37 @@ static void process_reparent_children(int old_parent_pid) {
     }
 }
 
+// 选择下一个 READY 进程：优先从当前进程槽位后方循环扫描，实现最小轮转效果
+static struct process* process_pick_next_ready(struct process* current) {
+    int i;
+    int start = 0;
+
+    if (current != (struct process*)0) {
+        for (i = 0; i < PROCESS_MAX; i++) {
+            if (&process_table[i] == current) {
+                start = i + 1;
+                break;
+            }
+        }
+    }
+
+    for (i = 0; i < PROCESS_MAX; i++) {
+        int idx = (start + i) % PROCESS_MAX;
+
+        if (process_table[idx].state != PROCESS_READY) {
+            continue;
+        }
+
+        if (process_table[idx].has_saved_frame == 0) {
+            continue;
+        }
+
+        return &process_table[idx];
+    }
+
+    return (struct process*)0;
+}
+
 // 释放进程占用的最小用户镜像资源：用户栈页 + ELF 映射页
 static void process_release_user_image(struct process* proc) {
     unsigned int i;
@@ -485,6 +527,59 @@ static const char* process_exec_program_name(int program_id) {
 
     if (program_id == 5) {
         return "loop";
+    }
+
+    return (const char*)0;
+}
+
+// 通过用户态传入的 argv[0] 推断目标程序名：作为 program_id 的最小兜底，避免 shell 传错编号时启动到错误程序
+static const char* process_exec_program_name_from_argv0(const char* arg0) {
+    if (arg0 == (const char*)0 || arg0[0] == '\0') {
+        return (const char*)0;
+    }
+
+    if (process_name_equals(arg0, "execchild") != 0) {
+        return "execchild";
+    }
+
+    if (process_name_equals(arg0, "shell") != 0) {
+        return "shell";
+    }
+
+    if (process_name_equals(arg0, "hello") != 0) {
+        return "hello";
+    }
+
+    if (process_name_equals(arg0, "echo") != 0) {
+        return "echo";
+    }
+
+    if (process_name_equals(arg0, "loop") != 0) {
+        return "loop";
+    }
+
+    return (const char*)0;
+}
+
+// 从教学版 argv 中推断目标程序名：优先看 argv[0]，再扫描后续参数，兼容用户态 start/run 传参不规范的情况
+static const char* process_exec_program_name_from_argv(int argc, const char* const* argv) {
+    int i;
+    const char* name;
+
+    if (argc <= 0 || argv == (const char* const*)0) {
+        return (const char*)0;
+    }
+
+    name = process_exec_program_name_from_argv0(argv[0]);
+    if (name != (const char*)0) {
+        return name;
+    }
+
+    for (i = 1; i < argc; i++) {
+        name = process_exec_program_name_from_argv0(argv[i]);
+        if (name != (const char*)0) {
+            return name;
+        }
     }
 
     return (const char*)0;
@@ -643,6 +738,9 @@ int process_exec_file(struct process* proc, const char* name) {
         return -2;
     }
 
+    // 先更新进程名：即使后续装载失败，也能在 ps 中看到“本次尝试 exec 的目标程序名”，便于排查启动路径问题。
+    proc->name = target->name;
+
     if (process_has_user_image(proc) != 0) {
         if (process_replace_image(proc, (const unsigned char*)target->data, (unsigned int)target->size) != 0) {
             return -3;
@@ -653,7 +751,6 @@ int process_exec_file(struct process* proc, const char* name) {
         }
     }
 
-    proc->name = target->name;
     return 0;
 }
 
@@ -666,6 +763,7 @@ int process_exec_program(int program_id, struct interrupt_frame* frame) {
 int process_exec_program_args(int program_id, int argc, const char* const* argv, struct interrupt_frame* frame) {
     struct process* proc = current_process;
     const char* target_name;
+    const char* argv_target_name = (const char*)0;
     int arg_result;
     int exec_result;
 
@@ -674,6 +772,13 @@ int process_exec_program_args(int program_id, int argc, const char* const* argv,
     }
 
     target_name = process_exec_program_name(program_id);
+    // 教学版兜底：优先从 argv 推断程序名（含扫描后续参数），避免用户态编号映射或传参偏差导致 exec 到错误镜像。
+    if (argc > 0 && argv != (const char* const*)0) {
+        argv_target_name = process_exec_program_name_from_argv(argc, argv);
+        if (argv_target_name != (const char*)0) {
+            target_name = argv_target_name;
+        }
+    }
     if (target_name == (const char*)0) {
         return -2;
     }
@@ -686,6 +791,9 @@ int process_exec_program_args(int program_id, int argc, const char* const* argv,
     process_debug_exec_event("begin", (unsigned int)proc->pid, (unsigned int)proc->parent_pid, (unsigned int)program_id);
     exec_result = process_exec_file(proc, target_name);
     if (exec_result != 0) {
+        print_string("process: exec failed target=");
+        print_string(target_name);
+        print_string("\n");
         process_clear_user_args(proc);
         process_debug_exec_event("failed", (unsigned int)proc->pid, (unsigned int)proc->parent_pid, (unsigned int)program_id);
         return -3;
@@ -911,6 +1019,194 @@ int process_wait_any(void) {
     return 0;
 }
 
+// 用户态 yield：保存当前进程现场并切换到下一个 READY 进程；没有可切换目标时直接返回
+int process_yield_syscall(struct interrupt_frame* frame, struct interrupt_frame** next_frame) {
+    struct process* current = current_process;
+    struct process* next;
+
+    if (next_frame != (struct interrupt_frame**)0) {
+        *next_frame = (struct interrupt_frame*)0;
+    }
+
+    if (current == (struct process*)0 || frame == (struct interrupt_frame*)0) {
+        return -1;
+    }
+
+    current->saved_frame = *frame;
+    current->has_saved_frame = 1;
+    current->state = PROCESS_READY;
+
+    next = process_pick_next_ready(current);
+    if (next == (struct process*)0 || next == current) {
+        current->state = PROCESS_RUNNING;
+        return 0;
+    }
+
+    current_process = next;
+    next->state = PROCESS_RUNNING;
+    process_activate_user_image(next);
+    if (next_frame != (struct interrupt_frame**)0) {
+        *next_frame = &next->saved_frame;
+    }
+    return -4;
+}
+
+// 用户态 sleep：把当前进程标记为 SLEEPING 并设置唤醒 tick，然后切换到其他 READY 进程
+int process_sleep_syscall(unsigned int ticks, struct interrupt_frame* frame, struct interrupt_frame** next_frame) {
+    struct process* current = current_process;
+    struct process* next;
+    unsigned int now;
+
+    if (ticks == 0) {
+        return process_yield_syscall(frame, next_frame);
+    }
+
+    if (next_frame != (struct interrupt_frame**)0) {
+        *next_frame = (struct interrupt_frame*)0;
+    }
+
+    if (current == (struct process*)0 || frame == (struct interrupt_frame*)0) {
+        return -1;
+    }
+
+    now = pit_get_ticks();
+    current->saved_frame = *frame;
+    current->has_saved_frame = 1;
+    current->wakeup_tick = now + ticks;
+    current->state = PROCESS_SLEEPING;
+
+    next = process_pick_next_ready(current);
+    if (next == (struct process*)0 || next == current) {
+        // 没有可切换目标时，回滚 sleep，避免当前进程“睡死”导致系统无进展
+        current->wakeup_tick = 0;
+        current->state = PROCESS_RUNNING;
+        return -2;
+    }
+
+    current_process = next;
+    next->state = PROCESS_RUNNING;
+    process_activate_user_image(next);
+    if (next_frame != (struct interrupt_frame**)0) {
+        *next_frame = &next->saved_frame;
+    }
+    return -4;
+}
+
+// PIT 每次 tick 调用：把到期的 SLEEPING 进程改回 READY，等待调度器后续选中运行
+void process_wakeup_sleeping(unsigned int now_tick) {
+    int i;
+
+    for (i = 0; i < PROCESS_MAX; i++) {
+        if (process_table[i].state != PROCESS_SLEEPING) {
+            continue;
+        }
+
+        if (now_tick < process_table[i].wakeup_tick) {
+            continue;
+        }
+
+        process_table[i].wakeup_tick = 0;
+        process_table[i].state = PROCESS_READY;
+    }
+}
+
+// 按 pid 设置睡眠：教学版调试接口，仅修改目标状态与唤醒 tick，不做复杂抢占
+int process_sleep_pid(int pid, unsigned int ticks) {
+    struct process* target;
+
+    if (ticks == 0) {
+        return 0;
+    }
+
+    target = process_find_by_pid(pid);
+    if (target == (struct process*)0) {
+        return -1;
+    }
+
+    if (target->state == PROCESS_UNUSED || target->state == PROCESS_ZOMBIE) {
+        return -2;
+    }
+
+    // 避免把当前执行进程直接改为 SLEEPING 却不切换现场，当前最小实现先拒绝该情况
+    if (target == current_process) {
+        return -3;
+    }
+
+    target->wakeup_tick = pit_get_ticks() + ticks;
+    target->state = PROCESS_SLEEPING;
+    return 0;
+}
+
+// 用户态 read_char 在没有输入时阻塞当前进程：保存返回现场后切换到其他 READY 进程。
+// 这里复用 waiting_pid=-1 作为“等待键盘输入”的最小标记，避免为教学版再引入额外状态字段。
+int process_read_char_syscall(struct interrupt_frame* frame, struct interrupt_frame** next_frame) {
+    struct process* current = current_process;
+    struct process* next;
+
+    if (next_frame != (struct interrupt_frame**)0) {
+        *next_frame = (struct interrupt_frame*)0;
+    }
+
+    if (current == (struct process*)0 || frame == (struct interrupt_frame*)0) {
+        return -1;
+    }
+
+    current->saved_frame = *frame;
+    current->has_saved_frame = 1;
+    current->waiting_pid = -1;
+    current->state = PROCESS_BLOCKED;
+
+    next = process_pick_next_ready(current);
+    if (next == (struct process*)0 || next == current) {
+        current->waiting_pid = 0;
+        current->state = PROCESS_RUNNING;
+        return -2;
+    }
+
+    current_process = next;
+    next->state = PROCESS_RUNNING;
+    process_activate_user_image(next);
+    if (next_frame != (struct interrupt_frame**)0) {
+        *next_frame = &next->saved_frame;
+    }
+    return -4;
+}
+
+// 键盘到来时把字符直接交给一个阻塞中的 read_char 调用者。
+// 这样 shell 等输入时会显示为 BLOCKED，后台进程获得 CPU；收到按键后 shell 再回到 READY。
+int process_wake_read_char_waiter(char ch) {
+    int i;
+
+    for (i = 0; i < PROCESS_MAX; i++) {
+        if (process_table[i].state != PROCESS_BLOCKED) {
+            continue;
+        }
+
+        if (process_table[i].waiting_pid != -1 || process_table[i].has_saved_frame == 0) {
+            continue;
+        }
+
+        process_table[i].saved_frame.eax = (unsigned int)(unsigned char)ch;
+        process_table[i].waiting_pid = 0;
+        process_table[i].state = PROCESS_READY;
+        return 1;
+    }
+
+    return 0;
+}
+
+// 按 pid 设置后台标记：只允许修改现存进程，供 shell 的 start 命令把子进程标记为后台任务。
+int process_set_background_by_pid(int pid, int is_background) {
+    struct process* target = process_find_by_pid(pid);
+
+    if (target == (struct process*)0 || target->state == PROCESS_UNUSED) {
+        return -1;
+    }
+
+    target->is_background = (is_background != 0) ? 1 : 0;
+    return 0;
+}
+
 // 返回当前进程 pid；没有当前进程时返回 0
 int process_current_pid(void) {
     if (current_process == (struct process*)0 || current_process->state != PROCESS_RUNNING) {
@@ -918,6 +1214,15 @@ int process_current_pid(void) {
     }
 
     return current_process->pid;
+}
+
+// 返回当前进程是否是后台任务：供 syscall 层决定是否把 write 输出到前台控制台
+int process_current_is_background(void) {
+    if (current_process == (struct process*)0 || current_process->state != PROCESS_RUNNING) {
+        return 0;
+    }
+
+    return current_process->is_background;
 }
 
 // 基于当前运行进程的 trapframe 构造一个教学版 fork 子进程
@@ -937,6 +1242,7 @@ int process_fork(struct interrupt_frame* frame) {
 
     child->parent_pid = parent->pid;
     child->name = parent->name;
+    child->is_background = 0;
     child->exit_status = 0;
     child->user_argc = parent->user_argc;
     process_copy_bytes((unsigned char*)child->user_argv, (const unsigned char*)parent->user_argv, sizeof(child->user_argv));

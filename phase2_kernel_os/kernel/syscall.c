@@ -52,6 +52,12 @@ void syscall_handle(struct interrupt_frame* frame) {
     struct interrupt_frame* next_frame;
 
     if (frame->eax == SYS_WRITE) {
+        // 教学版后台任务先不占用前台输出，避免 start 出来的测试程序把 shell 提示符冲乱。
+        if (process_current_is_background() != 0) {
+            frame->eax = 0;
+            return;
+        }
+
         print_string((const char*)frame->ebx);
         frame->eax = 0;
         return;
@@ -88,7 +94,14 @@ void syscall_handle(struct interrupt_frame* frame) {
     }
 
     if (frame->eax == SYS_FORK) {
-        frame->eax = (unsigned int)process_fork(frame);
+        int fork_result = process_fork(frame);
+
+        // 防御性检查：父进程路径里 fork 不应返回 0；若出现 0，按失败处理避免把异常 pid 透传给用户态。
+        if (fork_result == 0) {
+            fork_result = -1;
+        }
+
+        frame->eax = (unsigned int)fork_result;
         syscall_debug_result("fork return to parent", frame->eax);
         return;
     }
@@ -125,7 +138,24 @@ void syscall_handle(struct interrupt_frame* frame) {
     }
 
     if (frame->eax == SYS_READ_CHAR) {
-        // read_char 当前改为最小阻塞语义：没有输入时先在内核里休眠，避免用户态 shell 忙等轮询。
+        char ch = keyboard_read_char();
+
+        if (ch != 0) {
+            frame->eax = (unsigned int)(unsigned char)ch;
+            return;
+        }
+
+        // 没有输入时阻塞当前用户进程，把 CPU 让给其他 READY 进程，而不是在内核里原地 hlt 死等。
+        {
+            int result = process_read_char_syscall(frame, &next_frame);
+
+            if (result == -4) {
+                syscall_set_resume_frame(next_frame);
+                return;
+            }
+        }
+
+        // 若当前没有其他可运行进程，退化为最小 hlt 等待，避免把 shell 永久挂起。
         frame->eax = (unsigned int)(unsigned char)keyboard_read_char_blocking();
         return;
     }
@@ -166,6 +196,40 @@ void syscall_handle(struct interrupt_frame* frame) {
     if (frame->eax == SYS_WAIT_ANY) {
         // 非阻塞 wait_any：有可回收 zombie 返回 pid；无可回收子进程返回 0
         frame->eax = (unsigned int)process_wait_any();
+        return;
+    }
+
+    if (frame->eax == SYS_YIELD) {
+        int result = process_yield_syscall(frame, &next_frame);
+
+        if (result == -4) {
+            syscall_set_resume_frame(next_frame);
+            return;
+        }
+
+        frame->eax = (unsigned int)result;
+        return;
+    }
+
+    if (frame->eax == SYS_SLEEP) {
+        int result = process_sleep_syscall(frame->ebx, frame, &next_frame);
+
+        if (result == -4) {
+            syscall_set_resume_frame(next_frame);
+            return;
+        }
+
+        frame->eax = (unsigned int)result;
+        return;
+    }
+
+    if (frame->eax == SYS_SLEEP_PID) {
+        frame->eax = (unsigned int)process_sleep_pid((int)frame->ebx, frame->ecx);
+        return;
+    }
+
+    if (frame->eax == SYS_SET_BACKGROUND) {
+        frame->eax = (unsigned int)process_set_background_by_pid((int)frame->ebx, (int)frame->ecx);
         return;
     }
 

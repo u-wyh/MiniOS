@@ -2,6 +2,7 @@
 #include "io.h"
 #include "pic.h"
 #include "pit.h"
+#include "process.h"
 #include "sched.h"
 
 // PIT 输入时钟频率
@@ -36,6 +37,8 @@ void pit_init(unsigned int frequency) {
 // 参数 current_esp 指向“旧任务完整中断现场”的栈顶，返回值则是应恢复的新任务 esp
 unsigned int timer_handler(unsigned int current_esp) {
     tick_count++;
+    // tick 驱动最小睡眠唤醒：到期的 SLEEPING 进程改回 READY，等待后续调度
+    process_wakeup_sleeping(tick_count);
 
     // 只有调度器真正启用后，才在固定时间片边界切换任务；纯 shell 模式只累计 tick
     if (scheduler_is_enabled() != 0 && (tick_count % PIT_SCHEDULE_INTERVAL) == 0) {

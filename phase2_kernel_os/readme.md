@@ -221,6 +221,23 @@ TODO：
 - 暂不支持完整 `wait(-1)` 语义与 wait 队列。
 - 暂不支持复杂 init 服务管理与完整 job control。
 
+### Task44：用户态 yield / sleep 系统调用雏形
+
+已完成：
+
+- 新增 `SYS_YIELD`，用户态进程可主动让出 CPU。
+- 新增 `SYS_SLEEP`，用户态进程可按 tick 粒度进入 `SLEEPING`。
+- PCB 增加 `wakeup_tick` 字段，用于记录睡眠到期时间。
+- PIT 每次 tick 会扫描并唤醒到期的 `SLEEPING` 进程（改回 `READY`）。
+- `ps` 状态名补充 `SLEEPING`，便于观察睡眠状态。
+
+TODO：
+
+- `sleep` 目前是 tick 粒度，不是高精度定时器。
+- 暂无复杂阻塞队列与信号唤醒。
+- 暂无 `select/poll` 一类复用接口。
+- 用户态内置测试程序对 `sleep/yield` 的覆盖还可继续增强。
+
 ## 五、阶段进度（已完成）
 
 ### A. 基础启动阶段（Task1 + Task2）

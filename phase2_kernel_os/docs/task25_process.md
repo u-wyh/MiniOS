@@ -660,3 +660,52 @@ reparent 只负责“把父进程关系改正确”。
 - 可阻塞 wait 队列
 - 子进程状态变化通知机制
 - 更完整的父子同步与并发保护
+
+## 31. Task44：用户态 yield / sleep 系统调用雏形
+
+### yield 和 sleep 的区别是什么
+
+- `yield`：主动让出 CPU，不设置长期等待条件。
+- `sleep(ticks)`：把进程置为 `SLEEPING`，直到 tick 到期再回到可调度状态。
+
+### 为什么 busy wait 不适合 init reaper 和后台任务
+
+busy wait 会持续占用 CPU，导致系统空转发热、交互延迟变大。  
+引入 `sleep` 后，空闲轮询路径可让出 CPU 并在到期后唤醒。
+
+### PIT tick 如何驱动 sleep 唤醒
+
+PIT IRQ0 每次 tick 递增系统节拍后，遍历进程表：  
+当 `now_tick >= wakeup_tick` 时，把该进程从 `SLEEPING` 改为 `READY`。
+
+### SLEEPING 状态和 READY / RUNNING / ZOMBIE 有什么区别
+
+- `READY`：可运行，等待被调度
+- `RUNNING`：当前正在执行
+- `SLEEPING`：等待时间到期，不应被调度
+- `ZOMBIE`：已退出，等待父进程回收
+
+### 调度器为什么要跳过 SLEEPING
+
+`SLEEPING` 的语义就是“到期前不运行”。  
+若不跳过，会破坏 sleep 的时间等待语义。
+
+### sleep 到期后为什么只是变回 READY
+
+唤醒只表示“可以参与调度”，不表示“立即抢占运行”。  
+最小模型中由后续调度点决定何时真正执行。
+
+### 当前 MiniOS sleep 和 Linux sleep/nanosleep 的差距
+
+当前是教学版最小实现：
+
+- tick 粒度
+- 无高精度定时器
+- 无 signal 中断睡眠
+- 无复杂阻塞队列
+
+### 后续要做阻塞队列 / 定时器队列还缺什么
+
+- 更完整的可运行/阻塞队列结构
+- 高精度计时与定时器管理
+- 与事件/信号机制联动的唤醒策略
