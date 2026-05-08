@@ -5,6 +5,7 @@
 #include "pic.h"
 #include "pit.h"
 #include "process.h"
+#include "sched.h"
 #include "exec.h"
 #include "shell.h"
 #include "user.h"
@@ -53,6 +54,8 @@ void kernel_main(void) {
     pic_remap();
     pit_init(20);
     process_init();
+    scheduler_init();
+    scheduler_start();
     __asm__ __volatile__("sti");
 
     // Task33 起由内核先启动第一个固定用户态 init，逐步把进程管理逻辑迁到用户态。

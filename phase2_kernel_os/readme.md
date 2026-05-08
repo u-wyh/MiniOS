@@ -238,6 +238,23 @@ TODO：
 - 暂无 `select/poll` 一类复用接口。
 - 用户态内置测试程序对 `sleep/yield` 的覆盖还可继续增强。
 
+### Task45：用户态 uptime / ticks 命令雏形
+
+已完成：
+
+- 复用 PIT 现有 tick 计数，新增只读 `SYS_GET_TICKS` 查询接口。
+- 用户态 shell 新增 `uptime` 命令，并支持 `ticks` 作为别名。
+- `uptime` 可显示系统启动以来累计的 PIT tick 数。
+- 连续执行 `uptime` 时可以观察 tick 持续递增。
+- 为后续 sleep 命令增强、进程运行时间统计和调度统计打基础。
+
+TODO：
+
+- 当前 `uptime` 只显示 tick 数，不显示秒或真实日期时间。
+- 暂不支持 RTC 真实时间。
+- 暂不处理 tick 溢出。
+- 暂不统计每个进程的 CPU 时间。
+
 ## 五、阶段进度（已完成）
 
 ### A. 基础启动阶段（Task1 + Task2）

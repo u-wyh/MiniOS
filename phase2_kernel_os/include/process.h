@@ -54,6 +54,8 @@ struct process {
     // 教学版 argv 暂存区：exec_args 先把参数复制到 PCB，中小规模参数足够支撑当前实验
     int user_argc;
     char user_argv[PROCESS_MAX_USER_ARGS][PROCESS_MAX_ARG_LEN];
+    // 记录本次退出是否来自用户态 shell 主动执行 exit 命令，供 init 决定是否自动重启 shell
+    int requested_exit;
 
     // 扩展字段：记录程序名与槽位占用，便于 ps 展示与管理
     const char* name;
@@ -99,6 +101,8 @@ const char* process_state_name(int state);
 int process_current_pid(void);
 // 返回当前进程是否被标记为后台任务
 int process_current_is_background(void);
+// 将当前运行进程标记为“主动请求退出”，供 init 区分正常 exit 与异常退出
+void process_mark_current_requested_exit(void);
 // 基于当前系统调用现场复制一个教学版子进程，成功返回子进程 pid
 int process_fork(struct interrupt_frame* frame);
 // 用户态 waitpid：目标未退出时阻塞父进程并切换到子进程运行
@@ -121,5 +125,7 @@ void process_list(void);
 int process_get_info_by_index(int index, struct process_info* out);
 // 返回已创建的进程数量
 int process_count(void);
+// 供 PIT 时间片调度使用：保存当前运行进程现场并切换到下一个 READY 进程，返回应恢复的中断现场栈顶
+unsigned int process_schedule_tick(unsigned int current_esp);
 
 #endif

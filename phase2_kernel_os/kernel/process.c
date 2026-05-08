@@ -42,6 +42,7 @@ static void process_restore_current_user_mapping(void);
 static void process_reparent_children(int old_parent_pid);
 static struct process* process_pick_next_ready(struct process* current);
 static struct process* process_find_by_pid(int pid);
+static int process_is_init_waiting_shell_restart(struct process* child, struct process* parent);
 
 // 仅在 fork 调试开启时打印无符号整数，便于验证父子 pid 和 waitpid 目标
 static void process_debug_uint(unsigned int value) {
@@ -211,6 +212,7 @@ static void process_clear_slot(struct process* proc) {
     proc->waiting_pid = 0;
     proc->wakeup_tick = 0;
     process_clear_user_args(proc);
+    proc->requested_exit = 0;
     proc->name = (const char*)0;
     proc->is_background = 0;
     proc->used = 0;
@@ -1225,6 +1227,15 @@ int process_current_is_background(void) {
     return current_process->is_background;
 }
 
+// 当前只把用户态 shell 的显式 exit 命令视为“允许 init 自动重启 shell”的正常退出来源。
+void process_mark_current_requested_exit(void) {
+    if (current_process == (struct process*)0) {
+        return;
+    }
+
+    current_process->requested_exit = 1;
+}
+
 // 基于当前运行进程的 trapframe 构造一个教学版 fork 子进程
 int process_fork(struct interrupt_frame* frame) {
     struct process* parent = current_process;
@@ -1244,6 +1255,7 @@ int process_fork(struct interrupt_frame* frame) {
     child->name = parent->name;
     child->is_background = 0;
     child->exit_status = 0;
+    child->requested_exit = 0;
     child->user_argc = parent->user_argc;
     process_copy_bytes((unsigned char*)child->user_argv, (const unsigned char*)parent->user_argv, sizeof(child->user_argv));
 
@@ -1303,18 +1315,13 @@ int process_waitpid_syscall(int pid, struct interrupt_frame* frame, struct inter
         return result;
     }
 
-    // 关键稳定性保护：除 init 启动链路外，用户态 waitpid 只做“已退出即回收”。
-    // 这样 shell 执行 wait <pid> 不会再进入阻塞切换路径，从而避免现场错乱导致重启。
-    if (process_name_equals(parent->name, "init") == 0) {
-        return -3;
-    }
-
     child = process_find_child_for_parent(pid, parent->pid);
     if (child == (struct process*)0 || child->state != PROCESS_READY || child->has_saved_frame == 0) {
         return -3;
     }
 
-    // waitpid 在教学版 fork 中采用最小阻塞语义：父进程保存现场后，把 CPU 让给子进程
+    // waitpid 在教学版 fork 中采用最小阻塞语义：父进程保存现场后，把 CPU 让给子进程。
+    // 这里同时服务于 init 等待 shell、shell 前台 run，以及 shell 手动 wait 后台子进程。
     parent->saved_frame = *frame;
     parent->has_saved_frame = 1;
     parent->waiting_pid = pid;
@@ -1396,6 +1403,16 @@ struct interrupt_frame* process_resume_after_exit(void) {
         }
 
         parent = &process_table[i];
+
+        // init 当前只会对“用户明确执行了 exit 的 shell”做自动重启。
+        // 若 shell 在未显式请求退出时就结束，这里只做资源回收，不唤醒 init，避免系统悄悄拉起一个新 shell。
+        if (process_is_init_waiting_shell_restart(child, parent) != 0) {
+            process_release_user_image(child);
+            process_clear_slot(child);
+            last_exited_process = (struct process*)0;
+            return (struct interrupt_frame*)0;
+        }
+
         parent->saved_frame.eax = (unsigned int)child_pid;
         parent->waiting_pid = 0;
 
@@ -1412,6 +1429,28 @@ struct interrupt_frame* process_resume_after_exit(void) {
     }
 
     return (struct interrupt_frame*)0;
+}
+
+// 判断这次退出是否属于“init 正在等待 shell，但 shell 并非由用户主动 exit”的情况。
+// 命中后不恢复 init，从而避免异常退出导致 shell 被静默自动重启。
+static int process_is_init_waiting_shell_restart(struct process* child, struct process* parent) {
+    if (child == (struct process*)0 || parent == (struct process*)0) {
+        return 0;
+    }
+
+    if (init_pid <= 0 || parent->pid != init_pid) {
+        return 0;
+    }
+
+    if (child->name == (const char*)0 || process_name_equals(child->name, "shell") == 0) {
+        return 0;
+    }
+
+    if (child->requested_exit != 0) {
+        return 0;
+    }
+
+    return 1;
 }
 
 // 输出进程列表：PID、PPID、STATE、退出码与程序名
@@ -1481,4 +1520,36 @@ int process_count(void) {
     }
 
     return count;
+}
+
+// PIT 时间片切换入口：把当前 RUNNING 进程的中断现场保存到 saved_frame，
+// 再按最小轮转规则选择下一个 READY 进程；若没有合适目标则保持当前进程继续运行。
+unsigned int process_schedule_tick(unsigned int current_esp) {
+    struct process* current = current_process;
+    struct process* next;
+    struct interrupt_frame* frame = (struct interrupt_frame*)current_esp;
+
+    if (current == (struct process*)0 || frame == (struct interrupt_frame*)0) {
+        return current_esp;
+    }
+
+    if (current->state != PROCESS_RUNNING) {
+        return current_esp;
+    }
+
+    current->saved_frame = *frame;
+    current->has_saved_frame = 1;
+    current->state = PROCESS_READY;
+
+    next = process_pick_next_ready(current);
+    if (next == (struct process*)0 || next == current) {
+        current->state = PROCESS_RUNNING;
+        process_activate_user_image(current);
+        return (unsigned int)&current->saved_frame;
+    }
+
+    current_process = next;
+    next->state = PROCESS_RUNNING;
+    process_activate_user_image(next);
+    return (unsigned int)&next->saved_frame;
 }

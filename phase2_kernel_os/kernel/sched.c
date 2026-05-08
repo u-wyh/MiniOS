@@ -1,8 +1,9 @@
-// sched.c：提供当前教学阶段的最小调度器占位实现
+// sched.c：提供当前教学阶段最小可用的 PIT 时间片轮转调度入口
+#include "process.h"
 #include "sched.h"
 
-// Task25 简化说明：当前仍为单核最小执行路径，调度器保持占位接口
-// 真正的进程创建与运行切换入口在 process_create/process_run
+// 当前仍是教学版最小调度器：只在 PIT 时间片边界做 READY 进程轮转，
+// 不引入优先级、复杂运行队列或多核语义。
 
 static int scheduler_enabled = 0;
 
@@ -11,11 +12,15 @@ void scheduler_init(void) {
 }
 
 void scheduler_start(void) {
-    scheduler_enabled = 0;
+    scheduler_enabled = 1;
 }
 
 unsigned int schedule(unsigned int current_esp) {
-    return current_esp;
+    if (scheduler_enabled == 0) {
+        return current_esp;
+    }
+
+    return process_schedule_tick(current_esp);
 }
 
 int scheduler_is_enabled(void) {

@@ -12,6 +12,23 @@ static int syscall_halt_requested = 0;
 // 若 syscall 期间需要把 CPU 直接切换到另一个用户态现场，则在这里登记目标 frame
 static struct interrupt_frame* syscall_resume_frame = (struct interrupt_frame*)0;
 
+// 最小字符串相等判断：仅供 syscall 层识别用户态 shell 输出的 "shell exit\n" 标记。
+static int syscall_string_equals(const char* a, const char* b) {
+    if (a == (const char*)0 || b == (const char*)0) {
+        return 0;
+    }
+
+    while (*a != '\0' && *b != '\0') {
+        if (*a != *b) {
+            return 0;
+        }
+        a++;
+        b++;
+    }
+
+    return (*a == '\0' && *b == '\0') ? 1 : 0;
+}
+
 // 裸机环境下手动打印无符号整数，便于输出 pid/time
 static void syscall_print_uint(unsigned int value) {
     char digits[16];
@@ -52,13 +69,20 @@ void syscall_handle(struct interrupt_frame* frame) {
     struct interrupt_frame* next_frame;
 
     if (frame->eax == SYS_WRITE) {
+        const char* text = (const char*)frame->ebx;
+
+        // 识别用户态 shell 的显式 exit 提示，把它记为“用户主动退出”，供 init 决定是否自动拉起新 shell。
+        if (syscall_string_equals(text, "shell exit\n") != 0) {
+            process_mark_current_requested_exit();
+        }
+
         // 教学版后台任务先不占用前台输出，避免 start 出来的测试程序把 shell 提示符冲乱。
         if (process_current_is_background() != 0) {
             frame->eax = 0;
             return;
         }
 
-        print_string((const char*)frame->ebx);
+        print_string(text);
         frame->eax = 0;
         return;
     }
@@ -230,6 +254,12 @@ void syscall_handle(struct interrupt_frame* frame) {
 
     if (frame->eax == SYS_SET_BACKGROUND) {
         frame->eax = (unsigned int)process_set_background_by_pid((int)frame->ebx, (int)frame->ecx);
+        return;
+    }
+
+    // 只读返回自系统启动以来累计的 PIT tick 数，供用户态 uptime/ticks 命令观察系统节拍
+    if (frame->eax == SYS_GET_TICKS) {
+        frame->eax = pit_get_ticks();
         return;
     }
 

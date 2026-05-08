@@ -18,6 +18,8 @@ static int input_index = 0;
 static char kbd_buf[KBD_BUF_SIZE];
 static unsigned int kbd_head = 0;
 static unsigned int kbd_tail = 0;
+// 记录扫描码当前是否处于“按下未释放”状态，用于忽略 typematic 或异常重复 make 码。
+static unsigned char key_down[128];
 
 // 向最小键盘缓冲区写入一个字符；缓冲区满时丢弃新字符，保持已有输入不被覆盖
 static void keyboard_buffer_put(char ch) {
@@ -110,10 +112,26 @@ void keyboard_handler(void) {
     int i;
     int user_process_running = process_current_pid();
 
-    // 释放码最高位为 1，本轮最小实现直接忽略
+    // 释放码最高位为 1：把对应按键标记为“已释放”，避免下次正常按下被当成重复 make 码忽略。
     if ((scancode & 0x80) != 0) {
+        unsigned char make_code = (unsigned char)(scancode & 0x7F);
+
+        if (make_code < 128) {
+            key_down[make_code] = 0;
+        }
         pic_send_eoi(1);
         return;
+    }
+
+    // 同一个键还没收到释放码时再次收到 make 码，视为重复触发并直接忽略。
+    // 这样可避免用户态 shell 偶发出现 eexit / exxit 这类重复字符显示。
+    if (scancode < 128 && key_down[scancode] != 0) {
+        pic_send_eoi(1);
+        return;
+    }
+
+    if (scancode < 128) {
+        key_down[scancode] = 1;
     }
 
     // Enter 键表示一行输入结束：补 '\0' 后交给 Shell 执行
