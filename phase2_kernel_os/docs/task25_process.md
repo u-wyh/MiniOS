@@ -753,3 +753,72 @@ tick 变量属于内核地址空间内部状态。
 - 调度器时间片与切换次数统计
 - 更接近 uptime/top 的系统观察命令
 - 与事件/信号机制联动的唤醒策略
+
+## 33. Task46：用户态 sleep 命令雏形
+
+### sleep 命令和 sleep syscall 的关系是什么
+
+当前 `sleep <ticks>` 只是用户态 shell 对已有 `sleep(ticks)` syscall 的最小封装。  
+shell 自己负责解析命令参数，真正把进程改成 `SLEEPING`、记录唤醒 tick、等待 PIT 唤醒的工作仍在内核里完成。
+
+### sleep <ticks> 为什么使用 tick 作为单位
+
+因为当前内核已有稳定的 PIT tick 计数和唤醒逻辑。  
+直接使用 tick 可以复用已有 `SYS_SLEEP` 与 `SYS_GET_TICKS`，避免在本阶段额外引入秒级换算和 RTC 逻辑。
+
+### shell 调用 sleep 后，为什么 shell 自己会暂停
+
+因为执行命令的主体就是 shell 进程本身。  
+当 shell 调用 `sleep(ticks)` 时，睡眠的是“当前 shell 进程”，不是某个抽象命令对象。
+
+### shell 睡眠期间为什么不能继续处理命令
+
+因为 shell 已经进入 `SLEEPING` 状态，此时它不会继续运行 `read_line` 和命令分发逻辑。  
+只有 PIT tick 到期、内核把 shell 改回 `READY`，并再次调度到 shell 时，命令循环才会继续。
+
+### PIT tick 如何唤醒 shell
+
+Task44 已经实现了：
+
+- shell 调用 `SYS_SLEEP`
+- 内核记录 `wakeup_tick = now + ticks`
+- 进程状态改成 `SLEEPING`
+- PIT 每次 tick 调用唤醒检查
+- 到期后把 shell 从 `SLEEPING` 改回 `READY`
+
+之后调度器再次选中 shell，sleep syscall 返回，shell 回到主循环重新打印提示符。
+
+补充说明：当前教学版系统如果暂时只有 `init + shell` 两个活动进程，没有其他 READY 进程可切换，
+shell 命令层会回退到基于 `get_ticks` 的最小等待，优先保证 `sleep <ticks>` 的可见语义稳定。
+
+### uptime 如何验证 sleep 的效果
+
+最直接的验证方式是：
+
+1. 执行 `uptime`
+2. 执行 `sleep 100`
+3. 再执行 `uptime`
+
+如果第二次的 tick 数明显大于第一次，通常至少增加了约 100 tick，就说明 `sleep <ticks>` 已按预期等待了一段节拍时间。
+
+### 当前 sleep 命令和 Linux sleep 有什么差距
+
+当前实现仍是教学版最小模型：
+
+- 单位是 tick，不是秒
+- 不支持 `sleep 1s` / `sleep 1m`
+- 不支持高精度定时器
+- 不支持信号中断 sleep
+- 不支持复杂阻塞队列和超时管理
+
+所以它更接近“把 shell 进程挂起若干定时节拍”，而不是 Linux 的完整时间接口。
+
+### 后续要支持秒级 sleep / 可中断 sleep 还缺什么
+
+后续如果要更接近真实系统，还需要继续补：
+
+- tick 到秒/毫秒的换算接口
+- 更清晰的用户态时间 API
+- 可中断 sleep 语义
+- 更完整的阻塞/唤醒队列
+- 更高精度的定时器基础设施

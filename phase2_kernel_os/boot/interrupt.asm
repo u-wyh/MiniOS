@@ -7,8 +7,11 @@ global enter_user_mode
 extern interrupt_handler_80
 extern syscall_should_halt
 extern syscall_clear_halt
+extern syscall_should_idle
+extern syscall_clear_idle
 extern syscall_take_resume_frame
 extern kernel_shell_loop
+extern kernel_idle_loop
 extern paging_get_kernel_virtual_base
 extern stack_top
 extern timer_handler
@@ -44,7 +47,7 @@ isr80:
 .check_halt_after_syscall:
     call syscall_should_halt
     test eax, eax
-    jz .return_from_syscall
+    jz .check_idle_after_syscall
 
     call syscall_clear_halt
 
@@ -57,6 +60,24 @@ isr80:
     mov esp, stack_top
     call paging_get_kernel_virtual_base
     add eax, kernel_shell_loop
+    jmp eax
+
+.check_idle_after_syscall:
+    call syscall_should_idle
+    test eax, eax
+    jz .return_from_syscall
+
+    call syscall_clear_idle
+
+    mov bx, KERNEL_DATA_SEL
+    mov ds, bx
+    mov es, bx
+    mov fs, bx
+    mov gs, bx
+    mov ss, bx
+    mov esp, stack_top
+    call paging_get_kernel_virtual_base
+    add eax, kernel_idle_loop
     jmp eax
 
     ; 恢复通用寄存器，确保返回后上下文一致

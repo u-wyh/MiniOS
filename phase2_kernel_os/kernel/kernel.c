@@ -15,6 +15,8 @@
 void kernel_main(void);
 // 用户态退出后回到这里，恢复 shell 交互主循环
 void kernel_shell_loop(void);
+// 当当前没有可运行用户进程时，进入不打印提示符的最小 idle/hlt 循环。
+void kernel_idle_loop(void);
 
 // 记录分页切换后内核是否已经从低地址别名迁移到高地址别名执行
 static int higher_half_active = 0;
@@ -82,6 +84,16 @@ void kernel_shell_loop(void) {
             exec_run_pending();
         }
 
+        __asm__ __volatile__("hlt");
+    }
+}
+
+// 纯 idle 循环：不重新初始化内核 shell，也不打印提示符，只负责 hlt 等待中断。
+// 当 PIT 唤醒某个 READY 用户进程后，irq0 调度路径会直接切回对应用户态现场。
+void kernel_idle_loop(void) {
+    __asm__ __volatile__("sti");
+
+    for (;;) {
         __asm__ __volatile__("hlt");
     }
 }

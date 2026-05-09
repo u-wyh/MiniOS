@@ -255,6 +255,27 @@ TODO：
 - 暂不处理 tick 溢出。
 - 暂不统计每个进程的 CPU 时间。
 
+### Task46：用户态 sleep 命令雏形
+
+已完成：
+
+- 用户态 shell 新增 `sleep <ticks>` 命令，直接复用已有 `SYS_SLEEP`。
+- `sleep` 缺少参数时会输出 `Usage: sleep <ticks>`。
+- `sleep` 参数非法时会输出 `Invalid ticks`。
+- `sleep 0` 当前直接返回，不额外进入 sleep/yield，保持最小语义简单稳定。
+- `sleep <ticks>` 会让当前 shell 进入 `SLEEPING`，到期后再恢复并重新显示提示符。
+- 当系统里还有其他活动进程时，`sleep <ticks>` 优先复用已有 `SYS_SLEEP`；当前仅剩 `init + shell` 时，会回退到基于 `get_ticks` 的最小等待，保证命令语义稳定。
+- 兼容保留了原有教学调试语义：`sleep <pid> <ticks>` 仍可按 pid 让目标进程睡眠。
+- 可通过 `uptime -> sleep -> uptime` 观察 tick 差值增长，验证 sleep 生效。
+
+TODO：
+
+- `sleep` 单位暂为 tick，不是秒。
+- 暂不支持 `sleep 1s` / `sleep 1m` 等格式。
+- 暂不支持高精度计时。
+- 暂不支持 signal 中断 sleep。
+- 暂不支持复杂阻塞队列。
+
 ## 五、阶段进度（已完成）
 
 ### A. 基础启动阶段（Task1 + Task2）

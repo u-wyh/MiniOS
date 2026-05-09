@@ -9,6 +9,8 @@
 
 // 记录用户态是否已经请求 exit，本轮把它作为一次性测试完成后的收口条件
 static int syscall_halt_requested = 0;
+// 记录 syscall 是否需要暂时退回内核 idle/hlt 路径，等待后续 PIT/键盘把 READY 进程切回来。
+static int syscall_idle_requested = 0;
 // 若 syscall 期间需要把 CPU 直接切换到另一个用户态现场，则在这里登记目标 frame
 static struct interrupt_frame* syscall_resume_frame = (struct interrupt_frame*)0;
 
@@ -243,6 +245,13 @@ void syscall_handle(struct interrupt_frame* frame) {
             return;
         }
 
+        // 没有可切换目标时，当前进程已被置为 SLEEPING；这里退回内核 idle 路径，
+        // 让 CPU 用 hlt 等待 PIT tick，而不是在 shell 或 syscall 里忙等。
+        if (result == -5) {
+            syscall_idle_requested = 1;
+            return;
+        }
+
         frame->eax = (unsigned int)result;
         return;
     }
@@ -275,6 +284,16 @@ int syscall_should_halt(void) {
 // 每次进入用户态测试前清理一次状态，避免上轮 exit 影响下一轮
 void syscall_clear_halt(void) {
     syscall_halt_requested = 0;
+}
+
+// 查询本次 syscall 是否希望先退回内核 idle/hlt 路径。
+int syscall_should_idle(void) {
+    return syscall_idle_requested;
+}
+
+// 清理一次性的 idle 请求标志，避免后续 syscall 误复用。
+void syscall_clear_idle(void) {
+    syscall_idle_requested = 0;
 }
 
 // 记录 syscall 返回时应恢复到哪个用户态 frame，供汇编中断尾部切换执行主体

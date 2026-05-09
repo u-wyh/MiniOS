@@ -1079,10 +1079,10 @@ int process_sleep_syscall(unsigned int ticks, struct interrupt_frame* frame, str
 
     next = process_pick_next_ready(current);
     if (next == (struct process*)0 || next == current) {
-        // 没有可切换目标时，回滚 sleep，避免当前进程“睡死”导致系统无进展
-        current->wakeup_tick = 0;
-        current->state = PROCESS_RUNNING;
-        return -2;
+        // 没有可切换目标时，不再回滚成失败，而是让当前进程保持 SLEEPING，
+        // 由内核 idle 路径 hlt 等待 PIT tick，到期后再恢复这个进程。
+        current_process = (struct process*)0;
+        return -5;
     }
 
     current_process = next;
@@ -1529,7 +1529,21 @@ unsigned int process_schedule_tick(unsigned int current_esp) {
     struct process* next;
     struct interrupt_frame* frame = (struct interrupt_frame*)current_esp;
 
-    if (current == (struct process*)0 || frame == (struct interrupt_frame*)0) {
+    // 当 CPU 处于内核 idle/hlt 路径时，current_process 可能为空。
+    // 这时只要有 READY 的用户进程，就直接切到它，避免“睡眠后只能忙等”。
+    if (current == (struct process*)0) {
+        next = process_pick_next_ready((struct process*)0);
+        if (next == (struct process*)0) {
+            return current_esp;
+        }
+
+        current_process = next;
+        next->state = PROCESS_RUNNING;
+        process_activate_user_image(next);
+        return (unsigned int)&next->saved_frame;
+    }
+
+    if (frame == (struct interrupt_frame*)0) {
         return current_esp;
     }
 
