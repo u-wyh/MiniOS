@@ -276,6 +276,27 @@ TODO：
 - 暂不支持 signal 中断 sleep。
 - 暂不支持复杂阻塞队列。
 
+### Task47：进程创建时间 / 存活时间统计雏形
+
+已完成：
+
+- PCB 新增 `create_tick`，用于记录进程创建时的系统 tick。
+- 新创建进程会复用已有 `pit_get_ticks()` 写入 `create_tick`，不新增第二套 tick 计数。
+- `fork` 子进程会重新记录自己的 `create_tick`；`exec` 只替换镜像，不重置同一 pid 的创建时间。
+- PCB 回收回 `UNUSED` 时会统一清理 `create_tick`，避免后续复用槽位时出现脏数据。
+- `process_info` 新增 `age_ticks` 字段，`ps` 查询时按 `当前 tick - create_tick` 计算。
+- shell `ps` 输出新增 `AGE` 列，可观察 `init / shell / loop / sleep_test` 等进程已存在多久。
+- 新增最小 `sleep_test` 用户程序，便于观察 `SLEEPING` 状态和 AGE 增长。
+- 为后续 CPU 运行 tick、调度次数等统计保留了基础字段，但本轮不实现这些复杂指标。
+
+TODO：
+
+- `AGE` 当前表示进程存活时间，不是 CPU 使用时间。
+- 暂不统计用户态 / 内核态运行时间。
+- 暂不统计上下文切换次数。
+- 暂不处理 tick 溢出。
+- 暂无 `top` 命令或复杂性能监控。
+
 ## 五、阶段进度（已完成）
 
 ### A. 基础启动阶段（Task1 + Task2）

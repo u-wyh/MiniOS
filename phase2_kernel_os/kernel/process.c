@@ -211,6 +211,7 @@ static void process_clear_slot(struct process* proc) {
     proc->has_saved_frame = 0;
     proc->waiting_pid = 0;
     proc->wakeup_tick = 0;
+    proc->create_tick = 0;
     process_clear_user_args(proc);
     proc->requested_exit = 0;
     proc->name = (const char*)0;
@@ -481,6 +482,8 @@ static struct process* process_create_object(void) {
     proc->pid = next_pid++;
     proc->parent_pid = process_parent_pid_for_current_context();
     proc->state = PROCESS_UNUSED;
+    // 新建 PCB 时记录创建 tick；后续 exec 只替换镜像，不应重置这份生命周期起点。
+    proc->create_tick = pit_get_ticks();
     return proc;
 }
 
@@ -531,6 +534,10 @@ static const char* process_exec_program_name(int program_id) {
         return "loop";
     }
 
+    if (program_id == 6) {
+        return "sleep_test";
+    }
+
     return (const char*)0;
 }
 
@@ -558,6 +565,10 @@ static const char* process_exec_program_name_from_argv0(const char* arg0) {
 
     if (process_name_equals(arg0, "loop") != 0) {
         return "loop";
+    }
+
+    if (process_name_equals(arg0, "sleep_test") != 0) {
+        return "sleep_test";
     }
 
     return (const char*)0;
@@ -1256,6 +1267,8 @@ int process_fork(struct interrupt_frame* frame) {
     child->is_background = 0;
     child->exit_status = 0;
     child->requested_exit = 0;
+    // fork 会创建一个新的进程实体，所以子进程需要拥有新的 create_tick。
+    child->create_tick = pit_get_ticks();
     child->user_argc = parent->user_argc;
     process_copy_bytes((unsigned char*)child->user_argv, (const unsigned char*)parent->user_argv, sizeof(child->user_argv));
 
@@ -1456,11 +1469,20 @@ static int process_is_init_waiting_shell_restart(struct process* child, struct p
 // 输出进程列表：PID、PPID、STATE、退出码与程序名
 void process_list(void) {
     int i;
+    unsigned int now = pit_get_ticks();
 
-    print_string("PID   PPID   STATE    STATUS  NAME\n");
+    print_string("PID   PPID   STATE    AGE   STATUS  NAME\n");
     for (i = 0; i < PROCESS_MAX; i++) {
+        unsigned int age_ticks;
+
         if (process_table[i].state == PROCESS_UNUSED) {
             continue;
+        }
+
+        if (process_table[i].create_tick == 0) {
+            age_ticks = 0;
+        } else {
+            age_ticks = now - process_table[i].create_tick;
         }
 
         process_print_uint((unsigned int)process_table[i].pid);
@@ -1468,6 +1490,8 @@ void process_list(void) {
         process_print_uint((unsigned int)process_table[i].parent_pid);
         print_string("      ");
         print_string(process_state_name(process_table[i].state));
+        print_string("    ");
+        process_print_uint(age_ticks);
         print_string("    ");
         process_print_uint((unsigned int)process_table[i].exit_status);
         print_string("       ");
@@ -1484,11 +1508,13 @@ void process_list(void) {
 int process_get_info_by_index(int index, struct process_info* out) {
     int i;
     int current = 0;
+    unsigned int now;
 
     if (index < 0 || out == (struct process_info*)0) {
         return -1;
     }
 
+    now = pit_get_ticks();
     for (i = 0; i < PROCESS_MAX; i++) {
         if (process_table[i].state == PROCESS_UNUSED) {
             continue;
@@ -1498,6 +1524,12 @@ int process_get_info_by_index(int index, struct process_info* out) {
             out->pid = process_table[i].pid;
             out->ppid = process_table[i].parent_pid;
             out->state = process_table[i].state;
+            // age_ticks 只表示“从创建到现在过去了多少 tick”，不是 CPU 实际运行时间。
+            if (process_table[i].create_tick == 0) {
+                out->age_ticks = 0;
+            } else {
+                out->age_ticks = now - process_table[i].create_tick;
+            }
             process_copy_name(out->name, process_table[i].name, PROCESS_NAME_MAX_LEN);
             return 0;
         }
