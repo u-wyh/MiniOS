@@ -26,6 +26,8 @@ struct process_info {
     int state;
     // age_ticks 表示当前 tick 与 create_tick 的差值，只反映进程已存在多久。
     uint32_t age_ticks;
+    // runs 表示进程被调度器选中运行的次数；它不是 CPU 时间。
+    uint32_t runs;
     char name[PROCESS_NAME_MAX_LEN];
 };
 
@@ -55,6 +57,8 @@ struct process {
     uint32_t wakeup_tick;
     // create_tick 表示进程创建时的系统 tick，供 ps 统计存活时间；它不是 CPU 运行时间。
     uint32_t create_tick;
+    // schedule_count 表示进程被调度器选中运行的次数；它不是 CPU 使用率，也不是精确运行时间。
+    uint32_t schedule_count;
     // 教学版 argv 暂存区：exec_args 先把参数复制到 PCB，中小规模参数足够支撑当前实验
     int user_argc;
     char user_argv[PROCESS_MAX_USER_ARGS][PROCESS_MAX_ARG_LEN];

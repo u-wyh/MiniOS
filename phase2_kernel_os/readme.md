@@ -297,6 +297,62 @@ TODO：
 - 暂不处理 tick 溢出。
 - 暂无 `top` 命令或复杂性能监控。
 
+### Task48：进程运行 tick / 调度次数统计雏形
+
+已完成：
+
+- PCB 新增 `schedule_count` 字段，用于记录进程被调度器选中运行的次数。
+- 新进程创建时 `schedule_count` 初始化为 `0`，PCB 回收时会统一清零。
+- 在真正决定“下一个由谁运行”的位置递增调度次数，而不是在遍历候选进程时递增。
+- `process_info` 新增 `runs` 字段，用户态 `ps` 可直接显示调度次数。
+- shell `ps` 输出新增 `RUNS` 列。
+- `AGE` 表示存活时间，`RUNS` 表示被调度次数，两者语义保持分离。
+- 为后续 CPU 时间统计和更丰富的调度观测打下基础，但本轮不实现 CPU 占用率。
+
+TODO：
+
+- `RUNS` 不是 CPU 占用率。
+- 暂不统计实际运行 tick。
+- 暂不区分用户态 / 内核态运行时间。
+- 暂不统计上下文切换耗时。
+- 暂无 `top` 命令。
+
+### Task49：系统调用表整理与文档化
+
+已完成：
+
+- 重新整理 `syscall.h` 中的 syscall 编号分组，保持现有编号不变，但把命名、用途和边界说明写清楚。
+- 补充 `syscall.c` 分发注释，明确当前 ABI 中 syscall 编号、参数寄存器和返回值寄存器约定。
+- 整理当前用户态封装函数和对应 syscall 的关系，明确 shell 主要依赖的最小封装接口。
+- 新增 `docs/syscall.md`，集中记录 MiniOS Phase2 当前 syscall 总表、参数位置、返回值语义和限制。
+- 明确当前 MiniOS syscall ABI 仍是教学版最小接口，不引入 `errno`、文件描述符表或复杂权限模型。
+
+TODO：
+
+- 暂无 `errno`。
+- 暂无完整用户指针校验。
+- 暂无完整文件描述符表。
+- `exec` 仍基于内置 `program_id`。
+- syscall ABI 后续 Phase3 可能继续调整。
+
+### Task50：用户程序表 / program_id 整理
+
+已完成：
+
+- 新增统一的 `program_id` 定义，集中管理内置用户程序编号，避免 shell / process / exec 路径继续散落魔法数字。
+- 新增统一用户程序描述表，集中维护 `program_id -> program name` 的规范映射。
+- `process_exec_program_args` 现在直接通过统一程序表解析 `program_id -> ELF/blob`，不再自己维护另一套固定编号映射。
+- shell `run/start` 现在通过共享程序清单解析 `program name -> program_id`，与内核侧使用同一份程序定义。
+- 当前内置用户程序表已整理为：`init`、`shell`、`hello`、`echo`、`loop`、`loop_exit`、`sleep_test`，并保留 `execchild` / `info` / `fork` / `forkexec` 等历史教学程序条目。
+- 新增最小 `loop_exit` 用户程序，便于验证“会主动退出的循环程序”路径。
+
+TODO：
+
+- 当前仍不支持真实文件系统。
+- 当前仍不支持 `PATH` 搜索。
+- 当前仍不支持动态加载外部 ELF 文件。
+- 当前仍不支持 `envp` 等更完整的进程启动环境。
+
 ## 五、阶段进度（已完成）
 
 ### A. 基础启动阶段（Task1 + Task2）

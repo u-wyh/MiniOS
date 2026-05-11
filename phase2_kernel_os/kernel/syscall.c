@@ -66,10 +66,15 @@ static void syscall_debug_result(const char* tag, unsigned int value) {
 #endif
 }
 
-// 根据 eax 分发最小系统调用；当前支持 write/exit/getpid/time/fork/waitpid/exec/read_char/get_argc/get_arg/exec_args
+// 根据 eax 分发最小系统调用。
+// 当前 ABI 约定：
+// - eax：syscall 编号
+// - ebx/ecx/edx：前 1~3 个参数
+// - eax：返回值
 void syscall_handle(struct interrupt_frame* frame) {
     struct interrupt_frame* next_frame;
 
+    // SYS_WRITE(text)：ebx=用户态字符串指针，成功返回 0。
     if (frame->eax == SYS_WRITE) {
         const char* text = (const char*)frame->ebx;
 
@@ -89,6 +94,7 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    // SYS_EXIT(status)：ebx=退出码；当前不会返回到原用户进程。
     if (frame->eax == SYS_EXIT) {
         print_string("user exit\n");
         frame->eax = 0;
@@ -103,6 +109,7 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    // SYS_GETPID()：无参数，返回当前进程 pid。
     if (frame->eax == SYS_GETPID) {
         frame->eax = (unsigned int)process_current_pid();
         print_string("pid: ");
@@ -111,6 +118,7 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    // SYS_TIME()：历史教学接口，无参数，返回当前 tick。
     if (frame->eax == SYS_TIME) {
         frame->eax = pit_get_ticks();
         print_string("time: ");
@@ -119,6 +127,7 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    // SYS_FORK()：无参数；父进程返回 child_pid，子进程恢复时看到 0。
     if (frame->eax == SYS_FORK) {
         int fork_result = process_fork(frame);
 
@@ -132,6 +141,7 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    // SYS_WAITPID(pid)：ebx=目标子进程 pid；成功返回回收/等待完成的 pid，失败返回负值。
     if (frame->eax == SYS_WAITPID) {
         int result = process_waitpid_syscall((int)frame->ebx, frame, &next_frame);
 
@@ -148,6 +158,7 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    // SYS_EXEC(program_id)：ebx=目标 program_id；成功后直接替换当前镜像，不回到旧程序。
     if (frame->eax == SYS_EXEC) {
         int result = process_exec_program((int)frame->ebx, frame);
 
@@ -163,6 +174,7 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    // SYS_READ_CHAR()：无参数；读到字符返回 ASCII，必要时阻塞并切换到其他进程。
     if (frame->eax == SYS_READ_CHAR) {
         char ch = keyboard_read_char();
 
@@ -186,16 +198,19 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    // SYS_GET_ARGC()：无参数，返回当前进程保存的教学版 argc。
     if (frame->eax == SYS_GET_ARGC) {
         frame->eax = (unsigned int)process_get_argc();
         return;
     }
 
+    // SYS_GET_ARG(index, buf, max_len)：ebx=参数下标，ecx=用户缓冲区，edx=缓冲区长度。
     if (frame->eax == SYS_GET_ARG) {
         frame->eax = (unsigned int)process_get_arg((int)frame->ebx, (char*)frame->ecx, (int)frame->edx);
         return;
     }
 
+    // SYS_EXEC_ARGS(program_id, argc, argv)：ebx=program_id，ecx=argc，edx=argv 指针。
     if (frame->eax == SYS_EXEC_ARGS) {
         int result = process_exec_program_args((int)frame->ebx, (int)frame->ecx, (const char* const*)frame->edx, frame);
 
@@ -208,23 +223,25 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    // SYS_PS(index, out)：ebx=活动进程序号，ecx=用户态 struct process_info*；成功返回 0。
     if (frame->eax == SYS_PS) {
-        // SYS_PS 最小语义：ebx=活动进程序号，ecx=用户缓冲区(struct process_info*)，成功返回0
         frame->eax = (unsigned int)process_get_info_by_index((int)frame->ebx, (struct process_info*)frame->ecx);
         return;
     }
 
+    // SYS_KILL(pid)：ebx=目标 pid；成功返回 0，失败返回负值。
     if (frame->eax == SYS_KILL) {
         frame->eax = (unsigned int)process_kill((int)frame->ebx, -9);
         return;
     }
 
+    // SYS_WAIT_ANY()：无参数；回收任意一个 zombie 子进程，有结果返回 pid，无结果返回 0。
     if (frame->eax == SYS_WAIT_ANY) {
-        // 非阻塞 wait_any：有可回收 zombie 返回 pid；无可回收子进程返回 0
         frame->eax = (unsigned int)process_wait_any();
         return;
     }
 
+    // SYS_YIELD()：无参数；当前进程主动让出 CPU，成功通常返回 0 或经过切换后恢复。
     if (frame->eax == SYS_YIELD) {
         int result = process_yield_syscall(frame, &next_frame);
 
@@ -237,6 +254,7 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    // SYS_SLEEP(ticks)：ebx=睡眠 tick 数；成功返回 0，必要时切到 idle/hlt 等待唤醒。
     if (frame->eax == SYS_SLEEP) {
         int result = process_sleep_syscall(frame->ebx, frame, &next_frame);
 
@@ -256,22 +274,33 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    // SYS_SLEEP_PID(pid, ticks)：ebx=目标 pid，ecx=睡眠 tick 数；主要用于教学调试。
     if (frame->eax == SYS_SLEEP_PID) {
         frame->eax = (unsigned int)process_sleep_pid((int)frame->ebx, frame->ecx);
         return;
     }
 
+    // SYS_SET_BACKGROUND(pid, flag)：ebx=目标 pid，ecx=后台标记；供 start 命令使用。
     if (frame->eax == SYS_SET_BACKGROUND) {
         frame->eax = (unsigned int)process_set_background_by_pid((int)frame->ebx, (int)frame->ecx);
         return;
     }
 
-    // 只读返回自系统启动以来累计的 PIT tick 数，供用户态 uptime/ticks 命令观察系统节拍
+    // SYS_GET_TICKS()：无参数，返回自系统启动以来累计的 PIT tick 数。
     if (frame->eax == SYS_GET_TICKS) {
         frame->eax = pit_get_ticks();
         return;
     }
 
+    // SYS_CLEAR_SCREEN()：无参数；最小界面辅助接口，成功返回 0。
+    if (frame->eax == SYS_CLEAR_SCREEN) {
+        // 用户态 clear 命令只做最小清屏，不改变任何进程状态。
+        clear_screen();
+        frame->eax = 0;
+        return;
+    }
+
+    // 未知 syscall：当前统一返回 -1，并在控制台打印一条最小调试信息。
     print_string("unknown syscall\n");
     frame->eax = (unsigned int)-1;
 }

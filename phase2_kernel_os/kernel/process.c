@@ -5,6 +5,7 @@
 #include "paging.h"
 #include "pit.h"
 #include "process.h"
+#include "user_program.h"
 #include "vga.h"
 
 #define PROCESS_MAX 16
@@ -30,10 +31,6 @@ static struct process* process_alloc_slot(void);
 static void process_activate_user_image(struct process* proc);
 // 前向声明：fork 调试辅助函数会复用基础整数输出
 static void process_print_uint(unsigned int value);
-// 前向声明：program_id 到内置程序名的最小映射，仅供教学版 exec 复用
-static const char* process_exec_program_name(int program_id);
-static const char* process_exec_program_name_from_argv0(const char* arg0);
-static const char* process_exec_program_name_from_argv(int argc, const char* const* argv);
 // 前向声明：教学版 argv 操作辅助函数，负责清空/复制 PCB 参数暂存区
 static void process_clear_user_args(struct process* proc);
 static int process_copy_user_args(struct process* proc, int argc, const char* const* argv);
@@ -43,6 +40,7 @@ static void process_reparent_children(int old_parent_pid);
 static struct process* process_pick_next_ready(struct process* current);
 static struct process* process_find_by_pid(int pid);
 static int process_is_init_waiting_shell_restart(struct process* child, struct process* parent);
+static void process_record_schedule(struct process* proc);
 
 // 仅在 fork 调试开启时打印无符号整数，便于验证父子 pid 和 waitpid 目标
 static void process_debug_uint(unsigned int value) {
@@ -212,11 +210,26 @@ static void process_clear_slot(struct process* proc) {
     proc->waiting_pid = 0;
     proc->wakeup_tick = 0;
     proc->create_tick = 0;
+    proc->schedule_count = 0;
     process_clear_user_args(proc);
     proc->requested_exit = 0;
     proc->name = (const char*)0;
     proc->is_background = 0;
     proc->used = 0;
+}
+
+// 在真正决定“接下来让哪个进程运行”时记一次调度次数。
+// 这里只统计被选中运行的次数，不统计 CPU 时间，也不在候选遍历阶段递增。
+static void process_record_schedule(struct process* proc) {
+    if (proc == (struct process*)0) {
+        return;
+    }
+
+    if (proc->state == PROCESS_UNUSED || proc->state == PROCESS_ZOMBIE) {
+        return;
+    }
+
+    proc->schedule_count++;
 }
 
 // 清空 PCB 中保存的教学版 argv，避免旧程序参数泄漏到新程序上下文
@@ -512,90 +525,23 @@ static int process_replace_image(struct process* proc, const unsigned char* elf_
     return process_exec(proc, elf_data, elf_size);
 }
 
-// 把最小 exec 的 program_id 翻译成内置程序名，避免当前阶段引入路径解析
-static const char* process_exec_program_name(int program_id) {
-    if (program_id == 1) {
-        return "execchild";
+// 直接按统一程序描述符执行镜像替换，明确表达 program_id -> ELF/blob 的教学版语义。
+static int process_exec_descriptor(struct process* proc, const struct user_program_descriptor* descriptor) {
+    if (proc == (struct process*)0 || descriptor == (const struct user_program_descriptor*)0) {
+        return -1;
     }
 
-    if (program_id == 2) {
-        return "shell";
+    if (descriptor->image == (const unsigned char*)0 || descriptor->image_size == 0) {
+        return -2;
     }
 
-    if (program_id == 3) {
-        return "hello";
+    proc->name = descriptor->name;
+
+    if (process_has_user_image(proc) != 0) {
+        return process_replace_image(proc, descriptor->image, descriptor->image_size);
     }
 
-    if (program_id == 4) {
-        return "echo";
-    }
-
-    if (program_id == 5) {
-        return "loop";
-    }
-
-    if (program_id == 6) {
-        return "sleep_test";
-    }
-
-    return (const char*)0;
-}
-
-// 通过用户态传入的 argv[0] 推断目标程序名：作为 program_id 的最小兜底，避免 shell 传错编号时启动到错误程序
-static const char* process_exec_program_name_from_argv0(const char* arg0) {
-    if (arg0 == (const char*)0 || arg0[0] == '\0') {
-        return (const char*)0;
-    }
-
-    if (process_name_equals(arg0, "execchild") != 0) {
-        return "execchild";
-    }
-
-    if (process_name_equals(arg0, "shell") != 0) {
-        return "shell";
-    }
-
-    if (process_name_equals(arg0, "hello") != 0) {
-        return "hello";
-    }
-
-    if (process_name_equals(arg0, "echo") != 0) {
-        return "echo";
-    }
-
-    if (process_name_equals(arg0, "loop") != 0) {
-        return "loop";
-    }
-
-    if (process_name_equals(arg0, "sleep_test") != 0) {
-        return "sleep_test";
-    }
-
-    return (const char*)0;
-}
-
-// 从教学版 argv 中推断目标程序名：优先看 argv[0]，再扫描后续参数，兼容用户态 start/run 传参不规范的情况
-static const char* process_exec_program_name_from_argv(int argc, const char* const* argv) {
-    int i;
-    const char* name;
-
-    if (argc <= 0 || argv == (const char* const*)0) {
-        return (const char*)0;
-    }
-
-    name = process_exec_program_name_from_argv0(argv[0]);
-    if (name != (const char*)0) {
-        return name;
-    }
-
-    for (i = 1; i < argc; i++) {
-        name = process_exec_program_name_from_argv0(argv[i]);
-        if (name != (const char*)0) {
-            return name;
-        }
-    }
-
-    return (const char*)0;
+    return process_exec(proc, descriptor->image, descriptor->image_size);
 }
 
 // 按 pid 查找进程，waitpid 需要先确认目标是否仍在进程表中
@@ -775,8 +721,7 @@ int process_exec_program(int program_id, struct interrupt_frame* frame) {
 // 当前运行进程执行教学版最小 exec：参数先拷贝到 PCB，再把当前用户镜像替换成目标程序
 int process_exec_program_args(int program_id, int argc, const char* const* argv, struct interrupt_frame* frame) {
     struct process* proc = current_process;
-    const char* target_name;
-    const char* argv_target_name = (const char*)0;
+    const struct user_program_descriptor* target_program;
     int arg_result;
     int exec_result;
 
@@ -784,15 +729,8 @@ int process_exec_program_args(int program_id, int argc, const char* const* argv,
         return -1;
     }
 
-    target_name = process_exec_program_name(program_id);
-    // 教学版兜底：优先从 argv 推断程序名（含扫描后续参数），避免用户态编号映射或传参偏差导致 exec 到错误镜像。
-    if (argc > 0 && argv != (const char* const*)0) {
-        argv_target_name = process_exec_program_name_from_argv(argc, argv);
-        if (argv_target_name != (const char*)0) {
-            target_name = argv_target_name;
-        }
-    }
-    if (target_name == (const char*)0) {
+    target_program = user_program_get_by_id(program_id);
+    if (target_program == (const struct user_program_descriptor*)0) {
         return -2;
     }
 
@@ -802,10 +740,10 @@ int process_exec_program_args(int program_id, int argc, const char* const* argv,
     }
 
     process_debug_exec_event("begin", (unsigned int)proc->pid, (unsigned int)proc->parent_pid, (unsigned int)program_id);
-    exec_result = process_exec_file(proc, target_name);
+    exec_result = process_exec_descriptor(proc, target_program);
     if (exec_result != 0) {
         print_string("process: exec failed target=");
-        print_string(target_name);
+        print_string(target_program->name);
         print_string("\n");
         process_clear_user_args(proc);
         process_debug_exec_event("failed", (unsigned int)proc->pid, (unsigned int)proc->parent_pid, (unsigned int)program_id);
@@ -919,6 +857,8 @@ void process_run(struct process* proc) {
 
     current_process = proc;
     current_process->state = PROCESS_RUNNING;
+    // 首次进入用户态前，也算调度器把该进程选中运行了一次。
+    process_record_schedule(current_process);
     process_activate_user_image(current_process);
 
     enter_user_mode(current_process->eip, current_process->esp);
@@ -1052,11 +992,15 @@ int process_yield_syscall(struct interrupt_frame* frame, struct interrupt_frame*
     next = process_pick_next_ready(current);
     if (next == (struct process*)0 || next == current) {
         current->state = PROCESS_RUNNING;
+        // 当前进程主动 yield 但没有其他候选时，继续运行当前进程也记作一次最小调度决策。
+        process_record_schedule(current);
         return 0;
     }
 
     current_process = next;
     next->state = PROCESS_RUNNING;
+    // 只有真正切到 next 运行时，才给 next 增加调度次数。
+    process_record_schedule(next);
     process_activate_user_image(next);
     if (next_frame != (struct interrupt_frame**)0) {
         *next_frame = &next->saved_frame;
@@ -1098,6 +1042,8 @@ int process_sleep_syscall(unsigned int ticks, struct interrupt_frame* frame, str
 
     current_process = next;
     next->state = PROCESS_RUNNING;
+    // sleep 让出 CPU 后，只有被选中的 READY 进程才增加调度次数。
+    process_record_schedule(next);
     process_activate_user_image(next);
     if (next_frame != (struct interrupt_frame**)0) {
         *next_frame = &next->saved_frame;
@@ -1178,6 +1124,8 @@ int process_read_char_syscall(struct interrupt_frame* frame, struct interrupt_fr
 
     current_process = next;
     next->state = PROCESS_RUNNING;
+    // 读字符阻塞后，只有真正获得 CPU 的进程才增加调度次数。
+    process_record_schedule(next);
     process_activate_user_image(next);
     if (next_frame != (struct interrupt_frame**)0) {
         *next_frame = &next->saved_frame;
@@ -1344,6 +1292,8 @@ int process_waitpid_syscall(int pid, struct interrupt_frame* frame, struct inter
 
     current_process = child;
     child->state = PROCESS_RUNNING;
+    // 父进程阻塞等待时，真正拿到 CPU 继续运行的是目标子进程。
+    process_record_schedule(child);
     process_activate_user_image(child);
     if (next_frame != (struct interrupt_frame**)0) {
         *next_frame = &child->saved_frame;
@@ -1437,6 +1387,8 @@ struct interrupt_frame* process_resume_after_exit(void) {
 
         current_process = parent;
         parent->state = PROCESS_RUNNING;
+        // 子进程退出后恢复父进程执行，也记作父进程再次被调度运行。
+        process_record_schedule(parent);
         process_activate_user_image(parent);
         return &parent->saved_frame;
     }
@@ -1471,7 +1423,7 @@ void process_list(void) {
     int i;
     unsigned int now = pit_get_ticks();
 
-    print_string("PID   PPID   STATE    AGE   STATUS  NAME\n");
+    print_string("PID   PPID   STATE    AGE   RUNS   STATUS  NAME\n");
     for (i = 0; i < PROCESS_MAX; i++) {
         unsigned int age_ticks;
 
@@ -1492,6 +1444,8 @@ void process_list(void) {
         print_string(process_state_name(process_table[i].state));
         print_string("    ");
         process_print_uint(age_ticks);
+        print_string("    ");
+        process_print_uint(process_table[i].schedule_count);
         print_string("    ");
         process_print_uint((unsigned int)process_table[i].exit_status);
         print_string("       ");
@@ -1530,6 +1484,7 @@ int process_get_info_by_index(int index, struct process_info* out) {
             } else {
                 out->age_ticks = now - process_table[i].create_tick;
             }
+            out->runs = process_table[i].schedule_count;
             process_copy_name(out->name, process_table[i].name, PROCESS_NAME_MAX_LEN);
             return 0;
         }
@@ -1571,6 +1526,8 @@ unsigned int process_schedule_tick(unsigned int current_esp) {
 
         current_process = next;
         next->state = PROCESS_RUNNING;
+        // idle 路径重新选中某个 READY 进程时，也需要记录一次调度次数。
+        process_record_schedule(next);
         process_activate_user_image(next);
         return (unsigned int)&next->saved_frame;
     }
@@ -1590,12 +1547,16 @@ unsigned int process_schedule_tick(unsigned int current_esp) {
     next = process_pick_next_ready(current);
     if (next == (struct process*)0 || next == current) {
         current->state = PROCESS_RUNNING;
+        // 时间片到期后即使继续运行当前进程，也按一次最小调度决策记账。
+        process_record_schedule(current);
         process_activate_user_image(current);
         return (unsigned int)&current->saved_frame;
     }
 
     current_process = next;
     next->state = PROCESS_RUNNING;
+    // 只有在确定 next 即将运行时，才给它增加调度次数。
+    process_record_schedule(next);
     process_activate_user_image(next);
     return (unsigned int)&next->saved_frame;
 }

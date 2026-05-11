@@ -62,6 +62,8 @@ static const unsigned char info_elf[] = {
 
 // loop 文件：循环输出 loop，并在每轮后 sleep 一小段 tick，降低后台测试程序占用
 #include "loop_elf.inc"
+// loop_exit 文件：先运行最小循环，再主动退出，便于验证可退出后台程序路径
+#include "loop_exit_elf.inc"
 // sleep_test 文件：持续输出并主动 sleep，便于观察 SLEEPING 状态和 AGE 增长
 #include "sleep_test_elf.inc"
 
@@ -231,6 +233,7 @@ static struct file file_table[] = {
     {"echo", (void*)echo_elf, (uint32_t)sizeof(echo_elf)},
     {"info", (void*)info_elf, (uint32_t)sizeof(info_elf)},
     {"loop", (void*)loop_elf, (uint32_t)sizeof(loop_elf)},
+    {"loop_exit", (void*)loop_exit_elf, (uint32_t)sizeof(loop_exit_elf)},
     {"sleep_test", (void*)sleep_test_elf, (uint32_t)sizeof(sleep_test_elf)},
     {"fork", (void*)fork_elf, (uint32_t)sizeof(fork_elf)},
     {"execchild", (void*)execchild_elf, (uint32_t)sizeof(execchild_elf)},

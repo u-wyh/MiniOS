@@ -1,4 +1,5 @@
 // shell_elf_source.c：用户态最小 shell 源文件，用于重新生成嵌入式 shell_elf.inc
+#include "user_program.h"
 
 #define SYS_WRITE 1
 #define SYS_EXIT 2
@@ -12,6 +13,7 @@
 #define SYS_SLEEP_PID 17
 #define SYS_SET_BACKGROUND 18
 #define SYS_GET_TICKS 19
+#define SYS_CLEAR_SCREEN 20
 
 #define PROCESS_NAME_MAX_LEN 16
 #define SHELL_ARGV_MAX 8
@@ -22,6 +24,7 @@ struct process_info {
     int ppid;
     int state;
     unsigned int age_ticks;
+    unsigned int runs;
     char name[PROCESS_NAME_MAX_LEN];
 };
 
@@ -113,6 +116,11 @@ static int user_kill(int pid) {
 // 设置后台标记，供 start 命令使用。
 static int user_set_background(int pid, int is_background) {
     return user_syscall2(SYS_SET_BACKGROUND, pid, is_background);
+}
+
+// 请求内核清空当前 VGA 文本屏幕，供用户态 clear 命令复用。
+static void user_clear_screen(void) {
+    user_syscall0(SYS_CLEAR_SCREEN);
 }
 
 // 比较两个字符串是否相等。
@@ -259,30 +267,26 @@ static int shell_split_line(char* line, char** argv, int max_argv) {
     return argc;
 }
 
-// 把程序名映射到当前内置 program_id。
+// 通过共享用户程序清单做 name -> program_id 解析，避免 shell 再维护一份散落映射。
 static int shell_program_id_from_name(const char* name) {
-    if (shell_streq(name, "hello")) {
-        return 3;
+#define SHELL_MATCH_PROGRAM(symbol, value, program_name, visible) \
+    if ((visible) != 0 && shell_streq(name, program_name)) {      \
+        return symbol;                                             \
     }
-
-    if (shell_streq(name, "echo")) {
-        return 4;
-    }
-
-    if (shell_streq(name, "loop")) {
-        return 5;
-    }
-
-    if (shell_streq(name, "sleep_test")) {
-        return 6;
-    }
+    MINIOS_USER_PROGRAM_LIST(SHELL_MATCH_PROGRAM)
+#undef SHELL_MATCH_PROGRAM
 
     // 兼容不便输入下划线的场景，允许用 sleeptest 作为 sleep_test 的简写别名。
     if (shell_streq(name, "sleeptest")) {
-        return 6;
+        return PROGRAM_SLEEP_TEST;
     }
 
-    return -1;
+    // 兼容不便输入下划线的场景，允许用 loopexit 作为 loop_exit 的简写别名。
+    if (shell_streq(name, "loopexit")) {
+        return PROGRAM_LOOP_EXIT;
+    }
+
+    return PROGRAM_INVALID;
 }
 
 // 统一处理 run/start/hello 的 fork + exec + waitpid 逻辑。
@@ -344,12 +348,12 @@ static void shell_cmd_uptime(void) {
     user_write("\n");
 }
 
-// 输出 ps 结果，并显示 AGE 列。
+// 输出 ps 结果，并显示 AGE / RUNS 列。
 static void shell_cmd_ps(void) {
     int index = 0;
     struct process_info info;
 
-    user_write("PID  PPID  STATE     AGE   NAME\n");
+    user_write("PID  PPID  STATE     AGE   RUNS  NAME\n");
     while (user_ps_get(index, &info) == 0) {
         shell_write_uint(info.pid);
         user_write("    ");
@@ -372,6 +376,8 @@ static void shell_cmd_ps(void) {
 
         user_write("   ");
         shell_write_uint((int)info.age_ticks);
+        user_write("   ");
+        shell_write_uint((int)info.runs);
         user_write("   ");
         user_write(info.name);
         user_write("\n");
@@ -424,17 +430,20 @@ static void shell_cmd_sleep(int argc, char** argv) {
 static void shell_cmd_help(void) {
     user_write("commands:\n");
     user_write("  help\n");
+    user_write("  clear\n");
     user_write("  echo <text>\n");
     user_write("  run <program>\n");
     user_write("  start <program>\n");
     user_write("  wait <pid>\n");
     user_write("  kill <pid>\n");
-    user_write("  ps    show process table with age ticks\n");
+    user_write("  ps    show process table with age/runs\n");
     user_write("  uptime\n");
     user_write("  ticks\n");
     user_write("  sleep <ticks>\n");
     user_write("  hello\n");
     user_write("  exit\n");
+    user_write("programs:\n");
+    user_write("  hello echo loop loop_exit sleep_test\n");
 }
 
 // 用户态 shell 主循环：保持最小交互式行为即可。
@@ -462,6 +471,12 @@ void _start(void) {
 
         if (shell_streq(argv[0], "echo")) {
             shell_cmd_echo(argc, argv);
+            continue;
+        }
+
+        if (shell_streq(argv[0], "clear")) {
+            // clear 只负责请求内核清屏；下一轮循环会自然重新打印提示符。
+            user_clear_screen();
             continue;
         }
 
@@ -538,7 +553,7 @@ void _start(void) {
             }
 
             program_id = shell_program_id_from_name(argv[1]);
-            if (program_id < 0) {
+            if (program_id == PROGRAM_INVALID) {
                 user_write("Unknown program\n");
                 continue;
             }
@@ -548,7 +563,7 @@ void _start(void) {
         }
 
         if (shell_streq(argv[0], "hello")) {
-            shell_spawn_program(3, 1, hello_argv, 1, 0);
+            shell_spawn_program(PROGRAM_HELLO, 1, hello_argv, 1, 0);
             continue;
         }
 
