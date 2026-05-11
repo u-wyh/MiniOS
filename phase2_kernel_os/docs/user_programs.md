@@ -79,10 +79,48 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `run <program>`：前台执行，shell `fork` 子进程，子进程 `exec`，父进程 `waitpid`
 - `start <program>`：后台执行，shell `fork` 子进程并 `exec`，父进程不等待
 
-## 6. 当前限制
+## 6. 用户程序参数传递
+
+当前 MiniOS 还没有完整 `execve(path, argv, envp)` 和用户栈 `argc/argv` ABI，因此先采用教学版最小链路：
+
+```text
+shell token -> program_id -> SYS_EXEC_ARGS -> PCB 暂存 argv -> 用户程序通过 get_argc/get_arg 读取
+```
+
+例如：
+
+```text
+run echo hello minios
+```
+
+会被解释为：
+
+- program name：`echo`
+- argv[0]：`echo`
+- argv[1]：`hello`
+- argv[2]：`minios`
+
+也就是说，当前实现保留了最小 Unix 风格语义：程序名会作为 `argv[0]` 传给新程序。
+
+## 7. 参数限制
+
+- 最大参数数量：`8`
+- 单个参数最大长度：`31` 个可见字符，外加结尾 `'\0'`
+- 参数过多：shell 会直接报错 `Too many args`，不会继续 `fork/exec`
+- 参数过长：shell 会直接报错 `Arg too long`，内核 `process_copy_user_args()` 也会做兜底校验
+
+## 8. echo 验证方式
+
+- `run echo`：验证“无附加参数”路径，程序应安全输出空行并退出
+- `run echo hello`：验证单参数传递
+- `run echo hello minios phase2`：验证多参数与顺序保持
+
+## 9. 当前限制
 
 1. 暂不支持磁盘文件系统
 2. 暂不支持 `PATH`
 3. 暂不支持动态加载外部 ELF 文件
 4. 暂不支持 `envp`
-5. 内置程序镜像仍由内核预先编译并嵌入
+5. 暂不支持复杂引号、转义、管道和重定向
+6. 当前 `argv` 保存在 PCB 暂存区里，还不是真实用户栈布局
+7. 内置程序镜像仍由内核预先编译并嵌入

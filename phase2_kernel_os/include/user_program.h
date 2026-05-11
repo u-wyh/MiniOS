@@ -4,6 +4,10 @@
 
 #include <stdint.h>
 
+// 教学版用户程序参数上限：当前 shell/run/start 与内核 PCB 暂存区统一复用这一组约束。
+#define USER_PROGRAM_MAX_ARGS 8
+#define USER_PROGRAM_MAX_ARG_LEN 32
+
 // 统一的内置用户程序清单：同时给 shell 名字解析、program_id 管理和内核镜像查询复用。
 // shell_visible 为 1 表示允许在用户态 shell 中通过 run/start 直接启动。
 #define MINIOS_USER_PROGRAM_LIST(X)                              \

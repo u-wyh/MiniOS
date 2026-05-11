@@ -16,7 +16,7 @@
 #define SYS_CLEAR_SCREEN 20
 
 #define PROCESS_NAME_MAX_LEN 16
-#define SHELL_ARGV_MAX 8
+#define SHELL_ARGV_MAX (USER_PROGRAM_MAX_ARGS + 1)
 #define SHELL_LINE_MAX 128
 
 struct process_info {
@@ -141,6 +141,24 @@ static int shell_streq(const char* left, const char* right) {
     return left[i] == '\0' && right[i] == '\0';
 }
 
+// 统计字符串长度；若长度达到上限仍未结束，则返回 -1 表示超长。
+static int shell_string_length_with_limit(const char* text, int max_len) {
+    int length = 0;
+
+    if (text == (const char*)0 || max_len <= 0) {
+        return -1;
+    }
+
+    while (text[length] != '\0') {
+        if (length >= (max_len - 1)) {
+            return -1;
+        }
+        length++;
+    }
+
+    return length;
+}
+
 // 输出十进制整数，便于显示 pid/tick/age。
 static void shell_write_uint(int value) {
     char digits[16];
@@ -233,7 +251,7 @@ static int shell_read_line(char* buffer, int capacity) {
     }
 }
 
-// 按空格或 tab 拆分参数，直接在原始缓冲区上写入 '\0'。
+// 按空格或 tab 拆分参数，直接在原始缓冲区上写入 '\0'；若 token 数超过上限则返回 -1。
 static int shell_split_line(char* line, char** argv, int max_argv) {
     int argc = 0;
     char* current = line;
@@ -248,7 +266,7 @@ static int shell_split_line(char* line, char** argv, int max_argv) {
         }
 
         if (argc >= max_argv) {
-            break;
+            return -1;
         }
 
         argv[argc++] = current;
@@ -289,6 +307,23 @@ static int shell_program_id_from_name(const char* name) {
     return PROGRAM_INVALID;
 }
 
+// 校验即将传给用户程序的教学版 argv：当前保留 argv[0]=程序名，参数过多或过长时在 shell 侧先失败。
+static int shell_validate_program_args(int argc, char** argv) {
+    int i;
+
+    if (argc < 0 || argc > USER_PROGRAM_MAX_ARGS) {
+        return -1;
+    }
+
+    for (i = 0; i < argc; i++) {
+        if (shell_string_length_with_limit(argv[i], USER_PROGRAM_MAX_ARG_LEN) < 0) {
+            return -2;
+        }
+    }
+
+    return 0;
+}
+
 // 统一处理 run/start/hello 的 fork + exec + waitpid 逻辑。
 static int shell_spawn_program(int program_id, int argc, char** argv, int wait_child, int is_background) {
     int pid = user_fork();
@@ -299,7 +334,10 @@ static int shell_spawn_program(int program_id, int argc, char** argv, int wait_c
     }
 
     if (pid == 0) {
-        if (user_exec_args(program_id, argc, (const char* const*)argv) != 0) {
+        int exec_result = user_exec_args(program_id, argc, (const char* const*)argv);
+
+        if (exec_result != 0) {
+            user_write("Exec failed\n");
             user_exit(99);
         }
         user_exit(0);
@@ -432,8 +470,8 @@ static void shell_cmd_help(void) {
     user_write("  help\n");
     user_write("  clear\n");
     user_write("  echo <text>\n");
-    user_write("  run <program>\n");
-    user_write("  start <program>\n");
+    user_write("  run <program> [args]\n");
+    user_write("  start <program> [args]\n");
     user_write("  wait <pid>\n");
     user_write("  kill <pid>\n");
     user_write("  ps    show process table with age/runs\n");
@@ -460,6 +498,10 @@ void _start(void) {
         user_write("MiniOS$ ");
         shell_read_line(line, SHELL_LINE_MAX);
         argc = shell_split_line(line, argv, SHELL_ARGV_MAX);
+        if (argc < 0) {
+            user_write("Too many args\n");
+            continue;
+        }
         if (argc == 0) {
             continue;
         }
@@ -542,6 +584,7 @@ void _start(void) {
         if (shell_streq(argv[0], "run") || shell_streq(argv[0], "start")) {
             int is_start = shell_streq(argv[0], "start");
             int program_id;
+            int validate_result;
 
             if (argc <= 1) {
                 if (is_start != 0) {
@@ -555,6 +598,16 @@ void _start(void) {
             program_id = shell_program_id_from_name(argv[1]);
             if (program_id == PROGRAM_INVALID) {
                 user_write("Unknown program\n");
+                continue;
+            }
+
+            validate_result = shell_validate_program_args(argc - 1, &argv[1]);
+            if (validate_result == -1) {
+                user_write("Too many args\n");
+                continue;
+            }
+            if (validate_result == -2) {
+                user_write("Arg too long\n");
                 continue;
             }
 

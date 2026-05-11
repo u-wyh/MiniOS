@@ -2008,3 +2008,45 @@ TODO：
 - 不支持 `SIGKILL/SIGTERM` 编号、handler、进程组、权限模型。
 - 不支持 `killall` 和完整后台任务管理。
 - kill 后 zombie 的完整资源释放仍依赖父进程 `waitpid`。
+
+## ✅ Task51：用户程序参数传递整理 / argc argv 语义统一
+
+本轮目标：
+
+- 整理 shell `run/start` 到 `exec` 的用户程序参数传递链路。
+- 明确 `program name`、`argc`、`argv` 的当前最小语义。
+- 统一参数数量与长度边界，避免静默截断或越界复制。
+
+已完成：
+
+- 统一参数上限常量：当前最多支持 `8` 个程序参数（含 `argv[0]` 程序名）。
+- 统一单参数长度上限：当前每个参数最多 `31` 个可见字符，另保留 `'\0'` 结尾。
+- shell `run/start` 现在明确采用：
+  - `argv[0] = program name`
+  - 剩余 token 作为用户参数
+- shell 在 `fork/exec` 前会先检查：
+  - 程序参数是否过多
+  - 单个参数是否过长
+- 参数过多时直接输出 `Too many args`，参数过长时输出 `Arg too long`。
+- 内核 `process_copy_user_args()` 继续保留兜底校验，避免非法参数破坏 PCB。
+- `echo` 继续作为最直接的参数传递验证程序：
+  - `run echo`
+  - `run echo hello`
+  - `run echo hello minios phase2`
+
+当前语义：
+
+- `run echo hello minios`
+- shell 自己看到的是：`run` / `echo` / `hello` / `minios`
+- 被执行的用户程序 `echo` 看到的是：
+  - `argv[0] = "echo"`
+  - `argv[1] = "hello"`
+  - `argv[2] = "minios"`
+
+当前限制：
+
+- 当前 `argv` 仍保存在 PCB 暂存区，不是真实用户栈 `argc/argv` ABI。
+- 暂不支持 `envp`。
+- 暂不支持 `PATH`。
+- 暂不支持复杂引号、转义、管道和重定向。
+- 暂不支持从磁盘加载外部程序。

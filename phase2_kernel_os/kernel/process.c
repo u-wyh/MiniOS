@@ -249,7 +249,7 @@ static void process_clear_user_args(struct process* proc) {
     }
 }
 
-// 复制教学版 argv：当前只支持少量短字符串，超限时返回错误码而不是继续破坏内核状态
+// 复制教学版 argv：当前保留 argv[0]=程序名 的最小语义，只支持少量短字符串，超限时返回错误码而不是继续破坏内核状态
 static int process_copy_user_args(struct process* proc, int argc, const char* const* argv) {
     int i;
     int j;
@@ -736,7 +736,8 @@ int process_exec_program_args(int program_id, int argc, const char* const* argv,
 
     arg_result = process_copy_user_args(proc, argc, argv);
     if (arg_result != 0) {
-        return -4;
+        // 参数复制失败时把底层错误码继续向上传递，便于 shell 和文档统一描述边界语义。
+        return arg_result;
     }
 
     process_debug_exec_event("begin", (unsigned int)proc->pid, (unsigned int)proc->parent_pid, (unsigned int)program_id);

@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include "elf.h"
 #include "syscall.h"
+#include "user_program.h"
 
 // 进程状态：空闲、就绪、运行、僵尸
 #define PROCESS_UNUSED 0
@@ -14,9 +15,9 @@
 #define PROCESS_BLOCKED 4
 #define PROCESS_SLEEPING 5
 
-// 教学版 argv 上限：当前先把启动参数暂存在 PCB 里，后续再迁移到真实用户栈 ABI
-#define PROCESS_MAX_USER_ARGS 8
-#define PROCESS_MAX_ARG_LEN 32
+// 教学版 argv 上限：沿用统一用户程序参数约束，避免 shell / process 各自维护魔法数字。
+#define PROCESS_MAX_USER_ARGS USER_PROGRAM_MAX_ARGS
+#define PROCESS_MAX_ARG_LEN USER_PROGRAM_MAX_ARG_LEN
 #define PROCESS_NAME_MAX_LEN 16
 
 // 用户态 ps 使用的进程只读摘要：避免直接暴露内核 PCB 结构
