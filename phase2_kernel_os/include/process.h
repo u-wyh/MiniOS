@@ -29,6 +29,8 @@ struct process_info {
     uint32_t age_ticks;
     // runs 表示进程被调度器选中运行的次数；它不是 CPU 时间。
     uint32_t runs;
+    // exit_status 记录最近一次退出码；对仍在运行的普通进程通常保持为 0。
+    int exit_status;
     char name[PROCESS_NAME_MAX_LEN];
 };
 

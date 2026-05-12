@@ -21,3 +21,10 @@
 - 统一了参数数量上限与单参数长度上限，并在 shell / process 两侧共同校验。
 - `echo` 可继续用于验证 `argc/argv` 传递，`hello` / `loop` / `loop_exit` / `sleep_test` 路径保持兼容。
 - 当前仍不支持 `envp`、`PATH`、复杂引号、转义和真实文件系统加载。
+
+## Task52：用户程序退出状态 / wait 语义整理
+
+- 明确了 `exit(status)` 后进程进入 `ZOMBIE`、等待父进程或 init/reaper 回收的最小语义。
+- `run`、`start`、`wait` 的关系进一步清晰：前台默认等待，后台默认不等待，`wait` 负责手动回收已退出子进程。
+- `ps` 现在会显示每个进程当前记录的 `exit_status`，便于观察 zombie/kill 后的退出码。
+- 当前仍然不是完整 Linux `waitpid` / 信号 / 进程组模型，只保留教学版闭环。

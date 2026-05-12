@@ -9,6 +9,7 @@
 #define SYS_EXEC_ARGS 11
 #define SYS_PS 12
 #define SYS_KILL 13
+#define SYS_WAIT_ANY 14
 #define SYS_SLEEP 16
 #define SYS_SLEEP_PID 17
 #define SYS_SET_BACKGROUND 18
@@ -25,6 +26,7 @@ struct process_info {
     int state;
     unsigned int age_ticks;
     unsigned int runs;
+    int exit_status;
     char name[PROCESS_NAME_MAX_LEN];
 };
 
@@ -96,6 +98,11 @@ static int user_fork(void) {
 // 等待指定子进程退出并回收。
 static int user_waitpid(int pid) {
     return user_syscall1(SYS_WAITPID, pid);
+}
+
+// 非阻塞回收任意一个已经退出的子进程。
+static int user_wait_any(void) {
+    return user_syscall0(SYS_WAIT_ANY);
 }
 
 // 以带参数方式执行教学版最小 exec。
@@ -391,7 +398,7 @@ static void shell_cmd_ps(void) {
     int index = 0;
     struct process_info info;
 
-    user_write("PID  PPID  STATE     AGE   RUNS  NAME\n");
+    user_write("PID  PPID  STATE     AGE   RUNS  EXIT  NAME\n");
     while (user_ps_get(index, &info) == 0) {
         shell_write_uint(info.pid);
         user_write("    ");
@@ -416,6 +423,8 @@ static void shell_cmd_ps(void) {
         shell_write_uint((int)info.age_ticks);
         user_write("   ");
         shell_write_uint((int)info.runs);
+        user_write("   ");
+        shell_write_uint(info.exit_status);
         user_write("   ");
         user_write(info.name);
         user_write("\n");
@@ -472,7 +481,7 @@ static void shell_cmd_help(void) {
     user_write("  echo <text>\n");
     user_write("  run <program> [args]\n");
     user_write("  start <program> [args]\n");
-    user_write("  wait <pid>\n");
+    user_write("  wait [pid]\n");
     user_write("  kill <pid>\n");
     user_write("  ps    show process table with age/runs\n");
     user_write("  uptime\n");
@@ -539,9 +548,23 @@ void _start(void) {
 
         if (shell_streq(argv[0], "wait")) {
             int pid = 0;
+            int wait_result;
 
-            if (argc <= 1) {
-                user_write("Usage: wait <pid>\n");
+            if (argc == 1) {
+                wait_result = user_wait_any();
+                if (wait_result <= 0) {
+                    user_write("No exited child\n");
+                    continue;
+                }
+
+                user_write("Wait done pid: ");
+                shell_write_uint(wait_result);
+                user_write("\n");
+                continue;
+            }
+
+            if (argc != 2) {
+                user_write("Usage: wait [pid]\n");
                 continue;
             }
 
@@ -550,12 +573,15 @@ void _start(void) {
                 continue;
             }
 
-            if (user_waitpid(pid) < 0) {
+            wait_result = user_waitpid(pid);
+            if (wait_result < 0) {
                 user_write("Wait failed\n");
                 continue;
             }
 
-            user_write("Wait done\n");
+            user_write("Wait done pid: ");
+            shell_write_uint(wait_result);
+            user_write("\n");
             continue;
         }
 

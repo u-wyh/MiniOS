@@ -105,7 +105,9 @@ void syscall_handle(struct interrupt_frame* frame) {
             return;
         }
 
-        syscall_halt_requested = 1;
+        // 没有父进程需要立刻恢复时，退出进程已经变成 ZOMBIE。
+        // 这里退到 idle 等待后续键盘/PIT 唤醒其他用户进程，避免后台进程退出时掉回内核 shell。
+        syscall_idle_requested = 1;
         return;
     }
 

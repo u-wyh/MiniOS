@@ -115,7 +115,30 @@ run echo hello minios
 - `run echo hello`：验证单参数传递
 - `run echo hello minios phase2`：验证多参数与顺序保持
 
-## 9. 当前限制
+## 9. 退出与等待语义
+
+当前用户程序退出采用教学版最小闭环：
+
+```text
+run/start -> running -> exit(status) -> ZOMBIE -> wait/reaper -> free slot
+```
+
+当前行为是：
+
+- `run <program>`：前台启动，shell 会等待指定子进程退出后再返回提示符
+- `start <program>`：后台启动，shell 不等待，立即返回提示符
+- `wait`：非阻塞回收任意一个已经退出的子进程
+- `wait <pid>`：针对指定子进程执行当前最小 `waitpid` 语义
+
+为了便于观察退出路径，`ps` 现在会额外显示 `exit_status` 列。
+
+## 10. loop_exit 验证方式
+
+- `run loop_exit`：验证前台程序正常退出并返回 shell
+- `start loop_exit`：验证后台程序退出后可由后续 `wait` 或 init/reaper 回收
+- `wait`：验证 shell 手动回收已经退出的后台子进程
+
+## 11. 当前限制
 
 1. 暂不支持磁盘文件系统
 2. 暂不支持 `PATH`
@@ -123,4 +146,6 @@ run echo hello minios
 4. 暂不支持 `envp`
 5. 暂不支持复杂引号、转义、管道和重定向
 6. 当前 `argv` 保存在 PCB 暂存区里，还不是真实用户栈布局
-7. 内置程序镜像仍由内核预先编译并嵌入
+7. 当前 `wait` / `waitpid` 仍是教学版最小实现，不等价于完整 Linux `waitpid`
+8. 暂不支持信号、进程组、session 和 TTY 控制
+9. 内置程序镜像仍由内核预先编译并嵌入

@@ -2050,3 +2050,27 @@ TODO：
 - 暂不支持 `PATH`。
 - 暂不支持复杂引号、转义、管道和重定向。
 - 暂不支持从磁盘加载外部程序。
+
+## ✅ Task52：用户程序退出状态 / wait 语义整理
+
+本轮目标：
+
+- 整理用户程序 `exit(status)`、`wait`、`reaper` 和 `ps` 状态显示之间的生命周期闭环。
+- 让前台 `run`、后台 `start`、手动 `wait` 的关系更加清楚。
+
+已完成：
+
+- 明确保留教学版 `ZOMBIE` 语义：用户程序退出后先保留 `pid` 与 `exit_status`，等待父进程或 init/reaper 回收。
+- `exit(status)` 后，退出进程不再继续参与调度。
+- shell 现在支持 `wait [pid]`：
+  - `wait`：非阻塞回收任意一个已退出子进程
+  - `wait <pid>`：对指定子进程走当前最小 `waitpid` 语义
+- `ps` 增加 `EXIT` 列，用于观察当前进程记录的 `exit_status`。
+- `run loop_exit`、`start loop_exit`、`wait`、`ps` 可以组成一条较完整的退出/回收验证链路。
+
+当前限制：
+
+- 当前仍不是完整 Linux `waitpid`
+- 暂不支持信号系统
+- 暂不支持进程组、session 和 TTY 控制
+- `exit_status` 目前主要通过 `ps` 观察，`wait` 返回值仍以 `pid` 为主

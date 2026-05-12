@@ -865,7 +865,7 @@ void process_run(struct process* proc) {
     enter_user_mode(current_process->eip, current_process->esp);
 }
 
-// 将当前进程标记为 ZOMBIE，等待 shell wait 命令回收 PCB 槽位
+// 将当前进程标记为 ZOMBIE，并保留 exit_status 供父进程 wait/reaper 读取和回收。
 void process_exit(int status) {
     int exiting_pid;
 
@@ -883,7 +883,7 @@ void process_exit(int status) {
     current_process = (struct process*)0;
 }
 
-// 回收一个 ZOMBIE 子进程；本轮 wait 非阻塞，只回收已经退出的子进程
+// 回收一个 ZOMBIE 子进程；当前最小 wait 语义是“只回收已经退出的子进程”，不做复杂阻塞等待。
 int process_wait(void) {
     int i;
     int pid;
@@ -899,8 +899,8 @@ int process_wait(void) {
         }
 
         pid = process_table[i].pid;
-        // wait 时先释放子进程资源，再回收 PCB
-        process_release_user_image(&process_table[i]);
+            // wait 时先释放子进程资源，再回收 PCB；exit_status 已经在 ZOMBIE 期间对父进程可见。
+            process_release_user_image(&process_table[i]);
         process_restore_current_user_mapping();
         if (last_exited_process == &process_table[i]) {
             last_exited_process = (struct process*)0;
@@ -912,7 +912,7 @@ int process_wait(void) {
     return -1;
 }
 
-// waitpid 雏形：只做立即检查，不阻塞等待子进程退出
+// waitpid 雏形：目标已成为 ZOMBIE 时立即回收；否则由 syscall 路径决定是否进入最小阻塞等待。
 int process_waitpid(int pid) {
     struct process* target = process_find_by_pid(pid);
     int parent_pid = process_parent_pid_for_current_context();
@@ -1424,7 +1424,7 @@ void process_list(void) {
     int i;
     unsigned int now = pit_get_ticks();
 
-    print_string("PID   PPID   STATE    AGE   RUNS   STATUS  NAME\n");
+    print_string("PID   PPID   STATE    AGE   RUNS   EXIT    NAME\n");
     for (i = 0; i < PROCESS_MAX; i++) {
         unsigned int age_ticks;
 
@@ -1483,9 +1483,10 @@ int process_get_info_by_index(int index, struct process_info* out) {
             if (process_table[i].create_tick == 0) {
                 out->age_ticks = 0;
             } else {
-                out->age_ticks = now - process_table[i].create_tick;
+            out->age_ticks = now - process_table[i].create_tick;
             }
             out->runs = process_table[i].schedule_count;
+            out->exit_status = process_table[i].exit_status;
             process_copy_name(out->name, process_table[i].name, PROCESS_NAME_MAX_LEN);
             return 0;
         }
