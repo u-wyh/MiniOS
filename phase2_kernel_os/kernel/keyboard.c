@@ -110,7 +110,9 @@ void keyboard_handler(void) {
     unsigned char scancode = inb(0x60);
     char ch;
     int i;
-    int user_process_running = process_current_pid();
+    // 用户 shell 等输入时可能处于 BLOCKED，并不一定是 current_process。
+    // 只要存在正在等待 read_char 的用户进程，就不能把按键再交给内核 shell 回显/缓存。
+    int user_input_active = (process_has_user_process() != 0 || process_current_pid() != 0 || process_has_read_char_waiter() != 0);
 
     // 释放码最高位为 1：把对应按键标记为“已释放”，避免下次正常按下被当成重复 make 码忽略。
     if ((scancode & 0x80) != 0) {
@@ -136,7 +138,7 @@ void keyboard_handler(void) {
 
     // Enter 键表示一行输入结束：补 '\0' 后交给 Shell 执行
     if (scancode == 0x1C) {
-        if (user_process_running != 0) {
+        if (user_input_active != 0) {
             if (process_wake_read_char_waiter('\n') == 0) {
                 keyboard_buffer_put('\n');
             }
@@ -161,7 +163,7 @@ void keyboard_handler(void) {
 
     // Backspace 退格键：同步删除输入缓冲中的最后一个字符，并清除屏幕回显
     if (scancode == 0x0E) {
-        if (user_process_running != 0) {
+        if (user_input_active != 0) {
             // 用户态下把退格键作为字符事件交给 shell 处理，保证“屏幕效果”和“命令缓冲”一致。
             if (process_wake_read_char_waiter('\b') == 0) {
                 keyboard_buffer_put('\b');
@@ -188,12 +190,12 @@ void keyboard_handler(void) {
             keyboard_buffer_put(ch);
         }
         // 用户态 shell 会自己回显字符，这里只在内核 shell 前台时回显，避免双回显。
-        if (user_process_running == 0) {
+        if (user_input_active == 0) {
             print_char(ch);
         }
 
         // 只有内核 shell 在前台时，才继续把字符写入命令行缓冲区，避免污染用户态 shell 的输入。
-        if (user_process_running == 0) {
+        if (user_input_active == 0) {
             input_buffer[input_index++] = ch;
 
             // 保证缓冲区末尾始终留给 '\0'，避免后续字符串越界

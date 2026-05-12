@@ -1059,3 +1059,67 @@ wait 只按 `parent_pid` 回收当前进程的子进程。这样 shell 不会误
 - 暂不支持信号
 - 暂不支持进程组、session 和 TTY 控制
 - `exit_status` 目前主要通过 `ps` 观察，`wait` 返回值仍以 pid 为主
+
+## 37. Task53：进程父子关系 / reparent 语义整理
+
+### 当前进程树语义
+
+MiniOS Phase2 当前采用最小教学版进程树：
+
+```text
+init
+    -> shell
+        -> hello / echo / loop / loop_exit / sleep_test
+```
+
+这里的父子关系不是完整 Linux 进程树实现，而是通过 PCB 里的 `parent_pid` 字段表达“谁创建了谁、谁负责回收谁”。
+
+### parent_pid 约定
+
+- `PROCESS_ROOT_PARENT_PID = 0`
+- init 是根进程，因此 init 的 `PPID` 显示为 `0`
+- shell 由 init 启动，因此 shell 的 `PPID` 指向 init
+- shell 通过 `run/start` 创建的用户程序，`PPID` 指向 shell
+
+这样 `ps` 里的 `PID / PPID` 可以直接帮助观察进程层次。
+
+### reparent to init
+
+父进程退出前，内核会扫描进程表：
+
+```text
+parent exits
+    -> find children whose parent_pid == parent.pid
+        -> child.parent_pid = init_pid
+```
+
+这一步只修改 `parent_pid`，不改变子进程的运行状态，也不直接释放仍在运行的子进程资源。
+它的目的只是避免子进程继续指向一个已经退出或即将释放的父进程。
+
+### wait / reaper 规则
+
+当前规则保持简单：
+
+- 普通进程 `wait` 只回收 `parent_pid == current.pid` 的 `ZOMBIE` 子进程
+- `waitpid(pid)` 也必须确认目标是当前进程的子进程
+- `wait_any()` 只扫描当前进程名下的已退出子进程
+- init/reaper 只兜底回收已经挂到 init 名下、且没有父进程正在等待的孤儿 `ZOMBIE`
+
+这样 shell 不会误回收 init 的子进程，也不会误删无关进程。
+
+### ps 显示
+
+`ps` 中的 `PPID` 表示当前记录的父进程 pid：
+
+- `init` 的 `PPID` 为 `0`
+- `shell` 的 `PPID` 为 init 的 pid
+- `start loop` 后，`loop` 的 `PPID` 应指向 shell
+- 父进程退出后，孤儿子进程的 `PPID` 会变为 init 的 pid
+
+### 当前限制
+
+- 暂不实现完整 Linux `waitpid`
+- 暂不支持信号系统
+- 暂不支持进程组、session 和 TTY 控制
+- 暂不维护复杂子链表，只用 `parent_pid` 扫描进程表
+- 后续可以扩展更完整的进程树、权限检查和 waitpid 选项

@@ -2074,3 +2074,31 @@ TODO：
 - 暂不支持信号系统
 - 暂不支持进程组、session 和 TTY 控制
 - `exit_status` 目前主要通过 `ps` 观察，`wait` 返回值仍以 `pid` 为主
+
+## ✅ Task53：进程父子关系 / reparent 语义整理
+
+本轮目标：
+
+- 明确 `parent_pid` 的教学版语义。
+- 让 init、shell、用户程序之间的父子关系可通过 `ps` 观察。
+- 父进程退出或被 kill 时，把仍存在的子进程转交给 init。
+- 让 wait/reaper 与父子关系配合，避免误回收无关进程。
+
+已完成：
+
+- 约定 `PROCESS_ROOT_PARENT_PID = 0`，表示 init 没有普通父进程。
+- 新进程默认以当前运行进程作为父进程，因此：
+  - init 的 PPID 为 `0`
+  - shell 的 PPID 指向 init
+  - shell 通过 `run/start` 创建的用户程序 PPID 指向 shell
+- `wait` / `waitpid` / `wait_any` 继续只回收当前进程名下的子进程。
+- 父进程 `exit` 或被 `kill` 时，会把仍有效的子进程 reparent 给 init。
+- init/reaper 会兜底回收已经挂到 init 名下、且没有父进程正在等待的孤儿 zombie。
+- `ps` 中的 `PPID` 可用于观察当前父子关系。
+
+当前限制：
+
+- 不实现完整 Linux `waitpid`
+- 不新增信号系统
+- 不支持进程组、session 和 TTY 控制
+- 当前 reparent 只维护 `parent_pid`，不引入复杂进程树结构
