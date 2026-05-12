@@ -19,6 +19,8 @@
 #define PROCESS_MAX_USER_ARGS USER_PROGRAM_MAX_ARGS
 #define PROCESS_MAX_ARG_LEN USER_PROGRAM_MAX_ARG_LEN
 #define PROCESS_NAME_MAX_LEN 16
+// init 的父进程约定：0 表示没有普通父进程，是 MiniOS 进程树的根。
+#define PROCESS_ROOT_PARENT_PID 0
 
 // 用户态 ps 使用的进程只读摘要：避免直接暴露内核 PCB 结构
 struct process_info {
@@ -37,6 +39,7 @@ struct process_info {
 // 最小 PCB：保存进程身份、父子关系、状态与用户态入口现场
 struct process {
     int pid;
+    // parent_pid 表示创建该进程的父进程 pid；init 作为根进程使用 PROCESS_ROOT_PARENT_PID。
     int parent_pid;
     int state;
     uint32_t esp;
@@ -112,6 +115,10 @@ const char* process_state_name(int state);
 int process_current_pid(void);
 // 返回当前进程是否被标记为后台任务
 int process_current_is_background(void);
+// 返回是否存在正在等待键盘输入的用户进程，供键盘 IRQ 区分用户 shell 与内核 shell
+int process_has_read_char_waiter(void);
+// 返回进程表中是否仍有用户进程存在；键盘 IRQ 用它避免用户态运行期间误回内核 shell
+int process_has_user_process(void);
 // 将当前运行进程标记为“主动请求退出”，供 init 区分正常 exit 与异常退出
 void process_mark_current_requested_exit(void);
 // 基于当前系统调用现场复制一个教学版子进程，成功返回子进程 pid

@@ -37,6 +37,9 @@ static int process_copy_user_args(struct process* proc, int argc, const char* co
 static int process_name_equals(const char* a, const char* b);
 static void process_restore_current_user_mapping(void);
 static void process_reparent_children(int old_parent_pid);
+static int process_has_blocked_waiter(struct process* child);
+static void process_reap_init_zombies(void);
+static void process_release_user_image(struct process* proc);
 static struct process* process_pick_next_ready(struct process* current);
 static struct process* process_find_by_pid(int pid);
 static int process_is_init_waiting_shell_restart(struct process* child, struct process* parent);
@@ -162,7 +165,7 @@ static int process_parent_pid_for_current_context(void) {
         return current_process->pid;
     }
 
-    return 0;
+    return PROCESS_ROOT_PARENT_PID;
 }
 
 // 判断进程当前是否已经持有一份用户镜像，供 exec 替换语义决定是否先释放旧资源
@@ -191,7 +194,7 @@ static void process_clear_slot(struct process* proc) {
     unsigned int i;
 
     proc->pid = 0;
-    proc->parent_pid = 0;
+    proc->parent_pid = PROCESS_ROOT_PARENT_PID;
     proc->state = PROCESS_UNUSED;
     proc->esp = 0;
     proc->eip = 0;
@@ -414,6 +417,63 @@ static void process_reparent_children(int old_parent_pid) {
         }
 
         process_table[i].parent_pid = init_pid;
+    }
+}
+
+// 判断某个 ZOMBIE 子进程是否正被父进程阻塞等待，避免 reaper 抢先回收 waitpid 目标。
+static int process_has_blocked_waiter(struct process* child) {
+    int i;
+
+    if (child == (struct process*)0) {
+        return 0;
+    }
+
+    for (i = 0; i < PROCESS_MAX; i++) {
+        if (process_table[i].state != PROCESS_BLOCKED) {
+            continue;
+        }
+
+        if (process_table[i].pid != child->parent_pid) {
+            continue;
+        }
+
+        if (process_table[i].waiting_pid != child->pid || process_table[i].has_saved_frame == 0) {
+            continue;
+        }
+
+        return 1;
+    }
+
+    return 0;
+}
+
+// init/reaper 的最小兜底：回收已经挂到 init 名下、且没有父进程正在 wait 的孤儿 ZOMBIE。
+static void process_reap_init_zombies(void) {
+    int i;
+
+    if (init_pid <= 0) {
+        return;
+    }
+
+    for (i = 0; i < PROCESS_MAX; i++) {
+        if (process_table[i].state != PROCESS_ZOMBIE) {
+            continue;
+        }
+
+        if (process_table[i].parent_pid != init_pid || process_table[i].pid == init_pid) {
+            continue;
+        }
+
+        if (process_has_blocked_waiter(&process_table[i]) != 0) {
+            continue;
+        }
+
+        // 这里只处理无人等待的孤儿 zombie；普通 shell 子进程仍交给 shell 的 wait/waitpid。
+        process_release_user_image(&process_table[i]);
+        if (last_exited_process == &process_table[i]) {
+            last_exited_process = (struct process*)0;
+        }
+        process_clear_slot(&process_table[i]);
     }
 }
 
@@ -881,6 +941,8 @@ void process_exit(int status) {
     current_process->state = PROCESS_ZOMBIE;
     last_exited_process = current_process;
     current_process = (struct process*)0;
+    // 如果退出的是已经 reparent 给 init 的孤儿进程，init/reaper 可直接完成兜底回收。
+    process_reap_init_zombies();
 }
 
 // 回收一个 ZOMBIE 子进程；当前最小 wait 语义是“只回收已经退出的子进程”，不做复杂阻塞等待。
@@ -1157,6 +1219,44 @@ int process_wake_read_char_waiter(char ch) {
     return 0;
 }
 
+// 查询是否有用户进程正阻塞等待键盘输入；键盘 IRQ 用它避免把用户 shell 输入误送给内核 shell。
+int process_has_read_char_waiter(void) {
+    int i;
+
+    for (i = 0; i < PROCESS_MAX; i++) {
+        if (process_table[i].state != PROCESS_BLOCKED) {
+            continue;
+        }
+
+        if (process_table[i].waiting_pid != -1 || process_table[i].has_saved_frame == 0) {
+            continue;
+        }
+
+        return 1;
+    }
+
+    return 0;
+}
+
+// 查询当前进程表里是否还有用户进程；只要用户态系统仍存在，键盘输入就不应回落到内核 shell。
+int process_has_user_process(void) {
+    int i;
+
+    for (i = 0; i < PROCESS_MAX; i++) {
+        if (process_table[i].state == PROCESS_UNUSED) {
+            continue;
+        }
+
+        if (process_table[i].pid <= 0) {
+            continue;
+        }
+
+        return 1;
+    }
+
+    return 0;
+}
+
 // 按 pid 设置后台标记：只允许修改现存进程，供 shell 的 start 命令把子进程标记为后台任务。
 int process_set_background_by_pid(int pid, int is_background) {
     struct process* target = process_find_by_pid(pid);
@@ -1329,11 +1429,15 @@ int process_kill(int pid, int exit_code) {
         return -5;
     }
 
+    // kill 让目标直接进入退出路径；若目标还有子进程，也要先转交给 init。
+    process_reparent_children(target->pid);
     target->exit_status = exit_code;
     target->state = PROCESS_ZOMBIE;
     target->has_saved_frame = 0;
     target->waiting_pid = 0;
     last_exited_process = target;
+    // 被 kill 的进程如果已经是 init 名下孤儿，交给最小 reaper 兜底清理。
+    process_reap_init_zombies();
     return 0;
 }
 

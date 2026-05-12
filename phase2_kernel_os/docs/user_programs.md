@@ -138,7 +138,28 @@ run/start -> running -> exit(status) -> ZOMBIE -> wait/reaper -> free slot
 - `start loop_exit`：验证后台程序退出后可由后续 `wait` 或 init/reaper 回收
 - `wait`：验证 shell 手动回收已经退出的后台子进程
 
-## 11. 当前限制
+## 11. 父子关系与 reparent
+
+当前 MiniOS 的用户程序不是平铺在进程表里，而是保留最小父子关系：
+
+```text
+init(PPID=0)
+    -> shell
+        -> hello / echo / loop / loop_exit / sleep_test
+```
+
+当前语义是：
+
+- init 是根进程，`PPID=0`
+- shell 由 init 创建，`PPID` 指向 init
+- shell 的 `run/start` 会 `fork` 出子进程，因此用户程序的 `PPID` 指向 shell
+- 普通 `wait` 只回收当前 shell 名下已经退出的子进程
+- 如果父进程先退出，仍存在的子进程会被 reparent 给 init
+- 被 reparent 给 init 的孤儿进程退出后，由 init/reaper 兜底回收
+
+`ps` 输出中的 `PPID` 列就是观察这条关系的主要方式。
+
+## 12. 当前限制
 
 1. 暂不支持磁盘文件系统
 2. 暂不支持 `PATH`
@@ -148,4 +169,5 @@ run/start -> running -> exit(status) -> ZOMBIE -> wait/reaper -> free slot
 6. 当前 `argv` 保存在 PCB 暂存区里，还不是真实用户栈布局
 7. 当前 `wait` / `waitpid` 仍是教学版最小实现，不等价于完整 Linux `waitpid`
 8. 暂不支持信号、进程组、session 和 TTY 控制
-9. 内置程序镜像仍由内核预先编译并嵌入
+9. 当前 reparent 只维护 `parent_pid`，不维护完整子链表
+10. 内置程序镜像仍由内核预先编译并嵌入
