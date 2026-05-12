@@ -31,7 +31,7 @@ bool executeBuiltinCommand(const std::vector<std::string>& tokens, bool& shouldE
     if (command == "help") {
         // Phase1 毕业版：按模块分类展示全部命令入口。
         std::cout << "[Shell]\n";
-        std::cout << "help pwd cd echo clear exit hostls\n";
+        std::cout << "help pwd cd echo clear exit host ls\n";
         std::cout << "\n[Task]\n";
         std::cout << "run <command> &\n";
         std::cout << "ps\n";

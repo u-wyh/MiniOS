@@ -6,4 +6,4 @@ int main() {
     shell.run();
     return 0;
 }
-// g++ -std=c++17 src/main.cpp src/shell.cpp src/commands.cpp src/task.cpp src/scheduler.cpp src/semaphore.cpp src/memory.cpp src/fs.cpp -Iinclude -o MiniOS
+// g++ -std=c++17 -Wall -Wextra -Iinclude src/*.cpp -o minios
