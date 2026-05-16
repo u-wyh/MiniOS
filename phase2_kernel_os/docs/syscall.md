@@ -28,7 +28,7 @@
 | 10 | `SYS_GET_ARG` | 用户程序内部原始调用 | `ebx=index` `ecx=buf` `edx=max_len` | 成功返回长度，失败返回负值 | 读取一项教学版 argv |
 | 11 | `SYS_EXEC_ARGS` | `user_exec_args` | `ebx=program_id` `ecx=argc` `edx=argv` | 成功后不回到旧镜像，失败返回负值 | 当前 shell 主要使用的 exec 入口 |
 | 12 | `SYS_PS` | `user_ps_get` | `ebx=index` `ecx=process_info*` | 成功返回 `0`，越界/失败返回负值 | 逐条读取进程摘要 |
-| 13 | `SYS_KILL` | `user_kill` | `ebx=pid` | 成功返回 `0`，失败返回负值 | 终止目标进程 |
+| 13 | `SYS_KILL` | `user_kill` | `ebx=pid` | 成功返回 `0`，失败返回负值 | 教学版按 pid 终止目标进程 |
 | 14 | `SYS_WAIT_ANY` | 当前无统一 shell 封装 | 无 | 回收成功返回 pid，无可回收返回 `0`，失败返回负值 | 非阻塞回收任意 zombie 子进程 |
 | 15 | `SYS_YIELD` | 当前无统一 shell 封装 | 无 | 通常返回 `0` / 负值 | 主动让出 CPU |
 | 16 | `SYS_SLEEP` | `user_sleep_ticks` | `ebx=ticks` | 成功返回 `0`，失败返回负值 | 当前进程睡眠若干 tick |
@@ -54,10 +54,23 @@
 6. `read_char`：读到字符返回 ASCII；若当前没有输入，可能先阻塞再恢复
 7. `get_ticks` / `time`：直接返回当前 tick 数
 8. `exec` / `exec_args`：成功后当前进程镜像被替换，因此不会按“旧程序继续执行”的方式返回成功值
+9. `kill`：成功返回 `0`；目标不存在、目标是 init、目标是当前 shell、目标已经退出等情况返回负值
 
 因此，MiniOS 当前 syscall ABI 不是“所有接口都严格统一成 0/-1”，而是保留了少量教学上更直观的特殊返回。
 
-## 4. 当前限制
+## 4. SYS_KILL 当前语义
+
+`SYS_KILL` 是当前 MiniOS 的教学版进程控制接口：
+
+1. 用户态把目标 `pid` 放入 `ebx`
+2. 内核调用 `process_kill(pid, PROCESS_KILL_EXIT_STATUS)`
+3. 可终止目标进入 `PROCESS_ZOMBIE`
+4. 调度器不再选择该目标运行
+5. 父进程通过 `wait/waitpid/wait_any` 回收，孤儿进程由 init/reaper 兜底回收
+
+当前 `PROCESS_KILL_EXIT_STATUS` 只表示“该进程被 kill 终止”，不是 Unix/Linux 的 `SIGKILL` 编号。MiniOS 仍不支持 `kill -9`、信号处理函数、进程组 kill 或权限检查。
+
+## 5. 当前限制
 
 当前 syscall ABI 仍有这些明确限制：
 

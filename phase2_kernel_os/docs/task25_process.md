@@ -1123,3 +1123,52 @@ parent exits
 - 暂不支持进程组、session 和 TTY 控制
 - 暂不维护复杂子链表，只用 `parent_pid` 扫描进程表
 - 后续可以扩展更完整的进程树、权限检查和 waitpid 选项
+
+## 38. Task54：kill syscall / shell kill 命令整理
+
+### 当前 kill 语义
+
+MiniOS 当前的 `kill(pid)` 是教学版进程终止接口，不是完整 Unix/Linux 信号系统。
+
+它的最小语义是：
+
+```text
+kill(pid)
+    -> 找到目标进程
+        -> 写入 PROCESS_KILL_EXIT_STATUS
+            -> 标记为 PROCESS_ZOMBIE
+                -> 等待 wait / reaper 回收
+```
+
+这里的 `PROCESS_KILL_EXIT_STATUS` 只表示“该进程被 kill 终止”，不表示 `SIGKILL`，也不支持信号编号。
+
+### kill 后为什么进入 ZOMBIE
+
+kill 不直接释放 PCB 和用户页资源，而是复用 Task52 整理出来的生命周期：
+
+```text
+running / ready / sleeping
+    -> zombie
+        -> wait / reap
+            -> unused
+```
+
+这样父进程仍然有机会通过 `wait` 或 `waitpid` 观察到子进程退出，并且资源释放只走一套回收路径。
+
+### scheduler 如何处理被 kill 的进程
+
+被 kill 的进程状态会变成 `PROCESS_ZOMBIE`。调度器只选择 `PROCESS_READY` 的进程，因此目标不会继续被调度运行。
+
+### wait / reaper 如何回收
+
+- shell 启动的后台任务被 kill 后，shell 可以执行 `wait` 或 `wait <pid>` 回收
+- 如果目标已经 reparent 给 init，则 init/reaper 负责兜底回收
+- 已回收后的进程槽会回到 `PROCESS_UNUSED`，`ps` 不应继续显示脏数据
+
+### 安全限制
+
+- 不允许 kill init，避免系统失去根进程
+- 不允许当前 shell 直接 kill 自己，避免本轮引入自杀恢复路径
+- 不支持 `kill -9`
+- 不支持进程组 kill
+- 不支持权限模型

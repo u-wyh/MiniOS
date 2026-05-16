@@ -36,3 +36,11 @@
 - `wait` / `waitpid` / `wait_any` 只回收当前进程名下的子进程；init/reaper 只兜底清理孤儿 zombie。
 - `ps` 继续通过 `PPID` 展示父子关系，便于观察 `start loop`、`start loop_exit`、`wait` 等场景。
 - 当前仍不实现完整进程树、信号、进程组、session 或复杂权限模型。
+
+## Task54：kill syscall / shell kill 命令整理
+
+- 整理了 `SYS_KILL(pid)` 与 shell `kill <pid>` 的最小教学版语义。
+- `kill` 成功后目标进程进入 `ZOMBIE`，退出状态记录为 `PROCESS_KILL_EXIT_STATUS`。
+- 被 kill 的进程不再被调度器选中，后续仍通过父进程 `wait/waitpid/wait_any` 或 init/reaper 回收。
+- 当前明确拒绝 kill init，也拒绝当前 shell 直接 kill 自己。
+- 当前 `kill` 不是完整 Unix/Linux 信号系统，不支持 `kill -9`、进程组 kill 或权限模型。

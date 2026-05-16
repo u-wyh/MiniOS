@@ -2102,3 +2102,32 @@ TODO：
 - 不新增信号系统
 - 不支持进程组、session 和 TTY 控制
 - 当前 reparent 只维护 `parent_pid`，不引入复杂进程树结构
+
+## ✅ Task54：kill syscall / shell kill 命令整理
+
+本轮目标：
+
+- 整理 `SYS_KILL` 与 shell `kill <pid>` 的教学版进程终止语义。
+- 让后台 `loop` 这类长期运行程序可以被 pid 控制。
+- 明确 kill 后仍复用 `ZOMBIE -> wait/reaper -> free slot` 生命周期。
+
+已完成：
+
+- `SYS_KILL(pid)` 复用现有 syscall ABI：`ebx=pid`，成功返回 `0`，失败返回负值。
+- `process_kill()` 通过 pid 查找目标进程，并把可终止目标标记为 `PROCESS_ZOMBIE`。
+- kill 后写入 `PROCESS_KILL_EXIT_STATUS`，该值只表示“被 kill”，不是 Unix/Linux 信号编号。
+- 被 kill 的进程不再处于 READY/RUNNING/SLEEPING 调度候选状态。
+- 被 kill 的进程仍由父进程 `wait/waitpid/wait_any` 或 init/reaper 回收。
+- shell `kill <pid>` 支持：
+  - 缺少 pid 时输出 `Usage: kill <pid>`
+  - 非数字 pid 时输出 `Invalid pid`
+  - 成功时输出 `Killed`
+  - 失败时输出 `Kill failed`
+
+当前限制：
+
+- 不实现完整信号系统
+- 不支持 `kill -9` 或其它信号编号
+- 不支持进程组 kill
+- 不支持权限模型
+- 不允许 kill init，也不允许当前 shell 直接 kill 自己

@@ -159,7 +159,41 @@ init(PPID=0)
 
 `ps` 输出中的 `PPID` 列就是观察这条关系的主要方式。
 
-## 12. 当前限制
+## 12. shell kill 命令
+
+当前 shell 支持最小进程控制命令：
+
+```text
+kill <pid>
+```
+
+典型验证方式是：
+
+```text
+start loop
+ps
+kill <loop_pid>
+wait
+ps
+```
+
+当前 `kill` 的语义是：
+
+- 通过 pid 查找目标进程
+- 允许终止的目标会被标记为 `ZOMBIE`
+- `EXIT` 列会显示教学版 kill 退出状态
+- 目标进程不再被调度器选中
+- 后续由 `wait` 或 init/reaper 回收
+
+安全限制：
+
+- 不允许 kill init
+- 不允许当前 shell 直接 kill 自己
+- `kill abc` 会报 `Invalid pid`
+- `kill 9999` 这类不存在 pid 会报 `Kill failed`
+- 当前不支持 `kill -9` 或其它信号编号
+
+## 13. 当前限制
 
 1. 暂不支持磁盘文件系统
 2. 暂不支持 `PATH`
@@ -170,4 +204,5 @@ init(PPID=0)
 7. 当前 `wait` / `waitpid` 仍是教学版最小实现，不等价于完整 Linux `waitpid`
 8. 暂不支持信号、进程组、session 和 TTY 控制
 9. 当前 reparent 只维护 `parent_pid`，不维护完整子链表
-10. 内置程序镜像仍由内核预先编译并嵌入
+10. 当前 kill 不是完整信号系统，不支持进程组 kill 和权限模型
+11. 内置程序镜像仍由内核预先编译并嵌入

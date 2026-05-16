@@ -21,6 +21,8 @@
 #define PROCESS_NAME_MAX_LEN 16
 // init 的父进程约定：0 表示没有普通父进程，是 MiniOS 进程树的根。
 #define PROCESS_ROOT_PARENT_PID 0
+// 教学版 kill 退出码：只表示“被 kill 终止”，不是 Unix/Linux 的信号编号。
+#define PROCESS_KILL_EXIT_STATUS -9
 
 // 用户态 ps 使用的进程只读摘要：避免直接暴露内核 PCB 结构
 struct process_info {
@@ -125,7 +127,7 @@ void process_mark_current_requested_exit(void);
 int process_fork(struct interrupt_frame* frame);
 // 用户态 waitpid：目标未退出时阻塞父进程并切换到子进程运行
 int process_waitpid_syscall(int pid, struct interrupt_frame* frame, struct interrupt_frame** next_frame);
-// 教学版 kill：将目标普通用户进程标记为 ZOMBIE，退出码由调用方给定（如 -9）
+// 教学版 kill：将目标普通用户进程标记为 ZOMBIE，退出码由调用方给定（如 PROCESS_KILL_EXIT_STATUS）
 int process_kill(int pid, int exit_code);
 // 当前运行进程按固定 program_id 执行最小 exec 替换，成功时直接改写返回现场
 int process_exec_program(int program_id, struct interrupt_frame* frame);

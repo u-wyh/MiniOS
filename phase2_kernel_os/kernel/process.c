@@ -1403,7 +1403,8 @@ int process_waitpid_syscall(int pid, struct interrupt_frame* frame, struct inter
     return -4;
 }
 
-// 教学版 kill：按 pid 把目标普通用户进程标记为 ZOMBIE，资源释放仍交给父进程 wait/waitpid 回收
+// 教学版 kill：按 pid 把目标普通用户进程标记为 ZOMBIE，资源释放仍交给父进程 wait/waitpid 回收。
+// exit_code 通常使用 PROCESS_KILL_EXIT_STATUS，仅表示“被 kill”，不是完整信号编号。
 int process_kill(int pid, int exit_code) {
     struct process* target = process_find_by_pid(pid);
 

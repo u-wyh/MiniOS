@@ -233,7 +233,8 @@ void syscall_handle(struct interrupt_frame* frame) {
 
     // SYS_KILL(pid)：ebx=目标 pid；成功返回 0，失败返回负值。
     if (frame->eax == SYS_KILL) {
-        frame->eax = (unsigned int)process_kill((int)frame->ebx, -9);
+        // 当前 kill 不是信号系统；PROCESS_KILL_EXIT_STATUS 只是教学版“被 kill”退出状态。
+        frame->eax = (unsigned int)process_kill((int)frame->ebx, PROCESS_KILL_EXIT_STATUS);
         return;
     }
 
