@@ -16,15 +16,18 @@
 
 // 记录定时器 tick 次数，后续调度器会依赖它
 static volatile unsigned int tick_count = 0;
+// 记录当前 PIT 每秒 tick 数；默认值与初始化默认频率保持一致。
+static unsigned int pit_frequency_hz = PIT_DEFAULT_FREQUENCY;
 
 // 配置 PIT，使其周期性产生 IRQ0 定时中断
 void pit_init(unsigned int frequency) {
     unsigned int divisor;
 
     if (frequency == 0) {
-        frequency = 20;
+        frequency = PIT_DEFAULT_FREQUENCY;
     }
 
+    pit_frequency_hz = frequency;
     divisor = PIT_BASE_FREQUENCY / frequency;
 
     // 0x36 = 通道0 + 低字节/高字节 + 模式3 + 二进制计数
@@ -53,4 +56,9 @@ unsigned int timer_handler(unsigned int current_esp) {
 // 返回当前累计 tick 数，供控制台命令读取真实系统节拍
 unsigned int pit_get_ticks(void) {
     return tick_count;
+}
+
+// 返回当前 PIT 配置频率，便于把 ticks 做教学版 seconds 换算。
+unsigned int pit_get_frequency(void) {
+    return pit_frequency_hz;
 }

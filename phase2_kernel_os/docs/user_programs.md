@@ -227,7 +227,34 @@ jobs
 
 `jobs` 只负责观察，不负责真正回收进程。后台任务退出或被 kill 后，仍需要通过 `wait` 或 init/reaper 完成回收。
 
-## 14. 当前限制
+## 14. uptime / sleep / sleep_test
+
+当前时间相关用户态体验保持教学版最小模型：
+
+- `uptime` / `ticks`：显示系统启动以来累计 tick
+- 当前 shell 还会额外显示按 `20Hz` 换算后的整秒数
+- `sleep <ticks>`：让当前 shell 睡眠若干个 tick
+- `sleep_test`：循环输出 sleep 前后 tick，用于观察 `SLEEPING -> READY` 的唤醒路径
+
+典型验证方式：
+
+```text
+uptime
+sleep 100
+uptime
+run sleep_test
+start sleep_test
+ps
+```
+
+当前时间单位说明：
+
+- 内核内部统一使用 tick
+- 当前 PIT 默认频率是 `20Hz`
+- 因此 `1 tick ≈ 50ms`
+- `sleep` 参数单位不是秒，而是 tick
+
+## 15. 当前限制
 
 1. 暂不支持磁盘文件系统
 2. 暂不支持 `PATH`
@@ -240,4 +267,5 @@ jobs
 9. 当前 reparent 只维护 `parent_pid`，不维护完整子链表
 10. 当前 kill 不是完整信号系统，不支持进程组 kill 和权限模型
 11. 当前 jobs 不是完整 job control，不支持 `fg/bg` 和 Ctrl+Z
-12. 内置程序镜像仍由内核预先编译并嵌入
+12. 当前 uptime 不是 RTC / wall clock，不显示真实日期时间
+13. 内置程序镜像仍由内核预先编译并嵌入

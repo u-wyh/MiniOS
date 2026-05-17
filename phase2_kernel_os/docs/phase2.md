@@ -52,3 +52,11 @@
 - `jobs` 输出 `JOB / PID / STATE / NAME`，其中 `JOB` 是当前遍历生成的教学版显示编号。
 - `jobs` 不负责回收资源；后台任务退出或被 kill 后，仍由 `wait` 或 init/reaper 回收。
 - 当前不实现完整 job control，不支持 `fg/bg`、Ctrl+Z、进程组、session 或 tty 前台控制。
+
+## Task56：系统 tick / sleep / uptime 语义整理
+
+- 统一确认 `pit_get_ticks()` 是当前系统 tick 的只读查询入口。
+- 新增 `pit_get_frequency()`，明确当前 PIT 默认频率为 `20Hz`，即 `1 tick ≈ 50ms`。
+- `sleep(ticks)` 继续以 tick 为单位；`sleep(0)` 退化为最小 `yield`。
+- `uptime` / `ticks` 命令现在可显示累计 tick 和按 `20Hz` 换算后的整秒数。
+- `sleep_test` 输出 sleep 前后 tick，便于观察 `SLEEPING -> READY` 的唤醒路径。

@@ -2157,3 +2157,31 @@ TODO：
 - 不支持 `SIGSTOP/SIGCONT`
 - 不支持进程组、session 和 tty 前台控制
 - 当前 `JOB` 列只是按遍历顺序生成的教学版显示编号，不是持久 job id
+
+## ✅ Task56：系统 tick / sleep / uptime 语义整理
+
+本轮目标：
+
+- 把 `PIT IRQ0 -> ticks -> sleep / wakeup -> uptime` 这条时间链路整理清楚。
+- 明确当前 MiniOS 内部统一使用 tick 作为时间单位。
+- 让 `uptime` 和 `sleep_test` 能更直观地验证时间推进。
+
+已完成：
+
+- 统一复用 `pit_get_ticks()` 作为当前系统 tick 读取接口。
+- 新增 `pit_get_frequency()`，明确当前 PIT 默认频率为 `20Hz`。
+- shell `uptime` / `ticks` 现在显示：
+  - `ticks: <n>`
+  - `seconds: <n / 20>`
+- `sleep(ticks)` 语义保持为“睡眠若干个 tick”，`sleep(0)` 继续退化为 `yield`。
+- `sleep_test` 现在会输出 sleep 前后的 tick，便于观察 wakeup 是否按预期发生。
+- `SLEEPING` 进程仍只会在 `wakeup_tick` 到期后恢复为 `READY`，不会在睡眠期间持续占用 CPU。
+
+当前限制：
+
+- 不实现 RTC 真实日期时间
+- 不支持时区和 wall clock
+- 不支持高精度定时器
+- 不支持 `nanosleep`
+- 不支持 `timerfd`
+- 不支持信号唤醒

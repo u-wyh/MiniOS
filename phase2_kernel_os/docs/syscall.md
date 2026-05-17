@@ -70,7 +70,19 @@
 
 当前 `PROCESS_KILL_EXIT_STATUS` 只表示“该进程被 kill 终止”，不是 Unix/Linux 的 `SIGKILL` 编号。MiniOS 仍不支持 `kill -9`、信号处理函数、进程组 kill 或权限检查。
 
-## 5. 当前限制
+## 5. SYS_SLEEP / SYS_GET_TICKS 当前语义
+
+当前时间相关 syscall 采用教学版最小模型：
+
+1. `SYS_GET_TICKS` 直接返回系统启动以来累计的 PIT tick 数
+2. 当前 PIT 默认频率为 `20Hz`
+3. 因此 `1 tick ≈ 50ms`
+4. `SYS_SLEEP(ticks)` 的参数单位就是 tick，而不是秒
+5. `sleep(0)` 当前退化为最小 `yield`，不会把进程永久挂起
+
+内核内部仍统一使用 tick 做调度统计、睡眠唤醒和 uptime 展示，不引入 RTC、时区或 wall clock 语义。
+
+## 6. 当前限制
 
 当前 syscall ABI 仍有这些明确限制：
 

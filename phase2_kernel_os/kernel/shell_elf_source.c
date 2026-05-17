@@ -15,6 +15,8 @@
 #define SYS_SET_BACKGROUND 18
 #define SYS_GET_TICKS 19
 #define SYS_CLEAR_SCREEN 20
+// 当前内核默认把 PIT 配置为 20Hz，因此 1 tick 约等于 50ms。
+#define SHELL_UPTIME_TICKS_PER_SECOND 20
 
 #define PROCESS_NAME_MAX_LEN 16
 #define SHELL_ARGV_MAX (USER_PROGRAM_MAX_ARGS + 1)
@@ -406,8 +408,13 @@ static void shell_cmd_echo(int argc, char** argv) {
 
 // 输出当前 tick。
 static void shell_cmd_uptime(void) {
+    unsigned int ticks = user_get_ticks();
+    unsigned int seconds = ticks / SHELL_UPTIME_TICKS_PER_SECOND;
+
     user_write("ticks: ");
-    shell_write_uint((int)user_get_ticks());
+    shell_write_uint((int)ticks);
+    user_write(", seconds: ");
+    shell_write_uint((int)seconds);
     user_write("\n");
 }
 

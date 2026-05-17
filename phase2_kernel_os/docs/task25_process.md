@@ -1212,3 +1212,71 @@ jobs
 - 暂不支持 `SIGSTOP/SIGCONT`
 - 暂不支持进程组、session 和 tty 前台控制
 - `JOB` 列只是本次遍历生成的显示编号，不是持久 job id
+
+## 40. Task56：系统 tick / sleep / uptime 语义整理
+
+### PIT、ticks 与 uptime 的关系
+
+当前 MiniOS 的时间链路保持最小教学版设计：
+
+```text
+PIT IRQ0
+    -> timer_handler
+        -> ticks++
+            -> process_wakeup_sleeping(now_ticks)
+                -> shell uptime / ticks 读取当前累计 tick
+```
+
+也就是说，系统里所有“时间推进”的基础都来自 PIT 周期性中断，而不是 RTC 或真实日期时间。
+
+### 当前 tick 语义
+
+- `pit_get_ticks()`：统一返回系统启动以来累计的 tick 数
+- `pit_get_frequency()`：返回当前 PIT 频率
+- 当前默认频率是 `20Hz`
+- 因此 `1 tick ≈ 50ms`
+
+这也是为什么 `uptime` 当前既可以显示 tick，也可以按 `20Hz` 做最小 seconds 换算。
+
+### sleep 语义
+
+当前 `sleep(n)` 的单位不是秒，而是 tick：
+
+```text
+sleep(n)
+    -> 当前进程改为 SLEEPING
+        -> wakeup_tick = now + n
+            -> 调度器跳过该进程
+                -> ticks 到达后恢复为 READY
+```
+
+这里的关键点是：
+
+- `sleep(0)` 当前退化为最小 `yield`
+- 睡眠进程不会在睡眠期间继续被调度
+- 到期后只是恢复为 `READY`，并不是立刻抢占 CPU
+
+### scheduler 如何配合
+
+Task56 没有重写调度器，只是明确了已有配合关系：
+
+- `SLEEPING` 进程不属于可运行候选
+- 每次 PIT tick 都会检查是否有到期的睡眠进程
+- 到期后把状态从 `SLEEPING` 改回 `READY`
+- `RUNS` 统计也不会在睡眠期间异常增长
+
+### ps 与 sleep_test 的观察意义
+
+- `ps` 里可以看到 `SLEEPING / READY / RUNNING`
+- `AGE` 仍表示进程存在时长
+- `RUNS` 仍表示被调度次数
+- `sleep_test` 会打印 sleep 前后的 tick，便于观察唤醒是否按预期发生
+
+### 当前限制
+
+- 暂不支持 RTC 真实日期时间
+- 暂不支持时区和 wall clock
+- 暂不支持高精度定时器
+- 暂不支持 `nanosleep`
+- 暂不支持 `timerfd`
+- 暂不支持信号唤醒
