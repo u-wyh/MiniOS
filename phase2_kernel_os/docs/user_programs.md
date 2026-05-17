@@ -254,7 +254,45 @@ ps
 - 因此 `1 tick ≈ 50ms`
 - `sleep` 参数单位不是秒，而是 tick
 
-## 15. 当前限制
+## 15. ls / cat 与内置只读文件
+
+当前 shell 还没有真实文件系统，但已经支持最小只读文件观察：
+
+- `ls`：列出当前内置只读文件
+- `cat <file>`：输出指定内置只读文件内容
+
+当前内置文件包括：
+
+- `/readme.txt`
+- `/programs`
+- `/help.txt`
+
+当前 shell 还做了一个最小兼容：
+
+- `/readme.txt`
+- `readme.txt`
+- `readmetxt`
+
+都可以匹配到同一份内置文件；这样在教学环境里即使不方便输入 `/` 或 `.`，也仍能完成 `cat` 验证。
+
+典型用法：
+
+```text
+ls
+cat /readme.txt
+cat /programs
+cat /help.txt
+```
+
+当前 `ls/cat` 的定位是教学版文件抽象：
+
+- 文件来自内核静态字符串
+- 不来自真实磁盘
+- 不支持写入
+- 不支持目录树
+- 不支持 `open/read/close` syscall
+
+## 16. 当前限制
 
 1. 暂不支持磁盘文件系统
 2. 暂不支持 `PATH`
@@ -268,4 +306,5 @@ ps
 10. 当前 kill 不是完整信号系统，不支持进程组 kill 和权限模型
 11. 当前 jobs 不是完整 job control，不支持 `fg/bg` 和 Ctrl+Z
 12. 当前 uptime 不是 RTC / wall clock，不显示真实日期时间
-13. 内置程序镜像仍由内核预先编译并嵌入
+13. 当前 `ls/cat` 只读取内核内置只读文件，不支持真实磁盘文件
+14. 内置程序镜像仍由内核预先编译并嵌入

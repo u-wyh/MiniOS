@@ -60,3 +60,12 @@
 - `sleep(ticks)` 继续以 tick 为单位；`sleep(0)` 退化为最小 `yield`。
 - `uptime` / `ticks` 命令现在可显示累计 tick 和按 `20Hz` 换算后的整秒数。
 - `sleep_test` 输出 sleep 前后 tick，便于观察 `SLEEPING -> READY` 的唤醒路径。
+
+## Task57：内核内置只读文件表 / ls、cat 雏形
+
+- 当前文件系统仍不是磁盘文件系统，而是教学版内置只读文件表。
+- 共享文件清单统一维护了最小文件对象：路径、内容和大小。
+- shell 新增 `ls`，用于列出内置只读文件。
+- shell 新增 `cat <file>`，用于输出指定内置只读文件内容。
+- 当前内置文件包括 `/readme.txt`、`/programs`、`/help.txt`。
+- 这一步的目标是为后续 `open/read/close` syscall 预热，而不是直接实现真实 VFS/磁盘驱动。

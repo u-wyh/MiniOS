@@ -2185,3 +2185,33 @@ TODO：
 - 不支持 `nanosleep`
 - 不支持 `timerfd`
 - 不支持信号唤醒
+
+## ✅ Task57：内核内置只读文件表 / ls、cat 雏形
+
+本轮目标：
+
+- 引入教学版只读文件抽象，但不进入真实磁盘文件系统。
+- 在内核中维护统一的内置只读文件表。
+- 让 shell 先支持最小 `ls` / `cat <file>`。
+
+已完成：
+
+- 在 `fs.h` 中统一维护内置只读文本文件清单。
+- 当前内置文件包括：
+  - `/readme.txt`
+  - `/programs`
+  - `/help.txt`
+- `fs.c` 新增只读文本文件查询接口：
+  - `fs_builtin_file_count()`
+  - `fs_builtin_file_at()`
+  - `fs_builtin_file_find()`
+- 用户态 shell 新增 `ls` 命令，可列出内置文件名和大小。
+- 用户态 shell 新增 `cat <file>` 命令，可输出内置文件内容。
+- `cat` 缺少参数和文件不存在时都会给出清晰错误。
+
+当前限制：
+
+- 当前文件来自内核静态只读数据，不来自真实磁盘。
+- 不实现真实块设备、ext2/FAT、目录树、权限、inode 和持久化写入。
+- 本轮不实现 `open/read/close` syscall。
+- 后续可在这张只读文件表基础上继续扩展 fd 表与 `read` syscall。

@@ -1,4 +1,5 @@
 // shell_elf_source.c：用户态最小 shell 源文件，用于重新生成嵌入式 shell_elf.inc
+#include "fs.h"
 #include "user_program.h"
 
 #define SYS_WRITE 1
@@ -31,6 +32,21 @@ struct process_info {
     int exit_status;
     int is_background;
     char name[PROCESS_NAME_MAX_LEN];
+};
+
+// 用户态 shell 复用同一份只读文件清单，但只保留显示所需的路径/内容/大小字段。
+struct shell_builtin_text_file {
+    const char* path;
+    const char* content;
+    unsigned int size;
+};
+
+// 用户态 shell 侧的教学版只读文件视图：直接复用共享宏定义，避免 ls/cat 各自维护散落文件名。
+static const struct shell_builtin_text_file shell_builtin_files[] = {
+#define SHELL_BUILD_TEXT_FILE(path_text, content_text) \
+    {path_text, content_text, (unsigned int)(sizeof(content_text) - 1)},
+    MINIOS_BUILTIN_TEXT_FILE_LIST(SHELL_BUILD_TEXT_FILE)
+#undef SHELL_BUILD_TEXT_FILE
 };
 
 // 最小 int 0x80 包装：保持和当前教学版用户程序 ABI 一致。
@@ -239,6 +255,85 @@ static int shell_atoi(const char* text, int* out_value) {
     return 1;
 }
 
+// 教学版文件名匹配：兼容 `/readme.txt`、`readme.txt` 以及不便输入标点时的 `readmetxt` 简写。
+static int shell_file_name_matches(const char* input, const char* path) {
+    int input_index = 0;
+    int path_index = 0;
+
+    if (input == (const char*)0 || path == (const char*)0) {
+        return 0;
+    }
+
+    if (input[0] == '/') {
+        input_index++;
+    }
+    if (path[0] == '/') {
+        path_index++;
+    }
+
+    for (;;) {
+        while (input[input_index] == '.') {
+            input_index++;
+        }
+        while (path[path_index] == '.') {
+            path_index++;
+        }
+
+        if (input[input_index] == '\0' || path[path_index] == '\0') {
+            break;
+        }
+
+        if (input[input_index] != path[path_index]) {
+            return 0;
+        }
+
+        input_index++;
+        path_index++;
+    }
+
+    while (input[input_index] == '.') {
+        input_index++;
+    }
+    while (path[path_index] == '.') {
+        path_index++;
+    }
+
+    return input[input_index] == '\0' && path[path_index] == '\0';
+}
+
+// 返回当前教学版只读文本文件数量；文件清单仍只维护在共享宏里一份。
+static int shell_builtin_file_count(void) {
+    return (int)(sizeof(shell_builtin_files) / sizeof(shell_builtin_files[0]));
+}
+
+// 按索引读取共享只读文本文件，供 ls 遍历输出。
+static const struct shell_builtin_text_file* shell_builtin_file_at(int index) {
+    if (index < 0 || index >= (int)(sizeof(shell_builtin_files) / sizeof(shell_builtin_files[0]))) {
+        return (const struct shell_builtin_text_file*)0;
+    }
+
+    return &shell_builtin_files[index];
+}
+
+// 按路径查找共享只读文本文件，供 cat 输出内容。
+static const struct shell_builtin_text_file* shell_builtin_file_find(const char* path) {
+    int i;
+
+    if (path == (const char*)0 || path[0] == '\0') {
+        return (const struct shell_builtin_text_file*)0;
+    }
+
+    for (i = 0; i < shell_builtin_file_count(); i++) {
+        const struct shell_builtin_text_file* file = shell_builtin_file_at(i);
+
+        if (file != (const struct shell_builtin_text_file*)0 && shell_file_name_matches(path, file->path)) {
+            return file;
+        }
+    }
+
+    return (const struct shell_builtin_text_file*)0;
+}
+
 // 逐字符读入一行，并在本地回显。
 static int shell_read_line(char* buffer, int capacity) {
     int length = 0;
@@ -418,6 +513,51 @@ static void shell_cmd_uptime(void) {
     user_write("\n");
 }
 
+// 输出教学版只读文件表：当前只列出内置文本文件，不做真实目录遍历。
+static void shell_cmd_ls(int argc) {
+    int i;
+
+    if (argc > 1) {
+        user_write("ls: directory args not supported\n");
+        return;
+    }
+
+    user_write("NAME              SIZE\n");
+    for (i = 0; i < shell_builtin_file_count(); i++) {
+        const struct shell_builtin_text_file* file = shell_builtin_file_at(i);
+
+        if (file == (const struct shell_builtin_text_file*)0) {
+            continue;
+        }
+
+        user_write(file->path);
+        user_write("       ");
+        shell_write_uint((int)file->size);
+        user_write("\n");
+    }
+}
+
+// 输出指定只读文本文件内容；当前不支持多文件 cat、重定向和路径规范化。
+static void shell_cmd_cat(int argc, char** argv) {
+    const struct shell_builtin_text_file* file;
+
+    if (argc <= 1) {
+        user_write("Usage: cat <file>\n");
+        return;
+    }
+
+    file = shell_builtin_file_find(argv[1]);
+    if (file == (const struct shell_builtin_text_file*)0) {
+        user_write("cat: file not found\n");
+        return;
+    }
+
+    user_write(file->content);
+    if (file->size > 0 && file->content[file->size - 1] != '\n') {
+        user_write("\n");
+    }
+}
+
 // 输出 ps 结果，并显示 AGE / RUNS 列。
 static void shell_cmd_ps(void) {
     int index = 0;
@@ -541,6 +681,8 @@ static void shell_cmd_help(void) {
     user_write("  jobs\n");
     user_write("  wait [pid]\n");
     user_write("  kill <pid>\n");
+    user_write("  ls\n");
+    user_write("  cat <file>\n");
     user_write("  ps    show process table with age/runs\n");
     user_write("  uptime\n");
     user_write("  ticks\n");
@@ -596,6 +738,16 @@ void _start(void) {
 
         if (shell_streq(argv[0], "jobs")) {
             shell_cmd_jobs();
+            continue;
+        }
+
+        if (shell_streq(argv[0], "ls")) {
+            shell_cmd_ls(argc);
+            continue;
+        }
+
+        if (shell_streq(argv[0], "cat")) {
+            shell_cmd_cat(argc, argv);
             continue;
         }
 

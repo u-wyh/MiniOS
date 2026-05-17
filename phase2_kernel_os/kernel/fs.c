@@ -240,9 +240,22 @@ static struct file file_table[] = {
     {"forkexec", (void*)forkexec_elf, (uint32_t)sizeof(forkexec_elf)}
 };
 
+// 教学版只读文本文件表：当前内容直接编译进内核，只服务最小 ls/cat 语义。
+static const struct builtin_text_file builtin_text_files[] = {
+#define MINIOS_BUILD_TEXT_FILE(path_text, content_text) \
+    {path_text, content_text, (uint32_t)(sizeof(content_text) - 1)},
+    MINIOS_BUILTIN_TEXT_FILE_LIST(MINIOS_BUILD_TEXT_FILE)
+#undef MINIOS_BUILD_TEXT_FILE
+};
+
 // 统计文件数量，避免硬编码
 static uint32_t fs_count(void) {
     return (uint32_t)(sizeof(file_table) / sizeof(file_table[0]));
+}
+
+// 统计内置只读文本文件数量，避免在 ls/cat 路径里手写魔法常量。
+uint32_t fs_builtin_file_count(void) {
+    return (uint32_t)(sizeof(builtin_text_files) / sizeof(builtin_text_files[0]));
 }
 
 // 最小字符串比较，仅用于文件名匹配
@@ -274,6 +287,32 @@ struct file* fs_find(const char* name) {
     }
 
     return (struct file*)0;
+}
+
+// 按索引返回内置只读文本文件；越界时安全返回空指针。
+const struct builtin_text_file* fs_builtin_file_at(uint32_t index) {
+    if (index >= fs_builtin_file_count()) {
+        return (const struct builtin_text_file*)0;
+    }
+
+    return &builtin_text_files[index];
+}
+
+// 按路径查找内置只读文本文件，供 shell 的 cat 和后续 open/read 雏形复用。
+const struct builtin_text_file* fs_builtin_file_find(const char* path) {
+    uint32_t i;
+
+    if (path == (const char*)0 || path[0] == '\0') {
+        return (const struct builtin_text_file*)0;
+    }
+
+    for (i = 0; i < fs_builtin_file_count(); i++) {
+        if (fs_str_equal(path, builtin_text_files[i].path) != 0) {
+            return &builtin_text_files[i];
+        }
+    }
+
+    return (const struct builtin_text_file*)0;
 }
 
 // 列出当前所有文件，供 shell 的 ls 命令使用
