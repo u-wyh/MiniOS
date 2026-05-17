@@ -61,7 +61,8 @@ char keyboard_read_char_blocking(void) {
     }
 }
 
-// 将最小 Set 1 扫描码映射成小写字母或数字
+// 将最小 Set 1 扫描码映射成教学版 shell 需要的小写字母、数字和少量标点。
+// 当前先补齐文件名和路径常用字符，例如 '.' 和 '/'。
 static char scancode_to_ascii(unsigned char scancode) {
     switch (scancode) {
         case 0x1E: return 'a';
@@ -101,6 +102,8 @@ static char scancode_to_ascii(unsigned char scancode) {
         case 0x09: return '8';
         case 0x0A: return '9';
         case 0x39: return ' ';
+        case 0x34: return '.';
+        case 0x35: return '/';
         default:   return '\0';
     }
 }
