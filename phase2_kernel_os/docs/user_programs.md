@@ -193,7 +193,41 @@ ps
 - `kill 9999` 这类不存在 pid 会报 `Kill failed`
 - 当前不支持 `kill -9` 或其它信号编号
 
-## 13. 当前限制
+## 13. shell jobs 命令
+
+当前 shell 支持最小后台任务观察命令：
+
+```text
+jobs
+```
+
+典型使用方式：
+
+```text
+start loop
+jobs
+ps
+kill <loop_pid>
+jobs
+wait
+jobs
+```
+
+`jobs` 和 `ps` 的区别是：
+
+- `ps`：显示系统全局进程表，包括 init、shell 和普通用户程序
+- `jobs`：只显示当前 shell 通过 `start` 创建的后台子进程
+
+当前 `jobs` 显示字段：
+
+- `JOB`：本次遍历临时生成的教学版显示编号
+- `PID`：后台任务进程 pid
+- `STATE`：当前进程状态
+- `NAME`：程序名
+
+`jobs` 只负责观察，不负责真正回收进程。后台任务退出或被 kill 后，仍需要通过 `wait` 或 init/reaper 完成回收。
+
+## 14. 当前限制
 
 1. 暂不支持磁盘文件系统
 2. 暂不支持 `PATH`
@@ -205,4 +239,5 @@ ps
 8. 暂不支持信号、进程组、session 和 TTY 控制
 9. 当前 reparent 只维护 `parent_pid`，不维护完整子链表
 10. 当前 kill 不是完整信号系统，不支持进程组 kill 和权限模型
-11. 内置程序镜像仍由内核预先编译并嵌入
+11. 当前 jobs 不是完整 job control，不支持 `fg/bg` 和 Ctrl+Z
+12. 内置程序镜像仍由内核预先编译并嵌入

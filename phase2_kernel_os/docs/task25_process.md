@@ -1172,3 +1172,43 @@ running / ready / sleeping
 - 不支持 `kill -9`
 - 不支持进程组 kill
 - 不支持权限模型
+
+## 39. Task55：Shell 前后台任务观察 / jobs 命令整理
+
+### jobs 的当前语义
+
+`jobs` 是当前 shell 的后台任务视角：
+
+```text
+jobs
+    -> 遍历 process_info
+        -> 过滤 parent_pid == 当前 shell pid
+        -> 过滤 is_background == 1
+        -> 输出 JOB / PID / STATE / NAME
+```
+
+它只观察当前 shell 通过 `start` 创建的后台子进程，不显示 init、shell 自己，也不显示前台 `run` 程序。
+
+### jobs 和 ps 的区别
+
+- `ps`：系统全局进程表视角，显示所有仍在进程表中的进程
+- `jobs`：当前 shell 管理视角，只显示当前 shell 的后台任务
+
+所以 `ps` 更像内核调试窗口，而 `jobs` 更像 shell 的任务列表。
+
+### jobs 与 start / wait / reaper
+
+- `start <program>` 创建后台子进程，并通过 `is_background` 标记它
+- `jobs` 读取这个标记并显示后台任务
+- `jobs` 不释放资源，不替代 `wait`
+- 后台任务退出或被 kill 后，可以先在 jobs 中看到 `ZOMBIE`
+- `wait` 或 init/reaper 回收后，jobs 不再显示该任务
+
+### 当前限制
+
+- 暂不实现 `fg`
+- 暂不实现 `bg`
+- 暂不支持 Ctrl+Z
+- 暂不支持 `SIGSTOP/SIGCONT`
+- 暂不支持进程组、session 和 tty 前台控制
+- `JOB` 列只是本次遍历生成的显示编号，不是持久 job id

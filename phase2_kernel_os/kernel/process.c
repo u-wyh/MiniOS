@@ -1592,6 +1592,7 @@ int process_get_info_by_index(int index, struct process_info* out) {
             }
             out->runs = process_table[i].schedule_count;
             out->exit_status = process_table[i].exit_status;
+            out->is_background = process_table[i].is_background;
             process_copy_name(out->name, process_table[i].name, PROCESS_NAME_MAX_LEN);
             return 0;
         }

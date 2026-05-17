@@ -35,6 +35,8 @@ struct process_info {
     uint32_t runs;
     // exit_status 记录最近一次退出码；对仍在运行的普通进程通常保持为 0。
     int exit_status;
+    // is_background 表示该进程是否由 shell 以 start 方式作为后台任务启动。
+    int is_background;
     char name[PROCESS_NAME_MAX_LEN];
 };
 

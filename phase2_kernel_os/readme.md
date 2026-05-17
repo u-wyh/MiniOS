@@ -2131,3 +2131,29 @@ TODO：
 - 不支持进程组 kill
 - 不支持权限模型
 - 不允许 kill init，也不允许当前 shell 直接 kill 自己
+
+## ✅ Task55：Shell 前后台任务观察 / jobs 命令整理
+
+本轮目标：
+
+- 增加 shell `jobs` 命令，用当前 shell 的后台任务视角观察进程。
+- 区分 `ps` 的全局进程表视角和 `jobs` 的 shell 后台子进程视角。
+- 让 `start loop` 后可以用 `jobs` 直接看到后台任务 pid、状态和程序名。
+
+已完成：
+
+- `process_info` 摘要新增 `is_background`，供用户态 shell 判断后台任务。
+- shell 新增 `jobs` 命令：
+  - 无后台任务时输出 `No background jobs`
+  - 有后台任务时显示 `JOB / PID / STATE / NAME`
+- `jobs` 只显示当前 shell 直接管理的后台子进程，不显示 init、shell 自身和前台 `run` 程序。
+- `jobs` 只做观察，不负责释放资源；退出/被 kill 的后台任务仍由 `wait` 或 init/reaper 回收。
+
+当前限制：
+
+- 不实现 `fg`
+- 不实现 `bg`
+- 不实现 Ctrl+Z
+- 不支持 `SIGSTOP/SIGCONT`
+- 不支持进程组、session 和 tty 前台控制
+- 当前 `JOB` 列只是按遍历顺序生成的教学版显示编号，不是持久 job id

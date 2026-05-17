@@ -27,6 +27,7 @@ struct process_info {
     unsigned int age_ticks;
     unsigned int runs;
     int exit_status;
+    int is_background;
     char name[PROCESS_NAME_MAX_LEN];
 };
 
@@ -146,6 +147,23 @@ static int shell_streq(const char* left, const char* right) {
     }
 
     return left[i] == '\0' && right[i] == '\0';
+}
+
+// 输出进程状态名：ps 和 jobs 共用同一套教学版状态展示，避免两处状态文案不一致。
+static void shell_write_state(int state) {
+    if (state == 1) {
+        user_write("READY");
+    } else if (state == 2) {
+        user_write("RUNNING");
+    } else if (state == 3) {
+        user_write("ZOMBIE");
+    } else if (state == 4) {
+        user_write("BLOCKED");
+    } else if (state == 5) {
+        user_write("SLEEPING");
+    } else {
+        user_write("UNKNOWN");
+    }
 }
 
 // 统计字符串长度；若长度达到上限仍未结束，则返回 -1 表示超长。
@@ -405,19 +423,7 @@ static void shell_cmd_ps(void) {
         shell_write_uint(info.ppid);
         user_write("     ");
 
-        if (info.state == 1) {
-            user_write("READY");
-        } else if (info.state == 2) {
-            user_write("RUNNING");
-        } else if (info.state == 3) {
-            user_write("ZOMBIE");
-        } else if (info.state == 4) {
-            user_write("BLOCKED");
-        } else if (info.state == 5) {
-            user_write("SLEEPING");
-        } else {
-            user_write("UNKNOWN");
-        }
+        shell_write_state(info.state);
 
         user_write("   ");
         shell_write_uint((int)info.age_ticks);
@@ -429,6 +435,50 @@ static void shell_cmd_ps(void) {
         user_write(info.name);
         user_write("\n");
         index++;
+    }
+}
+
+// 输出当前 shell 直接管理的后台子进程；jobs 只是观察，不负责回收资源。
+static void shell_cmd_jobs(void) {
+    int index = 0;
+    int shell_pid = 0;
+    int job_id = 1;
+    struct process_info info;
+
+    while (user_ps_get(index, &info) == 0) {
+        if (info.state == 2 && shell_streq(info.name, "shell")) {
+            shell_pid = info.pid;
+            break;
+        }
+        index++;
+    }
+
+    if (shell_pid == 0) {
+        user_write("No background jobs\n");
+        return;
+    }
+
+    index = 0;
+    while (user_ps_get(index, &info) == 0) {
+        if (info.ppid == shell_pid && info.is_background != 0) {
+            if (job_id == 1) {
+                user_write("JOB  PID  STATE     NAME\n");
+            }
+            shell_write_uint(job_id);
+            user_write("    ");
+            shell_write_uint(info.pid);
+            user_write("    ");
+            shell_write_state(info.state);
+            user_write("   ");
+            user_write(info.name);
+            user_write("\n");
+            job_id++;
+        }
+        index++;
+    }
+
+    if (job_id == 1) {
+        user_write("No background jobs\n");
     }
 }
 
@@ -481,6 +531,7 @@ static void shell_cmd_help(void) {
     user_write("  echo <text>\n");
     user_write("  run <program> [args]\n");
     user_write("  start <program> [args]\n");
+    user_write("  jobs\n");
     user_write("  wait [pid]\n");
     user_write("  kill <pid>\n");
     user_write("  ps    show process table with age/runs\n");
@@ -533,6 +584,11 @@ void _start(void) {
 
         if (shell_streq(argv[0], "ps")) {
             shell_cmd_ps();
+            continue;
+        }
+
+        if (shell_streq(argv[0], "jobs")) {
+            shell_cmd_jobs();
             continue;
         }
 

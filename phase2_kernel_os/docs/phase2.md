@@ -44,3 +44,11 @@
 - 被 kill 的进程不再被调度器选中，后续仍通过父进程 `wait/waitpid/wait_any` 或 init/reaper 回收。
 - 当前明确拒绝 kill init，也拒绝当前 shell 直接 kill 自己。
 - 当前 `kill` 不是完整 Unix/Linux 信号系统，不支持 `kill -9`、进程组 kill 或权限模型。
+
+## Task55：Shell 前后台任务观察 / jobs 命令整理
+
+- 新增 shell `jobs` 命令，用于观察当前 shell 直接管理的后台任务。
+- `jobs` 基于 `parent_pid` 和 `is_background` 过滤，只显示由当前 shell `start` 出来的后台子进程。
+- `jobs` 输出 `JOB / PID / STATE / NAME`，其中 `JOB` 是当前遍历生成的教学版显示编号。
+- `jobs` 不负责回收资源；后台任务退出或被 kill 后，仍由 `wait` 或 init/reaper 回收。
+- 当前不实现完整 job control，不支持 `fg/bg`、Ctrl+Z、进程组、session 或 tty 前台控制。
