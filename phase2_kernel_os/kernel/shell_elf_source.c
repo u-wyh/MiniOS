@@ -803,7 +803,7 @@ static void shell_cmd_help(void) {
     user_write("  hello\n");
     user_write("  exit\n");
     user_write("programs:\n");
-    user_write("  hello echo loop loop_exit sleep_test\n");
+    user_write("  hello echo cat loop loop_exit sleep_test\n");
 }
 
 // 用户态 shell 主循环：保持最小交互式行为即可。

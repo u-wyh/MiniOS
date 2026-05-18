@@ -40,7 +40,7 @@
 
 ### cat
 
-`cat <file>` 当前直接输出指定内置只读文件内容。
+`cat <file>` 当前输出指定内置只读文件内容。
 
 为了降低教学环境里的输入门槛，当前还兼容：
 
@@ -87,7 +87,29 @@ path
 
 当前 fd 从 `3` 开始分配，`0/1/2` 仅保留给后续更完整的标准输入输出语义。
 
-## 6. 当前限制
+## 6. 用户态 cat 与文件 syscall
+
+在 Task59 中，文件访问链路继续往用户态推进：
+
+```text
+run cat /readme.txt
+    -> exec 用户态 cat
+        -> SYS_OPEN
+            -> SYS_READ
+                -> SYS_WRITE
+                    -> SYS_CLOSE
+```
+
+这里要区分两种 `cat`：
+
+- `cat /readme.txt`
+  - shell 内建命令
+- `run cat /readme.txt`
+  - 用户态 `cat` 程序
+
+用户态 `cat` 不能直接访问内核文件表，只能通过 syscall 拿到 fd 并循环读取。
+
+## 7. 当前限制
 
 1. 当前只支持只读普通文件
 2. 暂不支持写入
@@ -96,3 +118,4 @@ path
 5. 暂不支持 dup/dup2
 6. 暂不完整支持 stdin/stdout/stderr
 7. 暂不支持真实磁盘与目录树
+8. 用户指针检查仍是教学版最小实现

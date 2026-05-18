@@ -109,3 +109,20 @@
 5. 当前 `cat <file>` 已通过这套 fd 层读取文件
 
 它不是完整 Unix 文件系统接口，仍不支持写入、目录树、inode、block cache 或真实磁盘。
+
+当前用户态 `cat` 也已经通过这组 syscall 工作：
+
+```text
+run cat /readme.txt
+    -> SYS_OPEN(path)
+    -> SYS_READ(fd, buf, size)
+    -> SYS_WRITE(buf)
+    -> SYS_CLOSE(fd)
+```
+
+用户指针限制：
+
+1. `SYS_OPEN` 需要从用户态读取路径字符串
+2. `SYS_READ` 需要把数据写回用户缓冲区
+3. 当前仍依赖教学版共享映射和最小长度约束
+4. 暂无完整用户指针合法性校验与隔离防护

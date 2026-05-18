@@ -2247,3 +2247,30 @@ TODO：
 - 当前文件仍来自内核静态只读文件表，不来自真实磁盘。
 - 暂不支持写入、create/delete、目录树、权限、inode、block cache、pipe fd、dup/dup2。
 - 当前只实现只读普通文件 fd，不完整统一 stdin/stdout/stderr。
+
+## ✅ Task59：用户态 cat 程序 / open-read-close syscall 对接
+
+本轮目标：
+
+- 在 Task58 的 fd 层基础上新增用户态 `cat` 程序。
+- 让 `run cat /readme.txt` 通过 syscall 访问内核只读文件。
+- 明确区分 shell 内建 `cat` 和用户态 `cat`。
+
+已完成：
+
+- 新增用户态 `cat` 程序镜像，并加入统一 `program_id` / 程序名映射。
+- `run cat /readme.txt` 与 `run cat /programs` 均可工作。
+- 用户态 `cat` 通过：
+  - `SYS_OPEN`
+  - `SYS_READ`
+  - `SYS_CLOSE`
+  读取内置只读文件。
+- 用户态 `cat` 通过 `SYS_WRITE` 输出读取结果。
+- `/programs` 文件内容已同步加入 `cat`。
+- shell 内建 `cat <file>` 继续保留；`run cat <file>` 则走用户态程序链路。
+
+当前限制：
+
+- 当前仍只支持内核静态只读文件，不支持真实磁盘。
+- 暂不支持写入、create/delete、目录树、权限、inode、block cache、pipe fd、dup/dup2。
+- 用户指针检查仍是教学版最小实现，后续可以继续增强。

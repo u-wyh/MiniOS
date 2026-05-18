@@ -66,6 +66,8 @@ static const unsigned char info_elf[] = {
 #include "loop_exit_elf.inc"
 // sleep_test 文件：持续输出并主动 sleep，便于观察 SLEEPING 状态和 AGE 增长
 #include "sleep_test_elf.inc"
+// cat 文件：用户态通过 open/read/close syscall 读取内置只读文件并输出
+#include "cat_elf.inc"
 
 
 // fork 文件：父进程 fork 后等待子进程退出，子进程输出后以状态码 7 退出
@@ -235,6 +237,7 @@ static struct file file_table[] = {
     {"loop", (void*)loop_elf, (uint32_t)sizeof(loop_elf)},
     {"loop_exit", (void*)loop_exit_elf, (uint32_t)sizeof(loop_exit_elf)},
     {"sleep_test", (void*)sleep_test_elf, (uint32_t)sizeof(sleep_test_elf)},
+    {"cat", (void*)cat_elf, (uint32_t)sizeof(cat_elf)},
     {"fork", (void*)fork_elf, (uint32_t)sizeof(fork_elf)},
     {"execchild", (void*)execchild_elf, (uint32_t)sizeof(execchild_elf)},
     {"forkexec", (void*)forkexec_elf, (uint32_t)sizeof(forkexec_elf)}

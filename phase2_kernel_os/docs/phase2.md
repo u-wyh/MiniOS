@@ -83,3 +83,13 @@
   - `close(fd)`
 - `cat <file>` 已优先通过 fd 层读取，而不是直接输出静态字符串。
 - 当前仍不是完整文件系统，不涉及真实磁盘、写入、目录树、inode 或 block cache。
+
+## Task59：用户态 cat 程序 / open-read-close syscall 对接
+
+- 当前继续把 Task58 的 fd 层暴露给用户态程序。
+- 新增用户态 `cat`，支持 `run cat /readme.txt`。
+- 用户态 `cat` 通过 `sys_open -> sys_read -> sys_write -> sys_close` 访问内置只读文件。
+- shell 内建 `cat` 仍保留，因此：
+  - `cat /readme.txt` 是 shell 内建命令
+  - `run cat /readme.txt` 是用户态程序链路
+- 这一步让文件访问不再只是 shell 内建功能，而开始具备用户态文件 syscall 雏形。

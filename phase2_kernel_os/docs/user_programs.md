@@ -304,7 +304,32 @@ open(path)
 
 也就是说，用户看到的 `cat /readme.txt` 效果保持不变，但内部已经开始复用教学版 fd 语义。
 
-## 17. 当前限制
+## 17. 用户态 cat 程序
+
+在 Task59 中，MiniOS 新增了用户态 `cat` 程序。
+
+它和 shell 内建 `cat` 的区别是：
+
+- `cat /readme.txt`
+  - 走 shell 内建命令
+- `run cat /readme.txt`
+  - 走用户态程序
+
+用户态 `cat` 的最小链路是：
+
+```text
+run cat /readme.txt
+    -> shell 解析 argv
+    -> exec 启动 cat
+    -> SYS_OPEN
+    -> SYS_READ
+    -> SYS_WRITE
+    -> SYS_CLOSE
+```
+
+因此，文件访问不再只是 shell 自己的内建逻辑，而开始具备“用户程序通过 syscall 访问文件”的雏形。
+
+## 18. 当前限制
 
 1. 暂不支持磁盘文件系统
 2. 暂不支持 `PATH`
@@ -320,4 +345,5 @@ open(path)
 12. 当前 uptime 不是 RTC / wall clock，不显示真实日期时间
 13. 当前 `ls/cat` 只读取内核内置只读文件，不支持真实磁盘文件
 14. 当前 fd 只支持只读普通文件，不支持写入、pipe、dup/dup2
-15. 内置程序镜像仍由内核预先编译并嵌入
+15. 用户态 `cat` 仍只支持单文件、只读、无重定向的教学版语义
+16. 内置程序镜像仍由内核预先编译并嵌入
