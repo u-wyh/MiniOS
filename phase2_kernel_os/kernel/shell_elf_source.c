@@ -16,12 +16,18 @@
 #define SYS_SET_BACKGROUND 18
 #define SYS_GET_TICKS 19
 #define SYS_CLEAR_SCREEN 20
+#define SYS_OPEN 21
+#define SYS_READ 22
+#define SYS_CLOSE 23
 // 当前内核默认把 PIT 配置为 20Hz，因此 1 tick 约等于 50ms。
 #define SHELL_UPTIME_TICKS_PER_SECOND 20
 
 #define PROCESS_NAME_MAX_LEN 16
 #define SHELL_ARGV_MAX (USER_PROGRAM_MAX_ARGS + 1)
 #define SHELL_LINE_MAX 128
+#define SHELL_CAT_CHUNK_SIZE 32
+// 与内核当前教学版 fd 上限保持一致，仅供用户态 shell 内部 fdtest 使用。
+#define SHELL_FDTEST_MAX_OPEN 8
 
 struct process_info {
     int pid;
@@ -147,6 +153,21 @@ static int user_set_background(int pid, int is_background) {
 // 请求内核清空当前 VGA 文本屏幕，供用户态 clear 命令复用。
 static void user_clear_screen(void) {
     user_syscall0(SYS_CLEAR_SCREEN);
+}
+
+// 打开一个教学版只读文件，成功返回 fd。
+static int user_open(const char* path) {
+    return user_syscall1(SYS_OPEN, (int)path);
+}
+
+// 从 fd 读取最多 size 字节到用户缓冲区，成功返回字节数，EOF 返回 0。
+static int user_read(int fd, char* buffer, int size) {
+    return user_syscall3(SYS_READ, fd, (int)buffer, size);
+}
+
+// 关闭一个已打开 fd。
+static int user_close(int fd) {
+    return user_syscall1(SYS_CLOSE, fd);
 }
 
 // 比较两个字符串是否相等。
@@ -537,25 +558,117 @@ static void shell_cmd_ls(int argc) {
     }
 }
 
-// 输出指定只读文本文件内容；当前不支持多文件 cat、重定向和路径规范化。
+// 输出指定只读文本文件内容；当前优先通过 open/read/close 走教学版 fd 层。
 static void shell_cmd_cat(int argc, char** argv) {
-    const struct shell_builtin_text_file* file;
+    char buffer[SHELL_CAT_CHUNK_SIZE + 1];
+    int fd;
+    int read_result;
 
     if (argc <= 1) {
         user_write("Usage: cat <file>\n");
         return;
     }
 
-    file = shell_builtin_file_find(argv[1]);
-    if (file == (const struct shell_builtin_text_file*)0) {
+    if (shell_builtin_file_find(argv[1]) == (const struct shell_builtin_text_file*)0) {
         user_write("cat: file not found\n");
         return;
     }
 
-    user_write(file->content);
-    if (file->size > 0 && file->content[file->size - 1] != '\n') {
-        user_write("\n");
+    fd = user_open(argv[1]);
+    if (fd < 0) {
+        user_write("cat: open failed\n");
+        return;
     }
+
+    for (;;) {
+        read_result = user_read(fd, buffer, SHELL_CAT_CHUNK_SIZE);
+        if (read_result < 0) {
+            user_write("cat: read failed\n");
+            user_close(fd);
+            return;
+        }
+
+        if (read_result == 0) {
+            break;
+        }
+
+        buffer[read_result] = '\0';
+        user_write(buffer);
+    }
+
+    if (user_close(fd) < 0) {
+        user_write("cat: close failed\n");
+    }
+}
+
+// 内部 fd 自检：验证 EOF、close 后 read 失败，以及 fd 表满后 open 失败。
+static void shell_cmd_fdtest(void) {
+    char buffer[SHELL_CAT_CHUNK_SIZE + 1];
+    int fds[SHELL_FDTEST_MAX_OPEN + 1];
+    int i;
+    int fd;
+    int read_result;
+
+    fd = user_open("readmetxt");
+    if (fd < 0) {
+        user_write("fdtest open failed\n");
+        return;
+    }
+
+    for (;;) {
+        read_result = user_read(fd, buffer, SHELL_CAT_CHUNK_SIZE);
+        if (read_result < 0) {
+            user_write("fdtest read failed\n");
+            user_close(fd);
+            return;
+        }
+        if (read_result == 0) {
+            break;
+        }
+    }
+
+    if (user_read(fd, buffer, SHELL_CAT_CHUNK_SIZE) != 0) {
+        user_write("fdtest eof failed\n");
+        user_close(fd);
+        return;
+    }
+
+    if (user_close(fd) < 0) {
+        user_write("fdtest close failed\n");
+        return;
+    }
+
+    if (user_read(fd, buffer, SHELL_CAT_CHUNK_SIZE) >= 0) {
+        user_write("fdtest read after close failed\n");
+        return;
+    }
+
+    for (i = 0; i < SHELL_FDTEST_MAX_OPEN; i++) {
+        fds[i] = user_open("programs");
+        if (fds[i] < 0) {
+            user_write("fdtest table fill failed\n");
+            while (i > 0) {
+                i--;
+                user_close(fds[i]);
+            }
+            return;
+        }
+    }
+
+    fds[SHELL_FDTEST_MAX_OPEN] = user_open("programs");
+    if (fds[SHELL_FDTEST_MAX_OPEN] >= 0) {
+        user_write("fdtest full check failed\n");
+        for (i = 0; i <= SHELL_FDTEST_MAX_OPEN; i++) {
+            user_close(fds[i]);
+        }
+        return;
+    }
+
+    for (i = 0; i < SHELL_FDTEST_MAX_OPEN; i++) {
+        user_close(fds[i]);
+    }
+
+    user_write("fdtest ok\n");
 }
 
 // 输出 ps 结果，并显示 AGE / RUNS 列。
@@ -748,6 +861,11 @@ void _start(void) {
 
         if (shell_streq(argv[0], "cat")) {
             shell_cmd_cat(argc, argv);
+            continue;
+        }
+
+        if (shell_streq(argv[0], "fdtest")) {
+            shell_cmd_fdtest();
             continue;
         }
 

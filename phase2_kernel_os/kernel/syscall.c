@@ -303,6 +303,24 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    // SYS_OPEN(path)：ebx=用户态路径指针；成功返回 fd，失败返回负值。
+    if (frame->eax == SYS_OPEN) {
+        frame->eax = (unsigned int)process_open_file((const char*)frame->ebx);
+        return;
+    }
+
+    // SYS_READ(fd, buf, size)：ebx=fd，ecx=用户缓冲区，edx=读取长度；成功返回字节数，EOF 返回 0。
+    if (frame->eax == SYS_READ) {
+        frame->eax = (unsigned int)process_read_file((int)frame->ebx, (char*)frame->ecx, (int)frame->edx);
+        return;
+    }
+
+    // SYS_CLOSE(fd)：ebx=fd；成功返回 0，失败返回负值。
+    if (frame->eax == SYS_CLOSE) {
+        frame->eax = (unsigned int)process_close_file((int)frame->ebx);
+        return;
+    }
+
     // 未知 syscall：当前统一返回 -1，并在控制台打印一条最小调试信息。
     print_string("unknown syscall\n");
     frame->eax = (unsigned int)-1;

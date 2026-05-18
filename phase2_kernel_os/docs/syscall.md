@@ -36,6 +36,9 @@
 | 18 | `SYS_SET_BACKGROUND` | `user_set_background` | `ebx=pid` `ecx=flag` | 成功返回 `0`，失败返回负值 | 给后台任务打标记 |
 | 19 | `SYS_GET_TICKS` | `user_get_ticks` | 无 | 当前系统 tick 数 | 当前 `uptime/ticks` 命令主要使用的时间接口 |
 | 20 | `SYS_CLEAR_SCREEN` | `user_clear_screen` | 无 | `0` / 负值 | 清空 VGA 文本屏幕 |
+| 21 | `SYS_OPEN` | `user_open` | `ebx=path` | `fd` 或负值 | 打开一个内置只读文件 |
+| 22 | `SYS_READ` | `user_read` | `ebx=fd` `ecx=buf` `edx=size` | 字节数 / `0` / 负值 | 从 fd 当前 offset 读取数据 |
+| 23 | `SYS_CLOSE` | `user_close` | `ebx=fd` | `0` 或负值 | 关闭一个已打开 fd |
 
 说明：
 
@@ -88,9 +91,21 @@
 
 1. 暂无 `errno`
 2. 暂无完整用户指针校验
-3. 暂无文件描述符表
-4. 暂无 `open/read/write` 文件接口
+3. 当前只实现教学版最小 fd 表
+4. 当前只实现教学版 `open/read/close`，仍无真实磁盘文件接口
 5. `exec` 仍基于内置 `program_id`
 6. `argv` 仍是教学版实现，参数暂存在 PCB，而不是真正按完整用户栈 ABI 组织
 7. 部分 syscall 仍带有教学调试性质，例如 `sleep_pid`
 8. Phase3 若引入更真实文件系统和用户程序加载，syscall ABI 仍可能继续演进
+
+## 7. SYS_OPEN / SYS_READ / SYS_CLOSE 当前语义
+
+当前文件 syscall 只服务于内置只读文本文件：
+
+1. `SYS_OPEN(path)`：成功返回 fd，失败返回负值
+2. fd 从 `3` 开始分配
+3. `SYS_READ(fd, buf, size)`：成功返回读取字节数，EOF 返回 `0`
+4. `SYS_CLOSE(fd)`：成功返回 `0`
+5. 当前 `cat <file>` 已通过这套 fd 层读取文件
+
+它不是完整 Unix 文件系统接口，仍不支持写入、目录树、inode、block cache 或真实磁盘。

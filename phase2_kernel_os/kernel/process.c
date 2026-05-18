@@ -33,6 +33,7 @@ static void process_activate_user_image(struct process* proc);
 static void process_print_uint(unsigned int value);
 // 前向声明：教学版 argv 操作辅助函数，负责清空/复制 PCB 参数暂存区
 static void process_clear_user_args(struct process* proc);
+static void process_clear_fd_table(struct process* proc);
 static int process_copy_user_args(struct process* proc, int argc, const char* const* argv);
 static int process_name_equals(const char* a, const char* b);
 static void process_restore_current_user_mapping(void);
@@ -215,6 +216,7 @@ static void process_clear_slot(struct process* proc) {
     proc->create_tick = 0;
     proc->schedule_count = 0;
     process_clear_user_args(proc);
+    process_clear_fd_table(proc);
     proc->requested_exit = 0;
     proc->name = (const char*)0;
     proc->is_background = 0;
@@ -233,6 +235,21 @@ static void process_record_schedule(struct process* proc) {
     }
 
     proc->schedule_count++;
+}
+
+// 清空 PCB 中记录的教学版 fd 表；当前只重置表项，不释放静态只读文件内容。
+static void process_clear_fd_table(struct process* proc) {
+    unsigned int i;
+
+    if (proc == (struct process*)0) {
+        return;
+    }
+
+    for (i = 0; i < PROCESS_MAX_OPEN_FILES; i++) {
+        proc->fd_table[i].used = 0;
+        proc->fd_table[i].file = (const struct builtin_text_file*)0;
+        proc->fd_table[i].offset = 0;
+    }
 }
 
 // 清空 PCB 中保存的教学版 argv，避免旧程序参数泄漏到新程序上下文
@@ -1159,6 +1176,108 @@ int process_sleep_pid(int pid, unsigned int ticks) {
     return 0;
 }
 
+// 打开一个内置只读文本文件：path -> 文件对象 -> 当前进程 fd 表项。
+int process_open_file(const char* path) {
+    struct process* proc = current_process;
+    const struct builtin_text_file* file;
+    int i;
+
+    if (proc == (struct process*)0 || path == (const char*)0 || path[0] == '\0') {
+        return -1;
+    }
+
+    file = fs_builtin_file_find(path);
+    if (file == (const struct builtin_text_file*)0) {
+        return -2;
+    }
+
+    for (i = 0; i < PROCESS_MAX_OPEN_FILES; i++) {
+        if (proc->fd_table[i].used != 0) {
+            continue;
+        }
+
+        proc->fd_table[i].used = 1;
+        proc->fd_table[i].file = file;
+        proc->fd_table[i].offset = 0;
+        return PROCESS_FD_BASE + i;
+    }
+
+    return -3;
+}
+
+// 从当前进程已打开的只读 fd 读取数据，成功返回字节数，读到 EOF 返回 0。
+int process_read_file(int fd, char* user_buf, int size) {
+    struct process* proc = current_process;
+    struct process_fd_entry* entry;
+    uint32_t remain;
+    uint32_t to_copy;
+    uint32_t i;
+    int slot;
+
+    if (proc == (struct process*)0 || user_buf == (char*)0) {
+        return -1;
+    }
+
+    if (size < 0) {
+        return -2;
+    }
+
+    if (size == 0) {
+        return 0;
+    }
+
+    slot = fd - PROCESS_FD_BASE;
+    if (slot < 0 || slot >= PROCESS_MAX_OPEN_FILES) {
+        return -3;
+    }
+
+    entry = &proc->fd_table[slot];
+    if (entry->used == 0 || entry->file == (const struct builtin_text_file*)0) {
+        return -4;
+    }
+
+    if (entry->offset >= entry->file->size) {
+        return 0;
+    }
+
+    remain = entry->file->size - entry->offset;
+    to_copy = (uint32_t)size;
+    if (to_copy > remain) {
+        to_copy = remain;
+    }
+
+    for (i = 0; i < to_copy; i++) {
+        user_buf[i] = entry->file->content[entry->offset + i];
+    }
+
+    entry->offset += to_copy;
+    return (int)to_copy;
+}
+
+// 关闭当前进程的一个只读 fd：只释放表项，不释放静态只读文件对象。
+int process_close_file(int fd) {
+    struct process* proc = current_process;
+    int slot;
+
+    if (proc == (struct process*)0) {
+        return -1;
+    }
+
+    slot = fd - PROCESS_FD_BASE;
+    if (slot < 0 || slot >= PROCESS_MAX_OPEN_FILES) {
+        return -2;
+    }
+
+    if (proc->fd_table[slot].used == 0) {
+        return -3;
+    }
+
+    proc->fd_table[slot].used = 0;
+    proc->fd_table[slot].file = (const struct builtin_text_file*)0;
+    proc->fd_table[slot].offset = 0;
+    return 0;
+}
+
 // 用户态 read_char 在没有输入时阻塞当前进程：保存返回现场后切换到其他 READY 进程。
 // 这里复用 waiting_pid=-1 作为“等待键盘输入”的最小标记，避免为教学版再引入额外状态字段。
 int process_read_char_syscall(struct interrupt_frame* frame, struct interrupt_frame** next_frame) {
@@ -1320,6 +1439,8 @@ int process_fork(struct interrupt_frame* frame) {
     child->create_tick = pit_get_ticks();
     child->user_argc = parent->user_argc;
     process_copy_bytes((unsigned char*)child->user_argv, (const unsigned char*)parent->user_argv, sizeof(child->user_argv));
+    // 当前教学版 fd 层先不实现 fork 继承，避免把半成品共享/引用计数语义带进来。
+    process_clear_fd_table(child);
 
     copy_result = process_copy_user_image(child, parent);
     if (copy_result != 0) {

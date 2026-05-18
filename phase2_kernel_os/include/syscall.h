@@ -35,6 +35,11 @@
 // 界面辅助
 #define SYS_CLEAR_SCREEN 20
 
+// 只读文件 fd 雏形
+#define SYS_OPEN 21
+#define SYS_READ 22
+#define SYS_CLOSE 23
+
 // int 0x80 进入内核后，栈上会按 pusha + CPU 自动压栈的顺序保存现场
 struct interrupt_frame {
     unsigned int edi;

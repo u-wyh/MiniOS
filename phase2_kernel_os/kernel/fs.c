@@ -272,6 +272,52 @@ static int fs_str_equal(const char* a, const char* b) {
     return a[i] == '\0' && b[i] == '\0';
 }
 
+// 教学版文本文件路径匹配：兼容 `/readme.txt`、`readme.txt` 和 `readmetxt`。
+static int fs_text_path_equal(const char* input, const char* path) {
+    uint32_t input_index = 0;
+    uint32_t path_index = 0;
+
+    if (input == (const char*)0 || path == (const char*)0) {
+        return 0;
+    }
+
+    if (input[0] == '/') {
+        input_index++;
+    }
+    if (path[0] == '/') {
+        path_index++;
+    }
+
+    for (;;) {
+        while (input[input_index] == '.') {
+            input_index++;
+        }
+        while (path[path_index] == '.') {
+            path_index++;
+        }
+
+        if (input[input_index] == '\0' || path[path_index] == '\0') {
+            break;
+        }
+
+        if (input[input_index] != path[path_index]) {
+            return 0;
+        }
+
+        input_index++;
+        path_index++;
+    }
+
+    while (input[input_index] == '.') {
+        input_index++;
+    }
+    while (path[path_index] == '.') {
+        path_index++;
+    }
+
+    return input[input_index] == '\0' && path[path_index] == '\0';
+}
+
 // 根据文件名查找文件，找到返回文件结构指针
 struct file* fs_find(const char* name) {
     uint32_t i;
@@ -307,7 +353,7 @@ const struct builtin_text_file* fs_builtin_file_find(const char* path) {
     }
 
     for (i = 0; i < fs_builtin_file_count(); i++) {
-        if (fs_str_equal(path, builtin_text_files[i].path) != 0) {
+        if (fs_text_path_equal(path, builtin_text_files[i].path) != 0) {
             return &builtin_text_files[i];
         }
     }

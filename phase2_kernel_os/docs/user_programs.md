@@ -292,7 +292,19 @@ cat /help.txt
 - 不支持目录树
 - 不支持 `open/read/close` syscall
 
-## 16. 当前限制
+## 16. cat 与 fd 层
+
+在 Task58 中，`cat <file>` 已经优先改成：
+
+```text
+open(path)
+    -> read(fd, buf, size)
+        -> close(fd)
+```
+
+也就是说，用户看到的 `cat /readme.txt` 效果保持不变，但内部已经开始复用教学版 fd 语义。
+
+## 17. 当前限制
 
 1. 暂不支持磁盘文件系统
 2. 暂不支持 `PATH`
@@ -307,4 +319,5 @@ cat /help.txt
 11. 当前 jobs 不是完整 job control，不支持 `fg/bg` 和 Ctrl+Z
 12. 当前 uptime 不是 RTC / wall clock，不显示真实日期时间
 13. 当前 `ls/cat` 只读取内核内置只读文件，不支持真实磁盘文件
-14. 内置程序镜像仍由内核预先编译并嵌入
+14. 当前 fd 只支持只读普通文件，不支持写入、pipe、dup/dup2
+15. 内置程序镜像仍由内核预先编译并嵌入

@@ -62,11 +62,9 @@
 6. 不支持 block cache
 7. 不支持持久化
 
-## 5. 后续计划：open / read / close
+## 5. open / read / close 雏形
 
-Task57 只是把“文件名 -> 文件对象”这层关系建立起来。
-
-下一步可以继续扩展：
+在 Task58 中，当前已经补上了教学版只读 fd 层：
 
 ```text
 path
@@ -75,4 +73,26 @@ path
             -> open/read/close
 ```
 
-也就是说，后续 `open/read/close` syscall 或内核 fd 层都可以复用这张内置只读文件表。
+当前 fd 表项最小记录：
+
+- `used`
+- `file`
+- `offset`
+
+当前语义：
+
+- `open(path)`：根据路径查找内置只读文件，成功返回 fd
+- `read(fd, buf, size)`：从当前 offset 开始读取，读完后 offset 前进
+- `close(fd)`：释放 fd 表项，关闭后 fd 失效
+
+当前 fd 从 `3` 开始分配，`0/1/2` 仅保留给后续更完整的标准输入输出语义。
+
+## 6. 当前限制
+
+1. 当前只支持只读普通文件
+2. 暂不支持写入
+3. 暂不支持 create/delete
+4. 暂不支持 pipe fd
+5. 暂不支持 dup/dup2
+6. 暂不完整支持 stdin/stdout/stderr
+7. 暂不支持真实磁盘与目录树

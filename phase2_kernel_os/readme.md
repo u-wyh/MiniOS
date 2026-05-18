@@ -2215,3 +2215,35 @@ TODO：
 - 不实现真实块设备、ext2/FAT、目录树、权限、inode 和持久化写入。
 - 本轮不实现 `open/read/close` syscall。
 - 后续可在这张只读文件表基础上继续扩展 fd 表与 `read` syscall。
+
+## ✅ Task58：只读文件描述符 / open-read-close syscall 雏形
+
+本轮目标：
+
+- 从 Task57 的内置只读文件表继续推进到教学版 fd 抽象。
+- 增加最小 `open/read/close` syscall。
+- 让 `cat <file>` 优先通过 fd 层读取文件内容。
+
+已完成：
+
+- 在 PCB 中新增每进程 fd 表，表项记录：
+  - `used`
+  - `file`
+  - `offset`
+- 当前 fd 从 `3` 开始分配，`0/1/2` 仅保留语义，不在本轮完整实现。
+- 新增：
+  - `SYS_OPEN`
+  - `SYS_READ`
+  - `SYS_CLOSE`
+- `read(fd, buf, size)` 支持：
+  - offset 前进
+  - EOF 返回 `0`
+  - 非法 fd / 已关闭 fd 安全失败
+- `close(fd)` 后 fd 失效，可被重新分配。
+- shell `cat <file>` 现在优先通过 `open -> read -> close` 读取内置只读文件。
+
+当前限制：
+
+- 当前文件仍来自内核静态只读文件表，不来自真实磁盘。
+- 暂不支持写入、create/delete、目录树、权限、inode、block cache、pipe fd、dup/dup2。
+- 当前只实现只读普通文件 fd，不完整统一 stdin/stdout/stderr。

@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include "elf.h"
+#include "fs.h"
 #include "syscall.h"
 #include "user_program.h"
 
@@ -19,6 +20,10 @@
 #define PROCESS_MAX_USER_ARGS USER_PROGRAM_MAX_ARGS
 #define PROCESS_MAX_ARG_LEN USER_PROGRAM_MAX_ARG_LEN
 #define PROCESS_NAME_MAX_LEN 16
+// 教学版每进程最大打开文件数：fd 从 3 开始分配，0/1/2 预留给 stdin/stdout/stderr。
+#define PROCESS_MAX_OPEN_FILES 8
+// 教学版文件描述符起始编号。
+#define PROCESS_FD_BASE 3
 // init 的父进程约定：0 表示没有普通父进程，是 MiniOS 进程树的根。
 #define PROCESS_ROOT_PARENT_PID 0
 // 教学版 kill 退出码：只表示“被 kill 终止”，不是 Unix/Linux 的信号编号。
@@ -38,6 +43,13 @@ struct process_info {
     // is_background 表示该进程是否由 shell 以 start 方式作为后台任务启动。
     int is_background;
     char name[PROCESS_NAME_MAX_LEN];
+};
+
+// 教学版文件描述符表项：记录 fd 是否占用、关联的只读文件对象以及当前读取偏移。
+struct process_fd_entry {
+    int used;
+    const struct builtin_text_file* file;
+    uint32_t offset;
 };
 
 // 最小 PCB：保存进程身份、父子关系、状态与用户态入口现场
@@ -74,6 +86,8 @@ struct process {
     char user_argv[PROCESS_MAX_USER_ARGS][PROCESS_MAX_ARG_LEN];
     // 记录本次退出是否来自用户态 shell 主动执行 exit 命令，供 init 决定是否自动重启 shell
     int requested_exit;
+    // 教学版每进程 fd 表：当前只用于只读文本文件，不处理 pipe、dup 和写入。
+    struct process_fd_entry fd_table[PROCESS_MAX_OPEN_FILES];
 
     // 扩展字段：记录程序名与槽位占用，便于 ps 展示与管理
     const char* name;
@@ -107,6 +121,12 @@ int process_sleep_syscall(unsigned int ticks, struct interrupt_frame* frame, str
 void process_wakeup_sleeping(unsigned int now_tick);
 // 按 pid 将目标进程设置为 SLEEPING，供 shell 的 sleep <pid> <ticks> 调试命令使用
 int process_sleep_pid(int pid, unsigned int ticks);
+// 打开一个内置只读文本文件，成功返回 fd，失败返回负值。
+int process_open_file(const char* path);
+// 从已打开 fd 读取数据到用户缓冲区，成功返回读取字节数，EOF 返回 0。
+int process_read_file(int fd, char* user_buf, int size);
+// 关闭一个已打开 fd，成功返回 0，失败返回负值。
+int process_close_file(int fd);
 // 用户态 read_char 在无输入时进入最小阻塞语义：保存现场并切换到其他 READY 进程
 int process_read_char_syscall(struct interrupt_frame* frame, struct interrupt_frame** next_frame);
 // 键盘 IRQ 到来时唤醒一个正在等待输入的进程，并把字符写入其 syscall 返回值

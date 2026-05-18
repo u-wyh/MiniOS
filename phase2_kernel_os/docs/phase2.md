@@ -69,3 +69,17 @@
 - shell 新增 `cat <file>`，用于输出指定内置只读文件内容。
 - 当前内置文件包括 `/readme.txt`、`/programs`、`/help.txt`。
 - 这一步的目标是为后续 `open/read/close` syscall 预热，而不是直接实现真实 VFS/磁盘驱动。
+
+## Task58：只读文件描述符 / open-read-close syscall 雏形
+
+- 当前在内置只读文件表基础上继续引入教学版 fd。
+- fd 表项最小记录：
+  - 是否占用
+  - 指向哪个只读文件
+  - 当前读取 offset
+- 当前已支持：
+  - `open(path)`
+  - `read(fd, buf, size)`
+  - `close(fd)`
+- `cat <file>` 已优先通过 fd 层读取，而不是直接输出静态字符串。
+- 当前仍不是完整文件系统，不涉及真实磁盘、写入、目录树、inode 或 block cache。
