@@ -168,3 +168,52 @@ run stat /readme.txt
 - `readonly-file`
 
 也就是说，当前 `stat` 不是 POSIX `stat`，只是教学版“单个文件元信息查询接口”。
+
+## 10. Task62：RAMFS 可写内存文件系统雏形
+
+在 Task62 中，MiniOS 继续把文件系统从“只读文件表”推进到“运行时可写内存文件”。
+
+当前新增的是教学版 RAMFS：
+
+1. 文件驻留在内存中
+2. 系统重启后全部丢失
+3. 当前只支持小文本文件
+4. 当前不支持真实磁盘、inode、block cache 或持久化
+
+当前 RAMFS 文件槽位最小记录：
+
+- `used`
+- `path`
+- `content`
+- `size`
+
+当前实现的最小 shell 命令：
+
+- `touch <file>`：创建空 RAMFS 文件
+- `writefile <file> <text>`：覆盖写入文本内容
+- `rm <file>`：删除 RAMFS 文件
+
+当前文件列表 syscall 现在服务于“当前可见文件列表”，也就是：
+
+1. 内置只读文件
+2. RAMFS 内存文件
+
+因此 `ls` / `run ls`、`cat` / `run cat`、`run stat` 都能看到 RAMFS 文件。
+
+当前 `stat` 的类型也扩展为：
+
+- `readonly-file`
+- `ramfs-file`
+
+## 11. 当前限制
+
+1. 暂不支持真实磁盘
+2. 暂不支持持久化
+3. 暂不支持 inode
+4. 暂不支持权限系统
+5. 暂不支持目录树
+6. 暂不支持 block cache
+7. 暂不支持 append
+8. 暂不支持 `write(fd)`
+9. 暂不支持复杂路径解析
+10. 暂不支持多进程并发写保护

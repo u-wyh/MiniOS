@@ -42,6 +42,9 @@
 | 24 | `SYS_FILE_COUNT` | `user_file_count` | 无 | 文件数量 / 负值 | 返回当前内置只读文件数量 |
 | 25 | `SYS_FILE_INFO` | `user_file_info` | `ebx=index` `ecx=buf` `edx=max_len` | 文件大小 / 负值 | 复制指定索引文件路径并返回大小 |
 | 26 | `SYS_STAT` | `user_stat` | `ebx=path` `ecx=minios_stat*` | `0` / 负值 | 查询单个只读文件的教学版元信息 |
+| 27 | `SYS_TOUCH` | `user_touch` | `ebx=path` | `0` / 负值 | 创建空 RAMFS 文件 |
+| 28 | `SYS_WRITEFILE` | `user_writefile` | `ebx=path` `ecx=text` | `0` / 负值 | 覆盖写入 RAMFS 文本文件 |
+| 29 | `SYS_RM` | `user_rm` | `ebx=path` | `0` / 负值 | 删除一个 RAMFS 文件 |
 
 说明：
 
@@ -171,3 +174,23 @@ run stat /readme.txt
 ```
 
 当前 `struct minios_stat` 不是 POSIX `struct stat`，不包含 inode、权限、uid/gid、时间戳或 block 数等字段。
+
+当前 `type` 最小支持：
+
+1. `readonly-file`
+2. `ramfs-file`
+
+## 10. SYS_TOUCH / SYS_WRITEFILE / SYS_RM 当前语义
+
+Task62 继续把“可写内存文件”暴露到 shell 用户体验中，但当前仍保持最小教学版接口：
+
+1. `SYS_TOUCH(path)`：创建空 RAMFS 文件
+2. `SYS_WRITEFILE(path, text)`：覆盖写入一个 RAMFS 文本文件
+3. `SYS_RM(path)`：删除一个 RAMFS 文件
+
+当前规则：
+
+1. 内置只读文件不能被 `SYS_WRITEFILE` 或 `SYS_RM`
+2. `SYS_WRITEFILE` 当前要求文件已存在，推荐先 `touch`
+3. RAMFS 文件内容超过上限时直接失败
+4. 这组接口当前主要服务于 shell 内建命令，尚未扩展成 `write(fd)` 语义

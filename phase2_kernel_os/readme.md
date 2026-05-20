@@ -2323,3 +2323,33 @@ TODO：
 
 - 当前仍不支持 inode、权限位、uid/gid、时间戳、block 数、软链接/硬链接。
 - 当前 `stat` 不是完整 POSIX `stat`，只返回教学版最小元信息。
+
+## ✅ Task62：RAMFS 可写内存文件系统雏形 / touch、writefile、rm
+
+本轮目标：
+
+- 在只读内置文件表之外，再新增一张教学版 RAMFS 内存文件表。
+- 支持创建、覆盖写入、删除小文本文件。
+- 让 `ls/cat/stat` 与 `run ls/run cat/run stat` 都能观察 RAMFS 文件。
+
+已完成：
+
+- 新增 RAMFS 文件表，当前文件全部驻留内存，重启后丢失。
+- 新增 shell 命令：
+  - `touch <file>`
+  - `writefile <file> <text>`
+  - `rm <file>`
+- `ls` 和 `run ls` 现在都能同时看到只读内置文件与 RAMFS 文件。
+- `cat` 和 `run cat` 现在都能读取 RAMFS 文件内容。
+- `run stat` 现在能显示 RAMFS 文件的：
+  - `Name`
+  - `Size`
+  - `Type: ramfs-file`
+- 内置只读文件仍然禁止 `writefile` 和 `rm`。
+
+当前限制：
+
+- 当前 RAMFS 不持久化，重启后文件丢失。
+- 当前只支持小文本文件，不支持真实磁盘、inode、权限、目录树、block cache。
+- 当前只支持覆盖写入，不支持 append。
+- 当前还没有 `write(fd)`，RAMFS 写入只通过 shell 内建 `writefile`。

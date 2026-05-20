@@ -8,6 +8,7 @@
 
 #define STAT_ARG_MAX_LEN 32
 #define MINIOS_FILE_TYPE_READONLY_TEXT 1
+#define MINIOS_FILE_TYPE_RAMFS_TEXT 2
 
 // 教学版 stat 结构：与内核共享最小 size/type 语义。
 struct minios_stat {
@@ -90,6 +91,10 @@ static void user_write_int(int value) {
 static const char* stat_type_name(unsigned int type) {
     if (type == MINIOS_FILE_TYPE_READONLY_TEXT) {
         return "readonly-file";
+    }
+
+    if (type == MINIOS_FILE_TYPE_RAMFS_TEXT) {
+        return "ramfs-file";
     }
 
     return "unknown";

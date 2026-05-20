@@ -341,6 +341,25 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    // SYS_TOUCH(path)：ebx=用户态路径指针；成功返回 0，失败返回负值。
+    if (frame->eax == SYS_TOUCH) {
+        frame->eax = (unsigned int)fs_create_ramfs_file((const char*)frame->ebx);
+        return;
+    }
+
+    // SYS_WRITEFILE(path, text)：ebx=用户态路径指针，ecx=用户态文本指针；
+    // 成功返回 0，失败返回负值。当前只支持覆盖写入小文本文件。
+    if (frame->eax == SYS_WRITEFILE) {
+        frame->eax = (unsigned int)fs_write_ramfs_file((const char*)frame->ebx, (const char*)frame->ecx);
+        return;
+    }
+
+    // SYS_RM(path)：ebx=用户态路径指针；成功返回 0，失败返回负值。
+    if (frame->eax == SYS_RM) {
+        frame->eax = (unsigned int)fs_remove_ramfs_file((const char*)frame->ebx);
+        return;
+    }
+
     // 未知 syscall：当前统一返回 -1，并在控制台打印一条最小调试信息。
     print_string("unknown syscall\n");
     frame->eax = (unsigned int)-1;

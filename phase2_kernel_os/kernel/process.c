@@ -247,7 +247,7 @@ static void process_clear_fd_table(struct process* proc) {
 
     for (i = 0; i < PROCESS_MAX_OPEN_FILES; i++) {
         proc->fd_table[i].used = 0;
-        proc->fd_table[i].file = (const struct builtin_text_file*)0;
+        proc->fd_table[i].path[0] = '\0';
         proc->fd_table[i].offset = 0;
     }
 }
@@ -1176,18 +1176,18 @@ int process_sleep_pid(int pid, unsigned int ticks) {
     return 0;
 }
 
-// 打开一个内置只读文本文件：path -> 文件对象 -> 当前进程 fd 表项。
+// 打开一个当前可见文本文件：path -> 当前进程 fd 表项；当前既支持只读内置文件，也支持 RAMFS 文件。
 int process_open_file(const char* path) {
     struct process* proc = current_process;
-    const struct builtin_text_file* file;
+    struct minios_stat st;
     int i;
+    int j;
 
     if (proc == (struct process*)0 || path == (const char*)0 || path[0] == '\0') {
         return -1;
     }
 
-    file = fs_builtin_file_find(path);
-    if (file == (const struct builtin_text_file*)0) {
+    if (fs_builtin_file_stat(path, &st) < 0) {
         return -2;
     }
 
@@ -1197,7 +1197,18 @@ int process_open_file(const char* path) {
         }
 
         proc->fd_table[i].used = 1;
-        proc->fd_table[i].file = file;
+        for (j = 0; j < MAX_FS_PATH_LEN - 1; j++) {
+            proc->fd_table[i].path[j] = path[j];
+            if (path[j] == '\0') {
+                break;
+            }
+        }
+        if (j == MAX_FS_PATH_LEN - 1 && path[j] != '\0') {
+            proc->fd_table[i].used = 0;
+            proc->fd_table[i].path[0] = '\0';
+            return -4;
+        }
+        proc->fd_table[i].path[MAX_FS_PATH_LEN - 1] = '\0';
         proc->fd_table[i].offset = 0;
         return PROCESS_FD_BASE + i;
     }
@@ -1205,14 +1216,12 @@ int process_open_file(const char* path) {
     return -3;
 }
 
-// 从当前进程已打开的只读 fd 读取数据，成功返回字节数，读到 EOF 返回 0。
+// 从当前进程已打开 fd 读取数据：每次按路径重新解析文件，便于统一支持只读文件和 RAMFS 文件。
 int process_read_file(int fd, char* user_buf, int size) {
     struct process* proc = current_process;
     struct process_fd_entry* entry;
-    uint32_t remain;
-    uint32_t to_copy;
-    uint32_t i;
     int slot;
+    int read_result;
 
     if (proc == (struct process*)0 || user_buf == (char*)0) {
         return -1;
@@ -1232,29 +1241,19 @@ int process_read_file(int fd, char* user_buf, int size) {
     }
 
     entry = &proc->fd_table[slot];
-    if (entry->used == 0 || entry->file == (const struct builtin_text_file*)0) {
+    if (entry->used == 0 || entry->path[0] == '\0') {
         return -4;
     }
 
-    if (entry->offset >= entry->file->size) {
-        return 0;
+    read_result = fs_read_text_file(entry->path, entry->offset, user_buf, size);
+    if (read_result > 0) {
+        entry->offset += (uint32_t)read_result;
     }
 
-    remain = entry->file->size - entry->offset;
-    to_copy = (uint32_t)size;
-    if (to_copy > remain) {
-        to_copy = remain;
-    }
-
-    for (i = 0; i < to_copy; i++) {
-        user_buf[i] = entry->file->content[entry->offset + i];
-    }
-
-    entry->offset += to_copy;
-    return (int)to_copy;
+    return read_result;
 }
 
-// 关闭当前进程的一个只读 fd：只释放表项，不释放静态只读文件对象。
+// 关闭当前进程的一个教学版只读 fd：只释放表项，不涉及底层文件对象释放。
 int process_close_file(int fd) {
     struct process* proc = current_process;
     int slot;
@@ -1273,7 +1272,7 @@ int process_close_file(int fd) {
     }
 
     proc->fd_table[slot].used = 0;
-    proc->fd_table[slot].file = (const struct builtin_text_file*)0;
+    proc->fd_table[slot].path[0] = '\0';
     proc->fd_table[slot].offset = 0;
     return 0;
 }

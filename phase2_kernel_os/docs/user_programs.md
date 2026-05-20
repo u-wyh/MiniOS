@@ -389,11 +389,41 @@ run stat /readme.txt
 - `Size`
 - `Type`
 
-其中当前 `Type` 固定是：
+其中当前 `Type` 最小支持：
 
 - `readonly-file`
+- `ramfs-file`
 
-## 20. 当前限制
+## 20. RAMFS 文件与用户态程序
+
+在 Task62 中，MiniOS 继续把文件系统从“只读文件表”推进到“内存可写文件”。
+
+当前 shell 新增命令：
+
+- `touch <file>`
+- `writefile <file> <text>`
+- `rm <file>`
+
+典型验证链路：
+
+```text
+touch /note.txt
+writefile /note.txt hello
+cat /note.txt
+run cat /note.txt
+run stat /note.txt
+run ls
+rm /note.txt
+```
+
+其中：
+
+- shell 内建 `cat` 现在可以读取 RAMFS 文件
+- 用户态 `run cat` 通过已有 `open/read/close` syscall 读取 RAMFS 文件
+- 用户态 `run ls` 会把 RAMFS 文件和内置只读文件一起列出来
+- 用户态 `run stat` 会把 RAMFS 文件显示为 `ramfs-file`
+
+## 21. 当前限制
 
 1. 暂不支持磁盘文件系统
 2. 暂不支持 `PATH`
@@ -407,7 +437,8 @@ run stat /readme.txt
 10. 当前 kill 不是完整信号系统，不支持进程组 kill 和权限模型
 11. 当前 jobs 不是完整 job control，不支持 `fg/bg` 和 Ctrl+Z
 12. 当前 uptime 不是 RTC / wall clock，不显示真实日期时间
-13. 当前 `ls/cat` 只读取内核内置只读文件，不支持真实磁盘文件
-14. 当前 fd 只支持只读普通文件，不支持写入、pipe、dup/dup2
-15. 用户态 `cat` 仍只支持单文件、只读、无重定向的教学版语义
-16. 内置程序镜像仍由内核预先编译并嵌入
+13. 当前 RAMFS 不持久化，重启后文件丢失
+14. 当前 RAMFS 不支持 append、`write(fd)` 或复杂并发写保护
+15. 当前 fd 只支持只读普通文件，不支持写入、pipe、dup/dup2
+16. 用户态 `cat` 仍只支持单文件、只读、无重定向的教学版语义
+17. 内置程序镜像仍由内核预先编译并嵌入

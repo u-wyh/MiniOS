@@ -45,10 +45,10 @@ struct process_info {
     char name[PROCESS_NAME_MAX_LEN];
 };
 
-// 教学版文件描述符表项：记录 fd 是否占用、关联的只读文件对象以及当前读取偏移。
+// 教学版文件描述符表项：记录 fd 是否占用、当前打开的是哪个路径，以及当前读取偏移。
 struct process_fd_entry {
     int used;
-    const struct builtin_text_file* file;
+    char path[MAX_FS_PATH_LEN];
     uint32_t offset;
 };
 

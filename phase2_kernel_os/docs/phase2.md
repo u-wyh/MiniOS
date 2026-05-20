@@ -120,3 +120,14 @@
   - `ls`：列出文件
   - `cat`：读取内容
   - `stat`：查询元信息
+
+## Task62：RAMFS 可写内存文件系统雏形 / touch、writefile、rm
+
+- 当前在内置只读文件表之外，再增加了一张教学版 RAMFS 内存文件表。
+- RAMFS 文件全部驻留内存，系统重启后丢失，不涉及真实磁盘或持久化。
+- shell 新增：
+  - `touch <file>`
+  - `writefile <file> <text>`
+  - `rm <file>`
+- `ls` / `cat` / `stat` 以及 `run ls` / `run cat` / `run stat` 现在都能观察 RAMFS 文件。
+- 当前写入语义保持最小化：只支持覆盖写入文本，不支持 append，不支持 `write(fd)`。

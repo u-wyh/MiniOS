@@ -45,6 +45,11 @@
 #define SYS_FILE_INFO 25
 #define SYS_STAT 26
 
+// RAMFS 教学版写接口
+#define SYS_TOUCH 27
+#define SYS_WRITEFILE 28
+#define SYS_RM 29
+
 // int 0x80 进入内核后，栈上会按 pusha + CPU 自动压栈的顺序保存现场
 struct interrupt_frame {
     unsigned int edi;

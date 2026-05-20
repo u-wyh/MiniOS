@@ -257,13 +257,16 @@ static const struct builtin_text_file builtin_text_files[] = {
 #undef MINIOS_BUILD_TEXT_FILE
 };
 
+// 教学版 RAMFS 文件表：当前全部驻留内存，重启后内容丢失。
+static struct ramfs_file ramfs_files[MAX_RAMFS_FILES];
+
 // 统计文件数量，避免硬编码
 static uint32_t fs_count(void) {
     return (uint32_t)(sizeof(file_table) / sizeof(file_table[0]));
 }
 
-// 统计内置只读文本文件数量，避免在 ls/cat 路径里手写魔法常量。
-uint32_t fs_builtin_file_count(void) {
+// 统计内置只读文本文件数量，供可见文件总数与索引映射复用。
+static uint32_t fs_builtin_text_file_count_only(void) {
     return (uint32_t)(sizeof(builtin_text_files) / sizeof(builtin_text_files[0]));
 }
 
@@ -306,6 +309,41 @@ static int fs_copy_text_path(const char* source, char* target, int max_len) {
     }
 
     return max_len - 1;
+}
+
+// 把输入路径标准化成以 '/' 开头的教学版规范路径，供 RAMFS 创建/删除/写入统一使用。
+static int fs_normalize_path(const char* source, char* target, int max_len) {
+    int source_index = 0;
+    int target_index = 0;
+
+    if (source == (const char*)0 || target == (char*)0) {
+        return -1;
+    }
+
+    if (source[0] == '\0' || max_len <= 1) {
+        return -2;
+    }
+
+    target[target_index++] = '/';
+    if (source[0] == '/') {
+        source_index = 1;
+    }
+
+    while (source[source_index] != '\0') {
+        if (target_index >= max_len - 1) {
+            target[max_len - 1] = '\0';
+            return -3;
+        }
+
+        target[target_index++] = source[source_index++];
+    }
+
+    target[target_index] = '\0';
+    if (target_index <= 1) {
+        return -4;
+    }
+
+    return 0;
 }
 
 // 教学版文本文件路径匹配：兼容 `/readme.txt`、`readme.txt` 和 `readmetxt`。
@@ -354,6 +392,59 @@ static int fs_text_path_equal(const char* input, const char* path) {
     return input[input_index] == '\0' && path[path_index] == '\0';
 }
 
+// 按路径查找 RAMFS 文件；找到返回槽位指针，否则返回空指针。
+static struct ramfs_file* fs_ramfs_find(const char* path) {
+    int i;
+
+    if (path == (const char*)0 || path[0] == '\0') {
+        return (struct ramfs_file*)0;
+    }
+
+    for (i = 0; i < MAX_RAMFS_FILES; i++) {
+        if (ramfs_files[i].used == 0) {
+            continue;
+        }
+
+        if (fs_text_path_equal(path, ramfs_files[i].path) != 0) {
+            return &ramfs_files[i];
+        }
+    }
+
+    return (struct ramfs_file*)0;
+}
+
+// 统计当前已占用的 RAMFS 文件数量。
+static uint32_t fs_ramfs_used_count(void) {
+    uint32_t count = 0;
+    int i;
+
+    for (i = 0; i < MAX_RAMFS_FILES; i++) {
+        if (ramfs_files[i].used != 0) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+// 清空一个 RAMFS 槽位，避免删除后残留路径/内容继续被观察到。
+static void fs_ramfs_clear_slot(struct ramfs_file* file) {
+    int i;
+
+    if (file == (struct ramfs_file*)0) {
+        return;
+    }
+
+    file->used = 0;
+    file->size = 0;
+    for (i = 0; i < MAX_FS_PATH_LEN; i++) {
+        file->path[i] = '\0';
+    }
+    for (i = 0; i < MAX_RAMFS_FILE_SIZE + 1; i++) {
+        file->content[i] = '\0';
+    }
+}
+
 // 根据文件名查找文件，找到返回文件结构指针
 struct file* fs_find(const char* name) {
     uint32_t i;
@@ -373,7 +464,7 @@ struct file* fs_find(const char* name) {
 
 // 按索引返回内置只读文本文件；越界时安全返回空指针。
 const struct builtin_text_file* fs_builtin_file_at(uint32_t index) {
-    if (index >= fs_builtin_file_count()) {
+    if (index >= fs_builtin_text_file_count_only()) {
         return (const struct builtin_text_file*)0;
     }
 
@@ -397,40 +488,221 @@ const struct builtin_text_file* fs_builtin_file_find(const char* path) {
     return (const struct builtin_text_file*)0;
 }
 
-// 按索引导出一个内置只读文件的路径和大小，供教学版用户态 ls syscall 复用。
+// 返回当前“可见文件”数量：内置只读文件和 RAMFS 文件都会出现在同一份列表里。
+uint32_t fs_builtin_file_count(void) {
+    return fs_builtin_text_file_count_only() + fs_ramfs_used_count();
+}
+
+// 按索引导出一个可见文件的路径和大小，供教学版用户态 ls syscall 复用。
 int fs_builtin_file_info(int index, char* path_buf, int max_len) {
-    const struct builtin_text_file* file;
+    uint32_t builtin_count;
+    const struct builtin_text_file* builtin_file;
+    int ramfs_index;
+    int seen_ramfs = 0;
+    int i;
 
     if (index < 0) {
         return -1;
     }
 
-    file = fs_builtin_file_at((uint32_t)index);
-    if (file == (const struct builtin_text_file*)0) {
-        return -2;
+    builtin_count = fs_builtin_text_file_count_only();
+    if ((uint32_t)index < builtin_count) {
+        builtin_file = fs_builtin_file_at((uint32_t)index);
+        if (builtin_file == (const struct builtin_text_file*)0) {
+            return -2;
+        }
+
+        if (fs_copy_text_path(builtin_file->path, path_buf, max_len) < 0) {
+            return -3;
+        }
+
+        return (int)builtin_file->size;
     }
 
-    if (fs_copy_text_path(file->path, path_buf, max_len) < 0) {
-        return -3;
+    ramfs_index = index - (int)builtin_count;
+    for (i = 0; i < MAX_RAMFS_FILES; i++) {
+        if (ramfs_files[i].used == 0) {
+            continue;
+        }
+
+        if (seen_ramfs == ramfs_index) {
+            if (fs_copy_text_path(ramfs_files[i].path, path_buf, max_len) < 0) {
+                return -3;
+            }
+
+            return (int)ramfs_files[i].size;
+        }
+
+        seen_ramfs++;
     }
 
-    return (int)file->size;
+    return -2;
 }
 
-// 按路径导出一个内置只读文件的最小元信息，供教学版 SYS_STAT 复用。
+// 按路径导出一个当前可见文件的最小元信息，供教学版 SYS_STAT 复用。
 int fs_builtin_file_stat(const char* path, struct minios_stat* out_stat) {
-    const struct builtin_text_file* file = fs_builtin_file_find(path);
+    struct ramfs_file* ramfs_file;
+    const struct builtin_text_file* file;
 
     if (out_stat == (struct minios_stat*)0) {
         return -1;
     }
 
+    ramfs_file = fs_ramfs_find(path);
+    if (ramfs_file != (struct ramfs_file*)0) {
+        out_stat->size = ramfs_file->size;
+        out_stat->type = MINIOS_FILE_TYPE_RAMFS_TEXT;
+        return 0;
+    }
+
+    file = fs_builtin_file_find(path);
     if (file == (const struct builtin_text_file*)0) {
         return -2;
     }
 
     out_stat->size = file->size;
     out_stat->type = MINIOS_FILE_TYPE_READONLY_TEXT;
+    return 0;
+}
+
+// 按路径和 offset 读取一个当前可见文本文件的内容；当前统一服务内置只读文件与 RAMFS 文件。
+int fs_read_text_file(const char* path, uint32_t offset, char* out_buf, int max_len) {
+    struct ramfs_file* ramfs_file;
+    const struct builtin_text_file* file;
+    const char* content;
+    uint32_t size;
+    uint32_t remain;
+    uint32_t to_copy;
+    uint32_t i;
+
+    if (out_buf == (char*)0) {
+        return -1;
+    }
+
+    if (max_len < 0) {
+        return -2;
+    }
+
+    if (max_len == 0) {
+        return 0;
+    }
+
+    ramfs_file = fs_ramfs_find(path);
+    if (ramfs_file != (struct ramfs_file*)0) {
+        content = ramfs_file->content;
+        size = ramfs_file->size;
+    } else {
+        file = fs_builtin_file_find(path);
+        if (file == (const struct builtin_text_file*)0) {
+            return -3;
+        }
+        content = file->content;
+        size = file->size;
+    }
+
+    if (offset >= size) {
+        return 0;
+    }
+
+    remain = size - offset;
+    to_copy = (uint32_t)max_len;
+    if (to_copy > remain) {
+        to_copy = remain;
+    }
+
+    for (i = 0; i < to_copy; i++) {
+        out_buf[i] = content[offset + i];
+    }
+
+    return (int)to_copy;
+}
+
+// 创建一个空 RAMFS 文件：当前要求路径不存在，且不能与内置只读文件同名。
+int fs_create_ramfs_file(const char* path) {
+    char normalized[MAX_FS_PATH_LEN];
+    int i;
+
+    if (fs_normalize_path(path, normalized, MAX_FS_PATH_LEN) < 0) {
+        return -1;
+    }
+
+    if (fs_builtin_file_find(normalized) != (const struct builtin_text_file*)0) {
+        return -2;
+    }
+
+    if (fs_ramfs_find(normalized) != (struct ramfs_file*)0) {
+        return -3;
+    }
+
+    for (i = 0; i < MAX_RAMFS_FILES; i++) {
+        int j;
+
+        if (ramfs_files[i].used != 0) {
+            continue;
+        }
+
+        ramfs_files[i].used = 1;
+        for (j = 0; j < MAX_FS_PATH_LEN; j++) {
+            ramfs_files[i].path[j] = normalized[j];
+            if (normalized[j] == '\0') {
+                break;
+            }
+        }
+        ramfs_files[i].path[MAX_FS_PATH_LEN - 1] = '\0';
+        ramfs_files[i].size = 0;
+        ramfs_files[i].content[0] = '\0';
+        return 0;
+    }
+
+    return -4;
+}
+
+// 覆盖写入一个 RAMFS 文件：当前只支持纯文本，超过上限直接失败。
+int fs_write_ramfs_file(const char* path, const char* content) {
+    struct ramfs_file* file;
+    int length;
+    int i;
+
+    if (content == (const char*)0) {
+        return -1;
+    }
+
+    file = fs_ramfs_find(path);
+    if (file == (struct ramfs_file*)0) {
+        if (fs_builtin_file_find(path) != (const struct builtin_text_file*)0) {
+            return -2;
+        }
+        return -3;
+    }
+
+    length = fs_copy_text_path(content, file->content, MAX_RAMFS_FILE_SIZE + 1);
+    if (length < 0) {
+        return -4;
+    }
+
+    file->size = (uint32_t)length;
+    for (i = length; i < MAX_RAMFS_FILE_SIZE + 1; i++) {
+        if (i == length) {
+            file->content[i] = '\0';
+            continue;
+        }
+        file->content[i] = '\0';
+    }
+    return 0;
+}
+
+// 删除一个 RAMFS 文件：当前仅支持删除运行时创建的内存文件，不允许删除内置只读文件。
+int fs_remove_ramfs_file(const char* path) {
+    struct ramfs_file* file = fs_ramfs_find(path);
+
+    if (file == (struct ramfs_file*)0) {
+        if (fs_builtin_file_find(path) != (const struct builtin_text_file*)0) {
+            return -2;
+        }
+        return -1;
+    }
+
+    fs_ramfs_clear_slot(file);
     return 0;
 }
 

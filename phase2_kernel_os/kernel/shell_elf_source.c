@@ -22,6 +22,9 @@
 #define SYS_FILE_COUNT 24
 #define SYS_FILE_INFO 25
 #define SYS_STAT 26
+#define SYS_TOUCH 27
+#define SYS_WRITEFILE 28
+#define SYS_RM 29
 // 当前内核默认把 PIT 配置为 20Hz，因此 1 tick 约等于 50ms。
 #define SHELL_UPTIME_TICKS_PER_SECOND 20
 
@@ -29,6 +32,7 @@
 #define SHELL_ARGV_MAX (USER_PROGRAM_MAX_ARGS + 1)
 #define SHELL_LINE_MAX 128
 #define SHELL_CAT_CHUNK_SIZE 32
+#define SHELL_WRITEFILE_MAX_LEN (MAX_RAMFS_FILE_SIZE + 1)
 // 与内核当前教学版 fd 上限保持一致，仅供用户态 shell 内部 fdtest 使用。
 #define SHELL_FDTEST_MAX_OPEN 8
 
@@ -183,6 +187,21 @@ static int user_file_info(int index, char* buffer, int max_len) {
     return user_syscall3(SYS_FILE_INFO, index, (int)buffer, max_len);
 }
 
+// 创建一个空 RAMFS 文件；供 touch 命令复用。
+static int user_touch(const char* path) {
+    return user_syscall1(SYS_TOUCH, (int)path);
+}
+
+// 覆盖写入一个 RAMFS 文本文件；供 writefile 命令复用。
+static int user_writefile(const char* path, const char* text) {
+    return user_syscall2(SYS_WRITEFILE, (int)path, (int)text);
+}
+
+// 删除一个 RAMFS 文件；供 rm 命令复用。
+static int user_rm(const char* path) {
+    return user_syscall1(SYS_RM, (int)path);
+}
+
 // 比较两个字符串是否相等。
 static int shell_streq(const char* left, const char* right) {
     int i = 0;
@@ -234,6 +253,40 @@ static int shell_string_length_with_limit(const char* text, int max_len) {
     }
 
     return length;
+}
+
+// 把指定位置之后的参数用单个空格拼接成一段文本，供 writefile 最小复用。
+static int shell_join_args(int argc, char** argv, int start_index, char* buffer, int max_len) {
+    int i;
+    int out = 0;
+
+    if (buffer == (char*)0 || max_len <= 0) {
+        return -1;
+    }
+
+    buffer[0] = '\0';
+    for (i = start_index; i < argc; i++) {
+        int j = 0;
+
+        if (i > start_index) {
+            if (out >= max_len - 1) {
+                buffer[max_len - 1] = '\0';
+                return -2;
+            }
+            buffer[out++] = ' ';
+        }
+
+        while (argv[i][j] != '\0') {
+            if (out >= max_len - 1) {
+                buffer[max_len - 1] = '\0';
+                return -2;
+            }
+            buffer[out++] = argv[i][j++];
+        }
+    }
+
+    buffer[out] = '\0';
+    return out;
 }
 
 // 输出十进制整数，便于显示 pid/tick/age。
@@ -550,23 +603,32 @@ static void shell_cmd_uptime(void) {
 // 输出教学版只读文件表：当前只列出内置文本文件，不做真实目录遍历。
 static void shell_cmd_ls(int argc) {
     int i;
+    int count;
+    char path[MAX_FS_PATH_LEN];
 
     if (argc > 1) {
         user_write("ls: directory args not supported\n");
         return;
     }
 
-    user_write("NAME              SIZE\n");
-    for (i = 0; i < shell_builtin_file_count(); i++) {
-        const struct shell_builtin_text_file* file = shell_builtin_file_at(i);
+    count = user_file_count();
+    if (count < 0) {
+        user_write("ls: count failed\n");
+        return;
+    }
 
-        if (file == (const struct shell_builtin_text_file*)0) {
-            continue;
+    user_write("NAME              SIZE\n");
+    for (i = 0; i < count; i++) {
+        int size = user_file_info(i, path, MAX_FS_PATH_LEN);
+
+        if (size < 0) {
+            user_write("ls: info failed\n");
+            return;
         }
 
-        user_write(file->path);
+        user_write(path);
         user_write("       ");
-        shell_write_uint((int)file->size);
+        shell_write_uint(size);
         user_write("\n");
     }
 }
@@ -582,14 +644,9 @@ static void shell_cmd_cat(int argc, char** argv) {
         return;
     }
 
-    if (shell_builtin_file_find(argv[1]) == (const struct shell_builtin_text_file*)0) {
-        user_write("cat: file not found\n");
-        return;
-    }
-
     fd = user_open(argv[1]);
     if (fd < 0) {
-        user_write("cat: open failed\n");
+        user_write("cat: file not found\n");
         return;
     }
 
@@ -611,6 +668,57 @@ static void shell_cmd_cat(int argc, char** argv) {
 
     if (user_close(fd) < 0) {
         user_write("cat: close failed\n");
+    }
+}
+
+// 创建一个空 RAMFS 文件；当前要求路径不存在，且不能覆盖内置只读文件。
+static void shell_cmd_touch(int argc, char** argv) {
+    int result;
+
+    if (argc != 2) {
+        user_write("Usage: touch <file>\n");
+        return;
+    }
+
+    result = user_touch(argv[1]);
+    if (result < 0) {
+        user_write("touch failed\n");
+    }
+}
+
+// 覆盖写入一个 RAMFS 文本文件；当前把剩余参数用空格拼成一段文本。
+static void shell_cmd_writefile(int argc, char** argv) {
+    char text[SHELL_WRITEFILE_MAX_LEN];
+    int result;
+
+    if (argc < 3) {
+        user_write("Usage: writefile <file> <text>\n");
+        return;
+    }
+
+    if (shell_join_args(argc, argv, 2, text, SHELL_WRITEFILE_MAX_LEN) < 0) {
+        user_write("writefile: text too long\n");
+        return;
+    }
+
+    result = user_writefile(argv[1], text);
+    if (result < 0) {
+        user_write("writefile failed\n");
+    }
+}
+
+// 删除一个 RAMFS 文件；当前禁止删除内置只读文件。
+static void shell_cmd_rm(int argc, char** argv) {
+    int result;
+
+    if (argc != 2) {
+        user_write("Usage: rm <file>\n");
+        return;
+    }
+
+    result = user_rm(argv[1]);
+    if (result < 0) {
+        user_write("rm failed\n");
     }
 }
 
@@ -809,6 +917,9 @@ static void shell_cmd_help(void) {
     user_write("  kill <pid>\n");
     user_write("  ls\n");
     user_write("  cat <file>\n");
+    user_write("  touch <file>\n");
+    user_write("  writefile <file> <text>\n");
+    user_write("  rm <file>\n");
     user_write("  ps    show process table with age/runs\n");
     user_write("  uptime\n");
     user_write("  ticks\n");
@@ -874,6 +985,21 @@ void _start(void) {
 
         if (shell_streq(argv[0], "cat")) {
             shell_cmd_cat(argc, argv);
+            continue;
+        }
+
+        if (shell_streq(argv[0], "touch")) {
+            shell_cmd_touch(argc, argv);
+            continue;
+        }
+
+        if (shell_streq(argv[0], "writefile")) {
+            shell_cmd_writefile(argc, argv);
+            continue;
+        }
+
+        if (shell_streq(argv[0], "rm")) {
+            shell_cmd_rm(argc, argv);
             continue;
         }
 

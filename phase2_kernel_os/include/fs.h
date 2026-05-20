@@ -20,6 +20,23 @@ struct builtin_text_file {
 
 // 教学版文件类型：当前只支持内置只读文本文件。
 #define MINIOS_FILE_TYPE_READONLY_TEXT 1
+// 教学版 RAMFS 文件类型：表示运行时创建的内存文本文件。
+#define MINIOS_FILE_TYPE_RAMFS_TEXT 2
+
+// 教学版路径长度上限：同时供 RAMFS 路径、fd 记录路径和用户态文件 syscall 复用。
+#define MAX_FS_PATH_LEN 32
+// 教学版 RAMFS 文件数量上限：当前使用固定数组，不做动态扩容。
+#define MAX_RAMFS_FILES 8
+// 教学版 RAMFS 单文件内容上限：当前只支持小文本文件，超过上限直接拒绝写入。
+#define MAX_RAMFS_FILE_SIZE 64
+
+// 教学版 RAMFS 文件槽位：记录是否占用、规范路径、文本内容与当前大小。
+struct ramfs_file {
+    int used;
+    char path[MAX_FS_PATH_LEN];
+    char content[MAX_RAMFS_FILE_SIZE + 1];
+    uint32_t size;
+};
 
 // 教学版 stat 结构：当前只暴露最小文件大小与类型，不引入 inode/权限/时间戳。
 struct minios_stat {
@@ -46,9 +63,17 @@ uint32_t fs_builtin_file_count(void);
 const struct builtin_text_file* fs_builtin_file_at(uint32_t index);
 // 按路径查找内置只读文本文件；找不到时返回空指针。
 const struct builtin_text_file* fs_builtin_file_find(const char* path);
-// 按索引把内置文件路径复制到缓冲区，并返回文件大小；失败返回负值。
+// 按索引把当前可见文件路径复制到缓冲区，并返回文件大小；内置只读文件和 RAMFS 文件都会参与枚举。
 int fs_builtin_file_info(int index, char* path_buf, int max_len);
-// 按路径查询一个内置只读文件的教学版元信息；成功返回 0，失败返回负值。
+// 按路径查询一个当前可见文件的教学版元信息；成功返回 0，失败返回负值。
 int fs_builtin_file_stat(const char* path, struct minios_stat* out_stat);
+// 按路径与 offset 读取一个当前可见文本文件的内容；成功返回字节数，EOF 返回 0。
+int fs_read_text_file(const char* path, uint32_t offset, char* out_buf, int max_len);
+// 创建一个空 RAMFS 文件；成功返回 0，失败返回负值。
+int fs_create_ramfs_file(const char* path);
+// 覆盖写入一个 RAMFS 文件；成功返回 0，失败返回负值。
+int fs_write_ramfs_file(const char* path, const char* content);
+// 删除一个 RAMFS 文件；成功返回 0，失败返回负值。
+int fs_remove_ramfs_file(const char* path);
 
 #endif
