@@ -2380,5 +2380,30 @@ TODO：
 
 - 当前仍不是完整 POSIX `write(fd)` 语义，而是教学版最小写接口。
 - 当前只允许写 RAMFS 文件，不允许写内置只读文件。
-- 当前只支持覆盖写，不支持 append。
+- 当前只支持覆盖写，append 在下一轮单独补齐。
 - 当前不支持真实磁盘、持久化、inode、权限、目录树、并发写锁和复杂 open flags。
+
+## ✅ Task64：RAMFS append 追加写入 / 用户态 append 程序
+
+本轮目标：
+
+- 在已有覆盖写基础上补充 RAMFS append 追加写入语义。
+- 新增 shell 内建 `append` 命令。
+- 新增用户态 `append` 程序，支持 `run append /note.txt world`。
+
+已完成：
+
+- 新增 shell 内建：
+  - `append <file> <text>`
+- 新增用户态 `append` 程序，支持：
+  - `run append /note.txt world`
+- 新增教学版 `SYS_APPEND_FILE`，让用户态程序通过 syscall 追加写入 RAMFS 文件。
+- 当前 append 会从文件末尾继续写入，保留旧内容并更新新的 `size`。
+- `cat` / `run cat` / `run stat` / `run ls` 均可观察追加后的结果。
+- 内置只读文件仍然禁止 append。
+
+当前限制：
+
+- 当前 append 不是完整 POSIX `O_APPEND`。
+- 当前不支持并发原子追加、文件锁和 `>>` 重定向。
+- 当前仍不支持真实磁盘、持久化、inode、权限和复杂路径解析。

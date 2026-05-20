@@ -52,6 +52,8 @@
 // RAMFS fd 写入雏形：避免破坏已有 stdout SYS_WRITE ABI。
 #define SYS_OPEN_WRITE 30
 #define SYS_FD_WRITE 31
+// RAMFS 教学版追加写入接口：按路径把文本追加到文件末尾，不实现完整 POSIX O_APPEND。
+#define SYS_APPEND_FILE 32
 
 // int 0x80 进入内核后，栈上会按 pusha + CPU 自动压栈的顺序保存现场
 struct interrupt_frame {

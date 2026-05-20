@@ -47,6 +47,7 @@
 | 29 | `SYS_RM` | `user_rm` | `ebx=path` | `0` / 负值 | 删除一个 RAMFS 文件 |
 | 30 | `SYS_OPEN_WRITE` | `user_open_write` | `ebx=path` | `fd` / 负值 | 以可写方式打开一个已存在的 RAMFS 文件 |
 | 31 | `SYS_FD_WRITE` | `user_fd_write` | `ebx=fd` `ecx=buf` `edx=size` | 字节数 / 负值 | 通过 fd 向 RAMFS 文件写入文本内容 |
+| 32 | `SYS_APPEND_FILE` | `user_append_file` | `ebx=path` `ecx=text` | 追加字节数 / 负值 | 向 RAMFS 文件末尾追加文本内容 |
 
 说明：
 
@@ -209,7 +210,24 @@ Task63 继续把 RAMFS 写入能力暴露给用户态程序，但保持最小教
 2. `SYS_FD_WRITE(fd, buf, size)`：
    - 只接受通过 `SYS_OPEN_WRITE` 打开的 RAMFS 文件 fd
    - 成功返回实际写入字节数
-   - 当前采用覆盖写语义，不支持 append
+   - 当前采用覆盖写语义
    - 写入超过 RAMFS 文件大小上限时失败
 
 当前 `SYS_WRITE` 仍然保持原来的 stdout 输出语义，没有被改成通用 `write(fd, buf, size)`。这是为了不破坏已有 `user_write` / shell 输出 ABI。
+
+## 12. SYS_APPEND_FILE 当前语义
+
+Task64 继续给 RAMFS 补充教学版 append 接口。
+
+1. `SYS_APPEND_FILE(path, text)`：
+   - `ebx=path`
+   - `ecx=text`
+2. 成功时返回实际追加字节数
+3. 失败时返回负值
+4. 只允许追加到已存在的 RAMFS 文件
+5. 内置只读文件不能 append
+6. 文件不存在时失败，推荐先 `touch`
+7. 当前不自动补空格，也不自动补换行
+8. 追加后如果超过 `MAX_RAMFS_FILE_SIZE`，则失败且不破坏原内容
+
+当前它不是完整 POSIX `O_APPEND`，也不保证并发原子追加，只是教学版最小 append syscall。

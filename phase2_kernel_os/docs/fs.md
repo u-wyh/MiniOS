@@ -213,7 +213,7 @@ run stat /readme.txt
 4. 暂不支持权限系统
 5. 暂不支持目录树
 6. 暂不支持 block cache
-7. 暂不支持 append
+7. 当前 shell / 用户态都已支持最小 append，但还不是完整 POSIX `O_APPEND`
 8. 暂不支持 `write(fd)`
 9. 暂不支持复杂路径解析
 10. 暂不支持多进程并发写保护
@@ -236,8 +236,58 @@ run writefile /note.txt hello
 
 1. 只有 RAMFS 文件可以用可写 fd 打开
 2. 内置只读文件不能通过 fd 写入
-3. 写入采用覆盖写语义，不支持 append
+3. 写入采用覆盖写语义，追加写由单独的 append 接口处理
 4. 写入成功后会更新文件 size
+
+## 13. Task64：RAMFS append 追加写入
+
+在 Task64 中，MiniOS 继续在 RAMFS 上补齐“追加写入”语义。
+
+当前新增的最小链路分成两条：
+
+```text
+append /note.txt world
+    -> shell 内建 append
+        -> fs_append_ramfs_file(path, text)
+```
+
+```text
+run append /note.txt world
+    -> exec 用户态 append
+        -> SYS_APPEND_FILE(path, text)
+            -> fs_append_ramfs_file(path, text)
+```
+
+当前 append 语义：
+
+1. 只允许作用于 RAMFS 文件
+2. 不自动创建文件，推荐先 `touch`
+3. 不自动添加空格或换行
+4. 从当前文件 `size` 位置继续写入
+5. 成功后更新 `size`
+6. 追加超过 `MAX_RAMFS_FILE_SIZE` 时失败，且不会破坏原内容
+
+这意味着：
+
+```text
+writefile /note.txt hello
+append /note.txt world
+```
+
+最终内容是：
+
+```text
+helloworld
+```
+
+这里要明确区分两种写法：
+
+1. `writefile`
+   - 覆盖写入
+2. `append`
+   - 追加写入
+
+当前只读内置文件（如 `/readme.txt`）仍然禁止 append。
 5. 如果新内容比旧内容短，旧尾巴会被清理，避免残留脏数据
 
 当前 shell 和用户态的两条写路径同时存在：

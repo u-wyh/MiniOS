@@ -47,8 +47,8 @@ struct minios_stat {
 // 统一的内置只读文本文件清单：同时供内核文件表和用户态 shell 的 ls/cat 复用。
 #define MINIOS_BUILTIN_TEXT_FILE_LIST(X)                                                                    \
     X("/readme.txt", "MiniOS Phase2 builtin read-only files\nThis is a teaching kernel, not a disk fs.\n") \
-    X("/programs", "hello\necho\nls\ncat\nstat\nwritefile\nloop\nloop_exit\nsleep_test\n")                 \
-    X("/help.txt", "help\nps\njobs\nuptime\nrun\nstart\nwait\nkill\nls\ncat\ntouch\nwritefile\nrm\n")
+    X("/programs", "hello\necho\nls\ncat\nstat\nwritefile\nappend\nloop\nloop_exit\nsleep_test\n")        \
+    X("/help.txt", "help\nps\njobs\nuptime\nrun\nstart\nwait\nkill\nls\ncat\ntouch\nwritefile\nappend\nrm\n")
 
 // 根据程序镜像文件名查找文件，找到返回文件指针，否则返回空指针
 struct file* fs_find(const char* name);
@@ -75,6 +75,8 @@ int fs_write_text_file(const char* path, uint32_t offset, const char* in_buf, in
 int fs_create_ramfs_file(const char* path);
 // 覆盖写入一个 RAMFS 文件；成功返回 0，失败返回负值。
 int fs_write_ramfs_file(const char* path, const char* content);
+// 追加写入一个 RAMFS 文件；成功返回追加字节数，失败返回负值。
+int fs_append_ramfs_file(const char* path, const char* content);
 // 删除一个 RAMFS 文件；成功返回 0，失败返回负值。
 int fs_remove_ramfs_file(const char* path);
 

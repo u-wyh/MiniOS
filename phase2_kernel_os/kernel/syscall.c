@@ -373,6 +373,13 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    // SYS_APPEND_FILE(path, text)：ebx=用户态路径指针，ecx=用户态文本指针；
+    // 成功返回追加字节数，失败返回负值。当前只支持把文本追加到 RAMFS 文件末尾。
+    if (frame->eax == SYS_APPEND_FILE) {
+        frame->eax = (unsigned int)fs_append_ramfs_file((const char*)frame->ebx, (const char*)frame->ecx);
+        return;
+    }
+
     // 未知 syscall：当前统一返回 -1，并在控制台打印一条最小调试信息。
     print_string("unknown syscall\n");
     frame->eax = (unsigned int)-1;

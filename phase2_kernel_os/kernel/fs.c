@@ -74,6 +74,8 @@ static const unsigned char info_elf[] = {
 #include "stat_elf.inc"
 // writefile 文件：用户态通过 fd/syscall 覆盖写入 RAMFS 文件
 #include "writefile_elf.inc"
+// append 文件：用户态通过 syscall 追加写入 RAMFS 文件
+#include "append_elf.inc"
 
 
 // fork 文件：父进程 fork 后等待子进程退出，子进程输出后以状态码 7 退出
@@ -247,6 +249,7 @@ static struct file file_table[] = {
     {"ls", (void*)ls_elf, (uint32_t)sizeof(ls_elf)},
     {"stat", (void*)stat_elf, (uint32_t)sizeof(stat_elf)},
     {"writefile", (void*)writefile_elf, (uint32_t)sizeof(writefile_elf)},
+    {"append", (void*)append_elf, (uint32_t)sizeof(append_elf)},
     {"fork", (void*)fork_elf, (uint32_t)sizeof(fork_elf)},
     {"execchild", (void*)execchild_elf, (uint32_t)sizeof(execchild_elf)},
     {"forkexec", (void*)forkexec_elf, (uint32_t)sizeof(forkexec_elf)}
@@ -262,6 +265,21 @@ static const struct builtin_text_file builtin_text_files[] = {
 
 // 教学版 RAMFS 文件表：当前全部驻留内存，重启后内容丢失。
 static struct ramfs_file ramfs_files[MAX_RAMFS_FILES];
+
+// 计算一个以 0 结尾文本的长度；当前只服务于内核文件系统里的最小文本处理。
+static int fs_text_length(const char* text) {
+    int length = 0;
+
+    if (text == (const char*)0) {
+        return -1;
+    }
+
+    while (text[length] != '\0') {
+        length++;
+    }
+
+    return length;
+}
 
 // 统计文件数量，避免硬编码
 static uint32_t fs_count(void) {
@@ -736,6 +754,49 @@ int fs_write_ramfs_file(const char* path, const char* content) {
         file->content[i] = '\0';
     }
     return 0;
+}
+
+// 追加写入一个 RAMFS 文件：保留旧内容并把新文本拼接到文件末尾；超过容量时失败且不修改原内容。
+int fs_append_ramfs_file(const char* path, const char* content) {
+    struct ramfs_file* file;
+    int length;
+    uint32_t old_size;
+    uint32_t new_size;
+    int i;
+
+    if (content == (const char*)0) {
+        return -1;
+    }
+
+    file = fs_ramfs_find(path);
+    if (file == (struct ramfs_file*)0) {
+        if (fs_builtin_file_find(path) != (const struct builtin_text_file*)0) {
+            return -2;
+        }
+        return -3;
+    }
+
+    length = fs_text_length(content);
+    if (length < 0) {
+        return -4;
+    }
+
+    if (length == 0) {
+        return 0;
+    }
+
+    old_size = file->size;
+    new_size = old_size + (uint32_t)length;
+    if (new_size > MAX_RAMFS_FILE_SIZE) {
+        return -5;
+    }
+
+    for (i = 0; i < length; i++) {
+        file->content[old_size + (uint32_t)i] = content[i];
+    }
+    file->size = new_size;
+    file->content[file->size] = '\0';
+    return length;
 }
 
 // 删除一个 RAMFS 文件：当前仅支持删除运行时创建的内存文件，不允许删除内置只读文件。

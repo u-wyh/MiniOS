@@ -459,7 +459,7 @@ run writefile /note.txt hello
 1. 用户态 `writefile` 只允许写 RAMFS 文件
 2. 对 `/readme.txt` 这类内置只读文件写入会失败
 3. 推荐先 `touch` 再写入
-4. 当前采用覆盖写，不支持 append
+4. 当前 `writefile` 采用覆盖写，`append` 采用追加写
 5. 当前只处理简单文本参数，不做复杂引号解析
 
 ## 22. 当前限制
@@ -477,8 +477,43 @@ run writefile /note.txt hello
 11. 当前 jobs 不是完整 job control，不支持 `fg/bg` 和 Ctrl+Z
 12. 当前 uptime 不是 RTC / wall clock，不显示真实日期时间
 13. 当前 RAMFS 不持久化，重启后文件丢失
-14. 当前 RAMFS 不支持 append 或复杂并发写保护
+14. 当前 RAMFS 已支持最小 append，但仍不支持复杂并发写保护
 15. 当前 fd 写入只支持 RAMFS 文件，不支持 pipe、dup/dup2 和重定向
 16. 用户态 `cat` 仍只支持单文件、只读、无重定向的教学版语义
 17. 用户态 `writefile` 当前只支持简单文本参数，不支持复杂引号解析
 18. 内置程序镜像仍由内核预先编译并嵌入
+
+## 22. 用户态 append 程序
+
+当前新增用户态程序：
+
+- `run append /note.txt world`
+
+这条链路不再直接调用 shell 内建 RAMFS 追加接口，而是通过 syscall 走最小 append 写入路径：
+
+```text
+run append /note.txt world
+    -> SYS_APPEND_FILE(path, text)
+```
+
+当前同时存在两种追加写法：
+
+```text
+append /note.txt world
+```
+
+- shell 内建命令
+
+```text
+run append /note.txt world
+```
+
+- 用户态程序，通过 syscall 追加写入 RAMFS
+
+当前规则：
+
+1. 用户态 `append` 只允许追加到 RAMFS 文件
+2. 对 `/readme.txt` 这类内置只读文件 append 会失败
+3. 推荐先 `touch` 再写入或追加
+4. 当前不自动添加空格和换行
+5. 当前只处理简单文本参数，不做复杂引号解析

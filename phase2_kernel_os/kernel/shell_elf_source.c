@@ -25,6 +25,7 @@
 #define SYS_TOUCH 27
 #define SYS_WRITEFILE 28
 #define SYS_RM 29
+#define SYS_APPEND_FILE 32
 // 当前内核默认把 PIT 配置为 20Hz，因此 1 tick 约等于 50ms。
 #define SHELL_UPTIME_TICKS_PER_SECOND 20
 
@@ -200,6 +201,11 @@ static int user_writefile(const char* path, const char* text) {
 // 删除一个 RAMFS 文件；供 rm 命令复用。
 static int user_rm(const char* path) {
     return user_syscall1(SYS_RM, (int)path);
+}
+
+// 追加写入一个 RAMFS 文本文件；供 append 命令复用。
+static int user_appendfile(const char* path, const char* text) {
+    return user_syscall2(SYS_APPEND_FILE, (int)path, (int)text);
 }
 
 // 比较两个字符串是否相等。
@@ -707,6 +713,27 @@ static void shell_cmd_writefile(int argc, char** argv) {
     }
 }
 
+// 追加写入一个 RAMFS 文本文件；当前把剩余参数用空格拼成一段文本。
+static void shell_cmd_append(int argc, char** argv) {
+    char text[SHELL_WRITEFILE_MAX_LEN];
+    int result;
+
+    if (argc < 3) {
+        user_write("Usage: append <file> <text>\n");
+        return;
+    }
+
+    if (shell_join_args(argc, argv, 2, text, SHELL_WRITEFILE_MAX_LEN) < 0) {
+        user_write("append: text too long\n");
+        return;
+    }
+
+    result = user_appendfile(argv[1], text);
+    if (result < 0) {
+        user_write("append failed\n");
+    }
+}
+
 // 删除一个 RAMFS 文件；当前禁止删除内置只读文件。
 static void shell_cmd_rm(int argc, char** argv) {
     int result;
@@ -919,6 +946,7 @@ static void shell_cmd_help(void) {
     user_write("  cat <file>\n");
     user_write("  touch <file>\n");
     user_write("  writefile <file> <text>\n");
+    user_write("  append <file> <text>\n");
     user_write("  rm <file>\n");
     user_write("  ps    show process table with age/runs\n");
     user_write("  uptime\n");
@@ -927,7 +955,7 @@ static void shell_cmd_help(void) {
     user_write("  hello\n");
     user_write("  exit\n");
     user_write("programs:\n");
-    user_write("  hello echo ls cat stat writefile loop loop_exit sleep_test\n");
+    user_write("  hello echo ls cat stat writefile append loop loop_exit sleep_test\n");
 }
 
 // 用户态 shell 主循环：保持最小交互式行为即可。
@@ -995,6 +1023,11 @@ void _start(void) {
 
         if (shell_streq(argv[0], "writefile")) {
             shell_cmd_writefile(argc, argv);
+            continue;
+        }
+
+        if (shell_streq(argv[0], "append")) {
+            shell_cmd_append(argc, argv);
             continue;
         }
 

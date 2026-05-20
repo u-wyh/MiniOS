@@ -149,3 +149,20 @@
   - `writefile /note.txt hello`：内建命令
   - `run writefile /note.txt hello`：用户态程序
 - 当前仍只允许写 RAMFS 文件，不允许修改内置只读文件。
+
+## Task64：RAMFS append 追加写入 / 用户态 append 程序
+
+- 当前继续承接 Task63，在覆盖写基础上补充 RAMFS 文件追加写入语义。
+- shell 新增：
+  - `append <file> <text>`
+- 用户态新增：
+  - `run append /note.txt world`
+- 当前 append 语义是：
+  - 从文件当前 `size` 位置继续写入
+  - 保留旧内容
+  - 更新新的 `size`
+- 当前 `writefile` 与 `append` 的区别明确：
+  - `writefile`：覆盖写入
+  - `append`：追加写入
+- 内置只读文件仍然禁止 append。
+- 当前 append 仍是教学版最小实现，不支持完整 POSIX `O_APPEND`、并发原子追加和 `>>` 重定向。
