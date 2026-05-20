@@ -20,6 +20,8 @@ static unsigned int kbd_head = 0;
 static unsigned int kbd_tail = 0;
 // 记录扫描码当前是否处于“按下未释放”状态，用于忽略 typematic 或异常重复 make 码。
 static unsigned char key_down[128];
+// 记录左右 Shift 当前是否按下；供最小教学版标点输入复用，例如 Shift + '.' -> '>'。
+static int shift_down = 0;
 
 // 向最小键盘缓冲区写入一个字符；缓冲区满时丢弃新字符，保持已有输入不被覆盖
 static void keyboard_buffer_put(char ch) {
@@ -62,8 +64,8 @@ char keyboard_read_char_blocking(void) {
 }
 
 // 将最小 Set 1 扫描码映射成教学版 shell 需要的小写字母、数字和少量标点。
-// 当前先补齐文件名和路径常用字符，例如 '.' 和 '/'。
-static char scancode_to_ascii(unsigned char scancode) {
+// 当前补齐路径和重定向常用字符，例如 '.'、'/' 与 Shift + '.' -> '>'。
+static char scancode_to_ascii(unsigned char scancode, int shift_active) {
     switch (scancode) {
         case 0x1E: return 'a';
         case 0x30: return 'b';
@@ -102,7 +104,11 @@ static char scancode_to_ascii(unsigned char scancode) {
         case 0x09: return '8';
         case 0x0A: return '9';
         case 0x39: return ' ';
-        case 0x34: return '.';
+        case 0x34:
+            if (shift_active != 0) {
+                return '>';
+            }
+            return '.';
         case 0x35: return '/';
         default:   return '\0';
     }
@@ -124,6 +130,9 @@ void keyboard_handler(void) {
         if (make_code < 128) {
             key_down[make_code] = 0;
         }
+        if (make_code == 0x2A || make_code == 0x36) {
+            shift_down = 0;
+        }
         pic_send_eoi(1);
         return;
     }
@@ -137,6 +146,12 @@ void keyboard_handler(void) {
 
     if (scancode < 128) {
         key_down[scancode] = 1;
+    }
+
+    if (scancode == 0x2A || scancode == 0x36) {
+        shift_down = 1;
+        pic_send_eoi(1);
+        return;
     }
 
     // Enter 键表示一行输入结束：补 '\0' 后交给 Shell 执行
@@ -185,7 +200,7 @@ void keyboard_handler(void) {
         return;
     }
 
-    ch = scancode_to_ascii(scancode);
+    ch = scancode_to_ascii(scancode, shift_down);
     if (ch != '\0') {
         // 先把可打印字符放入最小输入缓冲区，后续用户态 read_char syscall 从这里消费。
         // 当前阶段 IRQ 与 syscall 共享该缓冲区，暂未加锁，后续可用关中断或锁进一步完善。

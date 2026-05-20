@@ -231,3 +231,20 @@ Task64 继续给 RAMFS 补充教学版 append 接口。
 8. 追加后如果超过 `MAX_RAMFS_FILE_SIZE`，则失败且不破坏原内容
 
 当前它不是完整 POSIX `O_APPEND`，也不保证并发原子追加，只是教学版最小 append syscall。
+
+## 13. Task65 与 syscall 的关系
+
+Task65 新增的是 shell 语法层的 `>` / `>>`，本轮没有再新增新的 syscall 编号。
+
+当前实现方式是：
+
+1. `echo text > /file`
+   - shell 直接复用已有 `SYS_TOUCH` / `SYS_WRITEFILE`
+2. `echo text >> /file`
+   - shell 直接复用已有 `SYS_APPEND_FILE`
+
+因此 Task65 还不是完整的“stdout fd 重定向”实现，而是教学版最小 shell 重定向：
+
+- 不改写通用 stdout
+- 不引入 `dup2`
+- 不支持把任意用户程序输出重定向到文件

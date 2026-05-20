@@ -226,6 +226,19 @@ static int shell_streq(const char* left, const char* right) {
     return left[i] == '\0' && right[i] == '\0';
 }
 
+// 判断一个 token 是否是当前教学版 shell 支持的输出重定向符号。
+static int shell_is_redirect_token(const char* token) {
+    if (shell_streq(token, ">") != 0) {
+        return 1;
+    }
+
+    if (shell_streq(token, ">>") != 0) {
+        return 1;
+    }
+
+    return 0;
+}
+
 // 输出进程状态名：ps 和 jobs 共用同一套教学版状态展示，避免两处状态文案不一致。
 static void shell_write_state(int state) {
     if (state == 1) {
@@ -293,6 +306,123 @@ static int shell_join_args(int argc, char** argv, int start_index, char* buffer,
 
     buffer[out] = '\0';
     return out;
+}
+
+// 把 [start_index, end_index) 范围内的参数用单个空格拼成一段文本；供 echo 重定向提取输出内容复用。
+static int shell_join_arg_range(int argc, char** argv, int start_index, int end_index, char* buffer, int max_len) {
+    int i;
+    int out = 0;
+
+    if (buffer == (char*)0 || max_len <= 0) {
+        return -1;
+    }
+
+    if (start_index < 0) {
+        start_index = 0;
+    }
+    if (end_index > argc) {
+        end_index = argc;
+    }
+    if (start_index > end_index) {
+        start_index = end_index;
+    }
+
+    buffer[0] = '\0';
+    for (i = start_index; i < end_index; i++) {
+        int j = 0;
+
+        if (i > start_index) {
+            if (out >= max_len - 1) {
+                buffer[max_len - 1] = '\0';
+                return -2;
+            }
+            buffer[out++] = ' ';
+        }
+
+        while (argv[i][j] != '\0') {
+            if (out >= max_len - 1) {
+                buffer[max_len - 1] = '\0';
+                return -2;
+            }
+            buffer[out++] = argv[i][j++];
+        }
+    }
+
+    buffer[out] = '\0';
+    return out;
+}
+
+// 扫描当前命令是否包含 > 或 >>；如果找到则返回其位置，并说明是否为追加写。
+static int shell_find_redirect(int argc, char** argv, int* out_index, int* out_is_append) {
+    int i;
+    int found_index = -1;
+    int found_is_append = 0;
+
+    if (out_index == (int*)0 || out_is_append == (int*)0) {
+        return -1;
+    }
+
+    for (i = 0; i < argc; i++) {
+        if (shell_is_redirect_token(argv[i]) == 0) {
+            continue;
+        }
+
+        if (found_index >= 0) {
+            return -2;
+        }
+
+        found_index = i;
+        found_is_append = shell_streq(argv[i], ">>");
+    }
+
+    *out_index = found_index;
+    *out_is_append = found_is_append;
+    return 0;
+}
+
+// 执行 echo 的教学版 RAMFS 输出重定向：> 覆盖写，必要时自动创建；>> 追加写且要求目标已存在。
+static void shell_cmd_echo_redirect(int argc, char** argv, int redirect_index, int is_append) {
+    char text[SHELL_WRITEFILE_MAX_LEN];
+    int result;
+
+    if (redirect_index <= 0) {
+        user_write("redirect: invalid syntax\n");
+        return;
+    }
+
+    if ((redirect_index + 1) >= argc) {
+        user_write("redirect: missing target file\n");
+        return;
+    }
+
+    if ((redirect_index + 2) != argc) {
+        user_write("redirect: only one target file supported\n");
+        return;
+    }
+
+    if (shell_join_arg_range(argc, argv, 1, redirect_index, text, SHELL_WRITEFILE_MAX_LEN) < 0) {
+        user_write("redirect: text too long\n");
+        return;
+    }
+
+    if (is_append != 0) {
+        result = user_appendfile(argv[redirect_index + 1], text);
+        if (result < 0) {
+            user_write("redirect append failed\n");
+        }
+        return;
+    }
+
+    result = user_writefile(argv[redirect_index + 1], text);
+    if (result == -3) {
+        if (user_touch(argv[redirect_index + 1]) >= 0) {
+            result = user_writefile(argv[redirect_index + 1], text);
+        }
+    }
+
+    if (result < 0) {
+        user_write("redirect write failed\n");
+    }
 }
 
 // 输出十进制整数，便于显示 pid/tick/age。
@@ -937,6 +1067,8 @@ static void shell_cmd_help(void) {
     user_write("  help\n");
     user_write("  clear\n");
     user_write("  echo <text>\n");
+    user_write("  echo <text> > <file>\n");
+    user_write("  echo <text> >> <file>\n");
     user_write("  run <program> [args]\n");
     user_write("  start <program> [args]\n");
     user_write("  jobs\n");
@@ -968,6 +1100,9 @@ void _start(void) {
 
     for (;;) {
         int argc;
+        int redirect_index;
+        int redirect_is_append;
+        int redirect_status;
 
         user_write("MiniOS$ ");
         shell_read_line(line, SHELL_LINE_MAX);
@@ -977,6 +1112,24 @@ void _start(void) {
             continue;
         }
         if (argc == 0) {
+            continue;
+        }
+
+        redirect_index = -1;
+        redirect_is_append = 0;
+        redirect_status = shell_find_redirect(argc, argv, &redirect_index, &redirect_is_append);
+        if (redirect_status < 0) {
+            user_write("redirect: invalid syntax\n");
+            continue;
+        }
+
+        if (redirect_index >= 0) {
+            if (shell_streq(argv[0], "echo") == 0) {
+                user_write("redirect only supports echo now\n");
+                continue;
+            }
+
+            shell_cmd_echo_redirect(argc, argv, redirect_index, redirect_is_append);
             continue;
         }
 

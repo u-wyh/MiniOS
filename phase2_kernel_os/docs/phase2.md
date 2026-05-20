@@ -166,3 +166,13 @@
   - `append`：追加写入
 - 内置只读文件仍然禁止 append。
 - 当前 append 仍是教学版最小实现，不支持完整 POSIX `O_APPEND`、并发原子追加和 `>>` 重定向。
+
+## Task65：Shell 输出重定向到 RAMFS / > 与 >> 雏形
+
+- 当前在已有 `writefile` / `append` 基础上，给 shell 增加了最小版输出重定向语法。
+- shell 现在支持：
+  - `echo <text> > <file>`
+  - `echo <text> >> <file>`
+- `>` 对应 RAMFS 覆盖写；目标文件不存在时，会自动创建 RAMFS 文件后再写入。
+- `>>` 对应 RAMFS 追加写；目标文件必须已存在且必须是 RAMFS 文件。
+- 当前只支持 `echo` 的输出重定向，不支持通用用户程序 stdout 重定向、管道组合与 `dup2`。

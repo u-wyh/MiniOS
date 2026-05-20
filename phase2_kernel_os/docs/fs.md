@@ -288,6 +288,64 @@ helloworld
    - 追加写入
 
 当前只读内置文件（如 `/readme.txt`）仍然禁止 append。
+
+## 14. Task65：Shell 输出重定向到 RAMFS
+
+在 Task65 中，MiniOS 把已有的 RAMFS 覆盖写和追加写语义，接到了 shell 的最小重定向语法上。
+
+当前仅支持：
+
+```text
+echo text > /file
+echo text >> /file
+```
+
+### `>` 当前语义
+
+`>` 对应 RAMFS 覆盖写。
+
+1. shell 先提取 `echo` 后、重定向符号前的文本内容
+2. 如果目标是已有 RAMFS 文件，则直接覆盖旧内容
+3. 如果目标文件不存在，则先创建 RAMFS 文件，再写入内容
+4. 如果目标是内置只读文件，则失败
+
+### `>>` 当前语义
+
+`>>` 对应 RAMFS 追加写。
+
+1. shell 提取 `echo` 输出文本
+2. 目标文件必须已经存在
+3. 目标文件必须是 RAMFS 文件
+4. 追加时不会覆盖旧内容
+5. 追加后 size 会增加
+6. 超过 `MAX_RAMFS_FILE_SIZE` 时失败，且不破坏原内容
+
+### 与 `writefile` / `append` 的关系
+
+当前关系可以理解为：
+
+```text
+echo text > /file
+    ~ writefile /file text
+```
+
+```text
+echo text >> /file
+    ~ append /file text
+```
+
+所以 Task65 不是重新实现新的文件系统接口，而是把已有 RAMFS 写接口接到了 shell 语法层。
+
+### 当前限制
+
+1. 当前只支持 `echo` 的输出重定向
+2. 暂不支持通用用户程序 stdout 重定向
+3. 暂不支持 `<`
+4. 暂不支持 `2>` / `2>&1`
+5. 暂不支持 `dup/dup2`
+6. 暂不支持管道和重定向组合
+7. 暂不支持后台任务重定向
+8. 暂不支持复杂引号解析
 5. 如果新内容比旧内容短，旧尾巴会被清理，避免残留脏数据
 
 当前 shell 和用户态的两条写路径同时存在：

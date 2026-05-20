@@ -517,3 +517,59 @@ run append /note.txt world
 3. 推荐先 `touch` 再写入或追加
 4. 当前不自动添加空格和换行
 5. 当前只处理简单文本参数，不做复杂引号解析
+
+## 23. Shell echo 重定向到 RAMFS
+
+Task65 当前新增的是 shell 语法层重定向，而不是新的用户程序。
+
+当前支持：
+
+```text
+echo hello > /note.txt
+echo world >> /note.txt
+```
+
+语义是：
+
+1. `>`：覆盖写入 RAMFS 文件
+2. `>>`：追加写入 RAMFS 文件
+
+这里要和已有命令区分清楚：
+
+```text
+writefile /note.txt hello
+```
+
+- shell 内建覆盖写
+
+```text
+run writefile /note.txt hello
+```
+
+- 用户态 writefile 程序
+
+```text
+append /note.txt world
+```
+
+- shell 内建追加写
+
+```text
+run append /note.txt world
+```
+
+- 用户态 append 程序
+
+而 Task65 新增的是：
+
+```text
+echo hello > /note.txt
+echo world >> /note.txt
+```
+
+当前限制：
+
+1. 只支持 `echo` 的重定向
+2. 不支持 `run cat /readme.txt > /copy.txt`
+3. 不支持通用用户程序 stdout 捕获
+4. 不支持管道与重定向组合
