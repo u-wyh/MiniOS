@@ -106,3 +106,17 @@
   - `ls` 是 shell 内建命令
   - `run ls` 是用户态程序链路
 - 当前仍不是真实目录系统，只是在内置只读文件表基础上提供最小文件列表查询能力。
+
+## Task61：文件 stat syscall / 用户态 stat 程序
+
+- 当前继续把文件系统元信息查询能力推进到用户态程序。
+- 新增教学版 `SYS_STAT`，按路径查询单个内置只读文件的基础元信息。
+- 新增用户态 `stat`，支持 `run stat /readme.txt` 与 `run stat /programs`。
+- 当前教学版 `stat` 结构只返回：
+  - `size`
+  - `type`
+- 当前类型统一使用 `readonly-file`，不引入 inode、权限、uid/gid、时间戳或 block 数等复杂字段。
+- 这一步让 MiniOS 文件接口进一步形成闭环：
+  - `ls`：列出文件
+  - `cat`：读取内容
+  - `stat`：查询元信息

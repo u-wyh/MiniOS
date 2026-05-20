@@ -33,6 +33,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `PROGRAM_FORKEXEC = 11`
 - `PROGRAM_CAT = 12`
 - `PROGRAM_LS = 13`
+- `PROGRAM_STAT = 14`
 
 其中：
 
@@ -54,6 +55,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `forkexec -> PROGRAM_FORKEXEC`
 - `cat -> PROGRAM_CAT`
 - `ls -> PROGRAM_LS`
+- `stat -> PROGRAM_STAT`
 
 其中 shell 默认直接暴露给用户的程序主要是：
 
@@ -61,6 +63,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `echo`
 - `ls`
 - `cat`
+- `stat`
 - `loop`
 - `loop_exit`
 - `sleep_test`
@@ -359,7 +362,38 @@ run ls
 
 因此，文件系统不再只是“能读内容”，也开始具备“用户程序通过 syscall 列出文件元信息”的能力。
 
-## 19. 当前限制
+## 19. 用户态 stat 程序
+
+在 Task61 中，MiniOS 新增了用户态 `stat` 程序。
+
+典型用法：
+
+```text
+run stat /readme.txt
+run stat /programs
+```
+
+它的最小链路是：
+
+```text
+run stat /readme.txt
+    -> shell 解析 argv
+    -> exec 启动 stat
+    -> SYS_STAT(path, stat_buf)
+    -> SYS_WRITE 输出 Name/Size/Type
+```
+
+当前输出字段是：
+
+- `Name`
+- `Size`
+- `Type`
+
+其中当前 `Type` 固定是：
+
+- `readonly-file`
+
+## 20. 当前限制
 
 1. 暂不支持磁盘文件系统
 2. 暂不支持 `PATH`

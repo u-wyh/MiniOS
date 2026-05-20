@@ -2299,3 +2299,27 @@ TODO：
 
 - 当前仍不是真实目录系统，不支持目录树、`readdir/getdents`、权限、inode、block cache、真实磁盘。
 - 用户态 `ls` 只支持最小文件名 / 文件大小展示，不支持 `ls -l`、排序或路径参数。
+
+## ✅ Task61：文件 stat syscall / 用户态 stat 程序
+
+本轮目标：
+
+- 新增用户态 `stat` 程序。
+- 让 `run stat /readme.txt` 通过 syscall 查询文件元信息。
+- 明确区分“列文件列表”“读文件内容”“查单个文件属性”这三类教学版文件接口。
+
+已完成：
+
+- 新增教学版 `SYS_STAT`。
+- 新增教学版 `struct minios_stat`，当前只包含：
+  - `size`
+  - `type`
+- 新增用户态 `stat` 程序镜像，并加入统一 `program_id` / 程序名映射。
+- `run stat /readme.txt` 与 `run stat /programs` 均可工作。
+- 当前文件类型统一显示为 `readonly-file`。
+- `/programs` 文件内容已同步加入 `stat`。
+
+当前限制：
+
+- 当前仍不支持 inode、权限位、uid/gid、时间戳、block 数、软链接/硬链接。
+- 当前 `stat` 不是完整 POSIX `stat`，只返回教学版最小元信息。

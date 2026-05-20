@@ -21,6 +21,7 @@
 #define SYS_CLOSE 23
 #define SYS_FILE_COUNT 24
 #define SYS_FILE_INFO 25
+#define SYS_STAT 26
 // 当前内核默认把 PIT 配置为 20Hz，因此 1 tick 约等于 50ms。
 #define SHELL_UPTIME_TICKS_PER_SECOND 20
 
@@ -815,7 +816,7 @@ static void shell_cmd_help(void) {
     user_write("  hello\n");
     user_write("  exit\n");
     user_write("programs:\n");
-    user_write("  hello echo ls cat loop loop_exit sleep_test\n");
+    user_write("  hello echo ls cat stat loop loop_exit sleep_test\n");
 }
 
 // 用户态 shell 主循环：保持最小交互式行为即可。

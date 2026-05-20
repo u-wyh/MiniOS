@@ -18,10 +18,19 @@ struct builtin_text_file {
     uint32_t size;
 };
 
+// 教学版文件类型：当前只支持内置只读文本文件。
+#define MINIOS_FILE_TYPE_READONLY_TEXT 1
+
+// 教学版 stat 结构：当前只暴露最小文件大小与类型，不引入 inode/权限/时间戳。
+struct minios_stat {
+    uint32_t size;
+    uint32_t type;
+};
+
 // 统一的内置只读文本文件清单：同时供内核文件表和用户态 shell 的 ls/cat 复用。
 #define MINIOS_BUILTIN_TEXT_FILE_LIST(X)                                                                    \
     X("/readme.txt", "MiniOS Phase2 builtin read-only files\nThis is a teaching kernel, not a disk fs.\n") \
-    X("/programs", "hello\necho\nls\ncat\nloop\nloop_exit\nsleep_test\n")                                   \
+    X("/programs", "hello\necho\nls\ncat\nstat\nloop\nloop_exit\nsleep_test\n")                             \
     X("/help.txt", "help\nps\njobs\nuptime\nrun\nstart\nwait\nkill\nls\ncat\n")
 
 // 根据程序镜像文件名查找文件，找到返回文件指针，否则返回空指针
@@ -39,5 +48,7 @@ const struct builtin_text_file* fs_builtin_file_at(uint32_t index);
 const struct builtin_text_file* fs_builtin_file_find(const char* path);
 // 按索引把内置文件路径复制到缓冲区，并返回文件大小；失败返回负值。
 int fs_builtin_file_info(int index, char* path_buf, int max_len);
+// 按路径查询一个内置只读文件的教学版元信息；成功返回 0，失败返回负值。
+int fs_builtin_file_stat(const char* path, struct minios_stat* out_stat);
 
 #endif

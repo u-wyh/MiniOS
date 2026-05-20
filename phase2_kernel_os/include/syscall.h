@@ -43,6 +43,7 @@
 // 只读文件列表查询
 #define SYS_FILE_COUNT 24
 #define SYS_FILE_INFO 25
+#define SYS_STAT 26
 
 // int 0x80 进入内核后，栈上会按 pusha + CPU 自动压栈的顺序保存现场
 struct interrupt_frame {

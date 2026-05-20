@@ -41,6 +41,7 @@
 | 23 | `SYS_CLOSE` | `user_close` | `ebx=fd` | `0` 或负值 | 关闭一个已打开 fd |
 | 24 | `SYS_FILE_COUNT` | `user_file_count` | 无 | 文件数量 / 负值 | 返回当前内置只读文件数量 |
 | 25 | `SYS_FILE_INFO` | `user_file_info` | `ebx=index` `ecx=buf` `edx=max_len` | 文件大小 / 负值 | 复制指定索引文件路径并返回大小 |
+| 26 | `SYS_STAT` | `user_stat` | `ebx=path` `ecx=minios_stat*` | `0` / 负值 | 查询单个只读文件的教学版元信息 |
 
 说明：
 
@@ -148,3 +149,25 @@ run ls
 ```
 
 它只是把“列出内置只读文件元信息”暴露给用户态程序，还不是 `readdir/getdents` 一类真实目录接口。
+
+## 9. SYS_STAT 当前语义
+
+当前 `SYS_STAT` 是教学版单文件元信息查询接口：
+
+1. `SYS_STAT(path, stat_buf)`：成功返回 `0`
+2. `path` 是用户态路径字符串
+3. `stat_buf` 是用户态 `struct minios_stat*`
+4. 当前只写入：
+   - `size`
+   - `type`
+5. 文件不存在、参数为空或路径非法时返回负值
+
+当前用户态 `stat` 已通过这组语义工作：
+
+```text
+run stat /readme.txt
+    -> SYS_STAT(path, stat_buf)
+    -> SYS_WRITE("Name/Size/Type")
+```
+
+当前 `struct minios_stat` 不是 POSIX `struct stat`，不包含 inode、权限、uid/gid、时间戳或 block 数等字段。

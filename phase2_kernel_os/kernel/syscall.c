@@ -334,6 +334,13 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    // SYS_STAT(path, out)：ebx=用户态路径指针，ecx=用户态 minios_stat*；
+    // 成功返回 0，并写入 size/type；失败返回负值。
+    if (frame->eax == SYS_STAT) {
+        frame->eax = (unsigned int)fs_builtin_file_stat((const char*)frame->ebx, (struct minios_stat*)frame->ecx);
+        return;
+    }
+
     // 未知 syscall：当前统一返回 -1，并在控制台打印一条最小调试信息。
     print_string("unknown syscall\n");
     frame->eax = (unsigned int)-1;

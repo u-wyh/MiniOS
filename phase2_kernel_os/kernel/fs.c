@@ -70,6 +70,8 @@ static const unsigned char info_elf[] = {
 #include "cat_elf.inc"
 // ls 文件：用户态通过文件列表 syscall 枚举内置只读文件并输出
 #include "ls_elf.inc"
+// stat 文件：用户态通过 SYS_STAT 查询只读文件元信息并输出
+#include "stat_elf.inc"
 
 
 // fork 文件：父进程 fork 后等待子进程退出，子进程输出后以状态码 7 退出
@@ -241,6 +243,7 @@ static struct file file_table[] = {
     {"sleep_test", (void*)sleep_test_elf, (uint32_t)sizeof(sleep_test_elf)},
     {"cat", (void*)cat_elf, (uint32_t)sizeof(cat_elf)},
     {"ls", (void*)ls_elf, (uint32_t)sizeof(ls_elf)},
+    {"stat", (void*)stat_elf, (uint32_t)sizeof(stat_elf)},
     {"fork", (void*)fork_elf, (uint32_t)sizeof(fork_elf)},
     {"execchild", (void*)execchild_elf, (uint32_t)sizeof(execchild_elf)},
     {"forkexec", (void*)forkexec_elf, (uint32_t)sizeof(forkexec_elf)}
@@ -412,6 +415,23 @@ int fs_builtin_file_info(int index, char* path_buf, int max_len) {
     }
 
     return (int)file->size;
+}
+
+// 按路径导出一个内置只读文件的最小元信息，供教学版 SYS_STAT 复用。
+int fs_builtin_file_stat(const char* path, struct minios_stat* out_stat) {
+    const struct builtin_text_file* file = fs_builtin_file_find(path);
+
+    if (out_stat == (struct minios_stat*)0) {
+        return -1;
+    }
+
+    if (file == (const struct builtin_text_file*)0) {
+        return -2;
+    }
+
+    out_stat->size = file->size;
+    out_stat->type = MINIOS_FILE_TYPE_READONLY_TEXT;
+    return 0;
 }
 
 // 列出当前所有文件，供 shell 的 ls 命令使用

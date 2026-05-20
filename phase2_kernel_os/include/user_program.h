@@ -23,7 +23,8 @@
     X(PROGRAM_FORK, 10, "fork", 0)                              \
     X(PROGRAM_FORKEXEC, 11, "forkexec", 0)                      \
     X(PROGRAM_CAT, 12, "cat", 1)                                \
-    X(PROGRAM_LS, 13, "ls", 1)
+    X(PROGRAM_LS, 13, "ls", 1)                                  \
+    X(PROGRAM_STAT, 14, "stat", 1)
 
 // program_id：统一表达内置用户程序身份，避免在 shell / exec / process 里散落魔法数字。
 enum user_program_id {

@@ -145,3 +145,26 @@ run ls
 2. `SYS_FILE_INFO(index, buf, max_len)`：复制指定文件路径到用户缓冲区，并返回文件大小
 
 这一步的意义是让“列出文件元信息”也开始走用户态 syscall 路径，而不只是停留在 shell 内建实现中。
+
+## 9. 用户态 stat 与文件元信息 syscall
+
+在 Task61 中，MiniOS 继续把“查询单个文件属性”暴露给用户态程序：
+
+```text
+run stat /readme.txt
+    -> exec 用户态 stat
+        -> SYS_STAT(path, stat_buf)
+            -> fs_builtin_file_stat(path, out)
+                -> 返回 size/type
+```
+
+当前教学版 `stat` 结构只包含两项：
+
+- `size`
+- `type`
+
+当前文件类型统一定义为：
+
+- `readonly-file`
+
+也就是说，当前 `stat` 不是 POSIX `stat`，只是教学版“单个文件元信息查询接口”。
