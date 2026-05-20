@@ -39,6 +39,8 @@
 | 21 | `SYS_OPEN` | `user_open` | `ebx=path` | `fd` 或负值 | 打开一个内置只读文件 |
 | 22 | `SYS_READ` | `user_read` | `ebx=fd` `ecx=buf` `edx=size` | 字节数 / `0` / 负值 | 从 fd 当前 offset 读取数据 |
 | 23 | `SYS_CLOSE` | `user_close` | `ebx=fd` | `0` 或负值 | 关闭一个已打开 fd |
+| 24 | `SYS_FILE_COUNT` | `user_file_count` | 无 | 文件数量 / 负值 | 返回当前内置只读文件数量 |
+| 25 | `SYS_FILE_INFO` | `user_file_info` | `ebx=index` `ecx=buf` `edx=max_len` | 文件大小 / 负值 | 复制指定索引文件路径并返回大小 |
 
 说明：
 
@@ -126,3 +128,23 @@ run cat /readme.txt
 2. `SYS_READ` 需要把数据写回用户缓冲区
 3. 当前仍依赖教学版共享映射和最小长度约束
 4. 暂无完整用户指针合法性校验与隔离防护
+
+## 8. SYS_FILE_COUNT / SYS_FILE_INFO 当前语义
+
+当前文件列表 syscall 仍然只服务于内置只读文件表，不是完整目录系统：
+
+1. `SYS_FILE_COUNT()`：返回当前内置文件数量
+2. `SYS_FILE_INFO(index, buf, max_len)`：把指定索引的文件路径复制到 `buf`
+3. `SYS_FILE_INFO` 成功时返回该文件大小
+4. `index` 越界、`buf` 为空或缓冲区太小时返回负值
+
+当前用户态 `ls` 已通过这组 syscall 工作：
+
+```text
+run ls
+    -> SYS_FILE_COUNT()
+    -> SYS_FILE_INFO(index, buf, max_len)
+    -> SYS_WRITE(buf)
+```
+
+它只是把“列出内置只读文件元信息”暴露给用户态程序，还不是 `readdir/getdents` 一类真实目录接口。

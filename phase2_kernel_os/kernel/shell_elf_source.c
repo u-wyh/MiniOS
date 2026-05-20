@@ -19,6 +19,8 @@
 #define SYS_OPEN 21
 #define SYS_READ 22
 #define SYS_CLOSE 23
+#define SYS_FILE_COUNT 24
+#define SYS_FILE_INFO 25
 // 当前内核默认把 PIT 配置为 20Hz，因此 1 tick 约等于 50ms。
 #define SHELL_UPTIME_TICKS_PER_SECOND 20
 
@@ -168,6 +170,16 @@ static int user_read(int fd, char* buffer, int size) {
 // 关闭一个已打开 fd。
 static int user_close(int fd) {
     return user_syscall1(SYS_CLOSE, fd);
+}
+
+// 查询当前内置只读文件数量；供用户态 ls 程序与 shell 共享同一套教学版文件列表语义。
+static int user_file_count(void) {
+    return user_syscall0(SYS_FILE_COUNT);
+}
+
+// 按索引读取内置只读文件路径，并返回该文件大小。
+static int user_file_info(int index, char* buffer, int max_len) {
+    return user_syscall3(SYS_FILE_INFO, index, (int)buffer, max_len);
 }
 
 // 比较两个字符串是否相等。
@@ -803,7 +815,7 @@ static void shell_cmd_help(void) {
     user_write("  hello\n");
     user_write("  exit\n");
     user_write("programs:\n");
-    user_write("  hello echo cat loop loop_exit sleep_test\n");
+    user_write("  hello echo ls cat loop loop_exit sleep_test\n");
 }
 
 // 用户态 shell 主循环：保持最小交互式行为即可。

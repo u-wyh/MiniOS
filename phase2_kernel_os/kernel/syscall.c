@@ -321,6 +321,19 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    // SYS_FILE_COUNT()：无参数；返回当前内置只读文件数量。
+    if (frame->eax == SYS_FILE_COUNT) {
+        frame->eax = fs_builtin_file_count();
+        return;
+    }
+
+    // SYS_FILE_INFO(index, buf, max_len)：ebx=索引，ecx=用户缓冲区，edx=缓冲区长度；
+    // 成功返回文件大小，并把路径复制到 buf；失败返回负值。
+    if (frame->eax == SYS_FILE_INFO) {
+        frame->eax = (unsigned int)fs_builtin_file_info((int)frame->ebx, (char*)frame->ecx, (int)frame->edx);
+        return;
+    }
+
     // 未知 syscall：当前统一返回 -1，并在控制台打印一条最小调试信息。
     print_string("unknown syscall\n");
     frame->eax = (unsigned int)-1;

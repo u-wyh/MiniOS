@@ -68,6 +68,8 @@ static const unsigned char info_elf[] = {
 #include "sleep_test_elf.inc"
 // cat 文件：用户态通过 open/read/close syscall 读取内置只读文件并输出
 #include "cat_elf.inc"
+// ls 文件：用户态通过文件列表 syscall 枚举内置只读文件并输出
+#include "ls_elf.inc"
 
 
 // fork 文件：父进程 fork 后等待子进程退出，子进程输出后以状态码 7 退出
@@ -238,6 +240,7 @@ static struct file file_table[] = {
     {"loop_exit", (void*)loop_exit_elf, (uint32_t)sizeof(loop_exit_elf)},
     {"sleep_test", (void*)sleep_test_elf, (uint32_t)sizeof(sleep_test_elf)},
     {"cat", (void*)cat_elf, (uint32_t)sizeof(cat_elf)},
+    {"ls", (void*)ls_elf, (uint32_t)sizeof(ls_elf)},
     {"fork", (void*)fork_elf, (uint32_t)sizeof(fork_elf)},
     {"execchild", (void*)execchild_elf, (uint32_t)sizeof(execchild_elf)},
     {"forkexec", (void*)forkexec_elf, (uint32_t)sizeof(forkexec_elf)}
@@ -273,6 +276,33 @@ static int fs_str_equal(const char* a, const char* b) {
     }
 
     return a[i] == '\0' && b[i] == '\0';
+}
+
+// 把内置文件路径安全复制到调用方缓冲区；缓冲区太小时返回错误。
+static int fs_copy_text_path(const char* source, char* target, int max_len) {
+    int i;
+
+    if (source == (const char*)0 || target == (char*)0) {
+        return -1;
+    }
+
+    if (max_len <= 0) {
+        return -2;
+    }
+
+    for (i = 0; i < max_len - 1; i++) {
+        target[i] = source[i];
+        if (source[i] == '\0') {
+            return i;
+        }
+    }
+
+    target[max_len - 1] = '\0';
+    if (source[max_len - 1] != '\0') {
+        return -3;
+    }
+
+    return max_len - 1;
 }
 
 // 教学版文本文件路径匹配：兼容 `/readme.txt`、`readme.txt` 和 `readmetxt`。
@@ -362,6 +392,26 @@ const struct builtin_text_file* fs_builtin_file_find(const char* path) {
     }
 
     return (const struct builtin_text_file*)0;
+}
+
+// 按索引导出一个内置只读文件的路径和大小，供教学版用户态 ls syscall 复用。
+int fs_builtin_file_info(int index, char* path_buf, int max_len) {
+    const struct builtin_text_file* file;
+
+    if (index < 0) {
+        return -1;
+    }
+
+    file = fs_builtin_file_at((uint32_t)index);
+    if (file == (const struct builtin_text_file*)0) {
+        return -2;
+    }
+
+    if (fs_copy_text_path(file->path, path_buf, max_len) < 0) {
+        return -3;
+    }
+
+    return (int)file->size;
 }
 
 // 列出当前所有文件，供 shell 的 ls 命令使用

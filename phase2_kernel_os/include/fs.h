@@ -21,7 +21,7 @@ struct builtin_text_file {
 // 统一的内置只读文本文件清单：同时供内核文件表和用户态 shell 的 ls/cat 复用。
 #define MINIOS_BUILTIN_TEXT_FILE_LIST(X)                                                                    \
     X("/readme.txt", "MiniOS Phase2 builtin read-only files\nThis is a teaching kernel, not a disk fs.\n") \
-    X("/programs", "hello\necho\ncat\nloop\nloop_exit\nsleep_test\n")                                       \
+    X("/programs", "hello\necho\nls\ncat\nloop\nloop_exit\nsleep_test\n")                                   \
     X("/help.txt", "help\nps\njobs\nuptime\nrun\nstart\nwait\nkill\nls\ncat\n")
 
 // 根据程序镜像文件名查找文件，找到返回文件指针，否则返回空指针
@@ -37,5 +37,7 @@ uint32_t fs_builtin_file_count(void);
 const struct builtin_text_file* fs_builtin_file_at(uint32_t index);
 // 按路径查找内置只读文本文件；找不到时返回空指针。
 const struct builtin_text_file* fs_builtin_file_find(const char* path);
+// 按索引把内置文件路径复制到缓冲区，并返回文件大小；失败返回负值。
+int fs_builtin_file_info(int index, char* path_buf, int max_len);
 
 #endif

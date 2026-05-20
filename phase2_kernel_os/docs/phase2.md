@@ -93,3 +93,16 @@
   - `cat /readme.txt` 是 shell 内建命令
   - `run cat /readme.txt` 是用户态程序链路
 - 这一步让文件访问不再只是 shell 内建功能，而开始具备用户态文件 syscall 雏形。
+
+## Task60：用户态 ls 程序 / 文件列表 syscall 对接
+
+- 当前继续把文件列表能力从 shell 内建命令推进到用户态程序。
+- 新增用户态 `ls`，支持 `run ls`。
+- 新增教学版文件列表 syscall：
+  - `SYS_FILE_COUNT`
+  - `SYS_FILE_INFO`
+- 用户态 `ls` 通过 syscall 枚举内置只读文件的路径和大小，而不是直接访问内核文件表。
+- shell 内建 `ls` 继续保留，因此：
+  - `ls` 是 shell 内建命令
+  - `run ls` 是用户态程序链路
+- 当前仍不是真实目录系统，只是在内置只读文件表基础上提供最小文件列表查询能力。

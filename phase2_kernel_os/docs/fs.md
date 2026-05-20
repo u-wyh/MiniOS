@@ -119,3 +119,29 @@ run cat /readme.txt
 6. 暂不完整支持 stdin/stdout/stderr
 7. 暂不支持真实磁盘与目录树
 8. 用户指针检查仍是教学版最小实现
+
+## 8. 用户态 ls 与文件列表 syscall
+
+在 Task60 中，MiniOS 继续把文件系统语义从 shell 内建命令推进到用户态程序：
+
+```text
+run ls
+    -> exec 用户态 ls
+        -> SYS_FILE_COUNT
+        -> SYS_FILE_INFO
+        -> SYS_WRITE
+```
+
+这里也要区分两种 `ls`：
+
+- `ls`
+  - shell 内建命令
+- `run ls`
+  - 用户态 `ls` 程序
+
+当前新增的文件列表 syscall 只服务于内置只读文件表，不是完整目录接口：
+
+1. `SYS_FILE_COUNT()`：返回当前内置文件数量
+2. `SYS_FILE_INFO(index, buf, max_len)`：复制指定文件路径到用户缓冲区，并返回文件大小
+
+这一步的意义是让“列出文件元信息”也开始走用户态 syscall 路径，而不只是停留在 shell 内建实现中。

@@ -40,6 +40,10 @@
 #define SYS_READ 22
 #define SYS_CLOSE 23
 
+// 只读文件列表查询
+#define SYS_FILE_COUNT 24
+#define SYS_FILE_INFO 25
+
 // int 0x80 进入内核后，栈上会按 pusha + CPU 自动压栈的顺序保存现场
 struct interrupt_frame {
     unsigned int edi;

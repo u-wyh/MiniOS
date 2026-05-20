@@ -31,6 +31,8 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `PROGRAM_INFO = 9`
 - `PROGRAM_FORK = 10`
 - `PROGRAM_FORKEXEC = 11`
+- `PROGRAM_CAT = 12`
+- `PROGRAM_LS = 13`
 
 其中：
 
@@ -50,11 +52,15 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `info -> PROGRAM_INFO`
 - `fork -> PROGRAM_FORK`
 - `forkexec -> PROGRAM_FORKEXEC`
+- `cat -> PROGRAM_CAT`
+- `ls -> PROGRAM_LS`
 
 其中 shell 默认直接暴露给用户的程序主要是：
 
 - `hello`
 - `echo`
+- `ls`
+- `cat`
 - `loop`
 - `loop_exit`
 - `sleep_test`
@@ -329,7 +335,31 @@ run cat /readme.txt
 
 因此，文件访问不再只是 shell 自己的内建逻辑，而开始具备“用户程序通过 syscall 访问文件”的雏形。
 
-## 18. 当前限制
+## 18. 用户态 ls 程序
+
+在 Task60 中，MiniOS 继续新增了用户态 `ls` 程序。
+
+它和 shell 内建 `ls` 的区别是：
+
+- `ls`
+  - 走 shell 内建命令
+- `run ls`
+  - 走用户态程序
+
+用户态 `ls` 的最小链路是：
+
+```text
+run ls
+    -> shell 解析程序名
+    -> exec 启动 ls
+    -> SYS_FILE_COUNT
+    -> SYS_FILE_INFO
+    -> SYS_WRITE
+```
+
+因此，文件系统不再只是“能读内容”，也开始具备“用户程序通过 syscall 列出文件元信息”的能力。
+
+## 19. 当前限制
 
 1. 暂不支持磁盘文件系统
 2. 暂不支持 `PATH`

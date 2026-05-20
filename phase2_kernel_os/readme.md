@@ -2274,3 +2274,28 @@ TODO：
 - 当前仍只支持内核静态只读文件，不支持真实磁盘。
 - 暂不支持写入、create/delete、目录树、权限、inode、block cache、pipe fd、dup/dup2。
 - 用户指针检查仍是教学版最小实现，后续可以继续增强。
+
+## ✅ Task60：用户态 ls 程序 / 文件列表 syscall 对接
+
+本轮目标：
+
+- 新增用户态 `ls` 程序。
+- 让 `run ls` 通过 syscall 获取内置只读文件列表。
+- 明确区分 shell 内建 `ls` 与用户态 `ls`。
+
+已完成：
+
+- 新增用户态 `ls` 程序镜像，并加入统一 `program_id` / 程序名映射。
+- `run ls` 可通过 syscall 获取当前内置文件数量、文件路径和文件大小。
+- 新增：
+  - `SYS_FILE_COUNT`
+  - `SYS_FILE_INFO`
+- shell 内建 `ls` 继续保留，因此：
+  - `ls` 是 shell 内建命令
+  - `run ls` 是用户态程序链路
+- `/programs` 文件内容已同步加入 `ls`。
+
+当前限制：
+
+- 当前仍不是真实目录系统，不支持目录树、`readdir/getdents`、权限、inode、block cache、真实磁盘。
+- 用户态 `ls` 只支持最小文件名 / 文件大小展示，不支持 `ls -l`、排序或路径参数。
