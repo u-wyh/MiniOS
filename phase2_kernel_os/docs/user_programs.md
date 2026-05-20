@@ -423,7 +423,46 @@ rm /note.txt
 - 用户态 `run ls` 会把 RAMFS 文件和内置只读文件一起列出来
 - 用户态 `run stat` 会把 RAMFS 文件显示为 `ramfs-file`
 
-## 21. 当前限制
+## 21. 用户态 writefile 与 RAMFS fd 写入
+
+在 Task63 中，MiniOS 继续把 RAMFS 写入能力从 shell 内建命令推进到用户态程序。
+
+当前新增用户态程序：
+
+- `run writefile /note.txt hello`
+
+这条链路不再直接调用 shell 内建 RAMFS 写接口，而是通过 syscall 走最小 fd 写入路径：
+
+```text
+run writefile /note.txt hello
+    -> sys_open_write(path)
+    -> sys_fd_write(fd, text, size)
+    -> sys_close(fd)
+```
+
+这意味着当前同时存在两种写法：
+
+```text
+writefile /note.txt hello
+```
+
+- shell 内建命令
+
+```text
+run writefile /note.txt hello
+```
+
+- 用户态程序，通过 syscall/fd 写 RAMFS
+
+当前规则：
+
+1. 用户态 `writefile` 只允许写 RAMFS 文件
+2. 对 `/readme.txt` 这类内置只读文件写入会失败
+3. 推荐先 `touch` 再写入
+4. 当前采用覆盖写，不支持 append
+5. 当前只处理简单文本参数，不做复杂引号解析
+
+## 22. 当前限制
 
 1. 暂不支持磁盘文件系统
 2. 暂不支持 `PATH`
@@ -438,7 +477,8 @@ rm /note.txt
 11. 当前 jobs 不是完整 job control，不支持 `fg/bg` 和 Ctrl+Z
 12. 当前 uptime 不是 RTC / wall clock，不显示真实日期时间
 13. 当前 RAMFS 不持久化，重启后文件丢失
-14. 当前 RAMFS 不支持 append、`write(fd)` 或复杂并发写保护
-15. 当前 fd 只支持只读普通文件，不支持写入、pipe、dup/dup2
+14. 当前 RAMFS 不支持 append 或复杂并发写保护
+15. 当前 fd 写入只支持 RAMFS 文件，不支持 pipe、dup/dup2 和重定向
 16. 用户态 `cat` 仍只支持单文件、只读、无重定向的教学版语义
-17. 内置程序镜像仍由内核预先编译并嵌入
+17. 用户态 `writefile` 当前只支持简单文本参数，不支持复杂引号解析
+18. 内置程序镜像仍由内核预先编译并嵌入

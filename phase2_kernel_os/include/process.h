@@ -45,10 +45,12 @@ struct process_info {
     char name[PROCESS_NAME_MAX_LEN];
 };
 
-// 教学版文件描述符表项：记录 fd 是否占用、当前打开的是哪个路径，以及当前读取偏移。
+// 教学版文件描述符表项：记录 fd 是否占用、当前打开的是哪个路径、是否允许写入，以及当前偏移。
 struct process_fd_entry {
     int used;
     char path[MAX_FS_PATH_LEN];
+    // can_write 为 1 表示该 fd 允许写入；当前只给 RAMFS 写打开路径设置，内置只读文件始终为 0。
+    int can_write;
     uint32_t offset;
 };
 
@@ -123,8 +125,12 @@ void process_wakeup_sleeping(unsigned int now_tick);
 int process_sleep_pid(int pid, unsigned int ticks);
 // 打开一个内置只读文本文件，成功返回 fd，失败返回负值。
 int process_open_file(const char* path);
+// 以写模式打开一个 RAMFS 文本文件，成功返回 fd，失败返回负值。
+int process_open_file_write(const char* path);
 // 从已打开 fd 读取数据到用户缓冲区，成功返回读取字节数，EOF 返回 0。
 int process_read_file(int fd, char* user_buf, int size);
+// 向已打开的可写 fd 写入数据，成功返回写入字节数，失败返回负值。
+int process_write_file(int fd, const char* user_buf, int size);
 // 关闭一个已打开 fd，成功返回 0，失败返回负值。
 int process_close_file(int fd);
 // 用户态 read_char 在无输入时进入最小阻塞语义：保存现场并切换到其他 READY 进程

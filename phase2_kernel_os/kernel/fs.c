@@ -72,6 +72,8 @@ static const unsigned char info_elf[] = {
 #include "ls_elf.inc"
 // stat 文件：用户态通过 SYS_STAT 查询只读文件元信息并输出
 #include "stat_elf.inc"
+// writefile 文件：用户态通过 fd/syscall 覆盖写入 RAMFS 文件
+#include "writefile_elf.inc"
 
 
 // fork 文件：父进程 fork 后等待子进程退出，子进程输出后以状态码 7 退出
@@ -244,6 +246,7 @@ static struct file file_table[] = {
     {"cat", (void*)cat_elf, (uint32_t)sizeof(cat_elf)},
     {"ls", (void*)ls_elf, (uint32_t)sizeof(ls_elf)},
     {"stat", (void*)stat_elf, (uint32_t)sizeof(stat_elf)},
+    {"writefile", (void*)writefile_elf, (uint32_t)sizeof(writefile_elf)},
     {"fork", (void*)fork_elf, (uint32_t)sizeof(fork_elf)},
     {"execchild", (void*)execchild_elf, (uint32_t)sizeof(execchild_elf)},
     {"forkexec", (void*)forkexec_elf, (uint32_t)sizeof(forkexec_elf)}
@@ -615,6 +618,50 @@ int fs_read_text_file(const char* path, uint32_t offset, char* out_buf, int max_
     }
 
     return (int)to_copy;
+}
+
+// 按路径与 offset 覆盖写入一个 RAMFS 文本文件：当前只允许写 RAMFS，内置只读文件一律拒绝。
+int fs_write_text_file(const char* path, uint32_t offset, const char* in_buf, int size) {
+    struct ramfs_file* file;
+    uint32_t end_offset;
+    int i;
+
+    if (in_buf == (const char*)0) {
+        return -1;
+    }
+
+    if (size < 0) {
+        return -2;
+    }
+
+    if (size == 0) {
+        return 0;
+    }
+
+    file = fs_ramfs_find(path);
+    if (file == (struct ramfs_file*)0) {
+        if (fs_builtin_file_find(path) != (const struct builtin_text_file*)0) {
+            return -3;
+        }
+        return -4;
+    }
+
+    end_offset = offset + (uint32_t)size;
+    if (end_offset > MAX_RAMFS_FILE_SIZE) {
+        return -5;
+    }
+
+    for (i = 0; i < size; i++) {
+        file->content[offset + (uint32_t)i] = in_buf[i];
+    }
+
+    file->size = end_offset;
+    file->content[file->size] = '\0';
+    for (i = (int)file->size + 1; i < MAX_RAMFS_FILE_SIZE + 1; i++) {
+        file->content[i] = '\0';
+    }
+
+    return size;
 }
 
 // 创建一个空 RAMFS 文件：当前要求路径不存在，且不能与内置只读文件同名。

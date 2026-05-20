@@ -2353,3 +2353,32 @@ TODO：
 - 当前只支持小文本文件，不支持真实磁盘、inode、权限、目录树、block cache。
 - 当前只支持覆盖写入，不支持 append。
 - 当前还没有 `write(fd)`，RAMFS 写入只通过 shell 内建 `writefile`。
+
+## ✅ Task63：RAMFS fd 写入 / write syscall 雏形
+
+本轮目标：
+
+- 把 RAMFS 写入能力从 shell 内建命令推进到 fd / syscall 层。
+- 新增用户态 `writefile` 程序，支持 `run writefile /note.txt hello`。
+- 保持 shell 内建 `writefile` 继续可用，同时让用户态程序也能通过 syscall 修改 RAMFS 文件。
+
+已完成：
+
+- 新增 `SYS_OPEN_WRITE`，用于以可写方式打开一个已存在的 RAMFS 文件。
+- 新增 `SYS_FD_WRITE`，用于通过 fd 向 RAMFS 文件写入文本内容。
+- 新增用户态 `writefile` 程序，支持：
+  - `run writefile /note.txt hello`
+- `run writefile` 现在会通过：
+  - `open_write`
+  - `fd_write`
+  - `close`
+  这条链路写入 RAMFS 文件，而不是直接访问内核 RAMFS 表。
+- `cat` / `run cat` / `run stat` / `run ls` 均可观察用户态写入后的 RAMFS 文件结果。
+- 内置只读文件仍然禁止通过用户态 `writefile` 写入。
+
+当前限制：
+
+- 当前仍不是完整 POSIX `write(fd)` 语义，而是教学版最小写接口。
+- 当前只允许写 RAMFS 文件，不允许写内置只读文件。
+- 当前只支持覆盖写，不支持 append。
+- 当前不支持真实磁盘、持久化、inode、权限、目录树、并发写锁和复杂 open flags。

@@ -217,3 +217,32 @@ run stat /readme.txt
 8. 暂不支持 `write(fd)`
 9. 暂不支持复杂路径解析
 10. 暂不支持多进程并发写保护
+
+## 12. Task63：RAMFS fd 写入 / write syscall 雏形
+
+在 Task63 中，MiniOS 把“RAMFS 文件写入”从 shell 内建命令继续推进到了 fd 层。
+
+当前新增的最小链路是：
+
+```text
+run writefile /note.txt hello
+    -> sys_open_write(path)
+    -> 得到可写 fd
+    -> sys_fd_write(fd, buf, size)
+    -> sys_close(fd)
+```
+
+当前 fd 写入的最小语义：
+
+1. 只有 RAMFS 文件可以用可写 fd 打开
+2. 内置只读文件不能通过 fd 写入
+3. 写入采用覆盖写语义，不支持 append
+4. 写入成功后会更新文件 size
+5. 如果新内容比旧内容短，旧尾巴会被清理，避免残留脏数据
+
+当前 shell 和用户态的两条写路径同时存在：
+
+1. shell 内建 `writefile <file> <text>`
+2. 用户态 `run writefile <file> <text>`
+
+其中用户态程序必须通过 syscall 访问 RAMFS，不能直接修改内核文件表。

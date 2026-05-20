@@ -360,6 +360,19 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    // SYS_OPEN_WRITE(path)：ebx=用户态路径指针；成功返回可写 fd，失败返回负值。
+    if (frame->eax == SYS_OPEN_WRITE) {
+        frame->eax = (unsigned int)process_open_file_write((const char*)frame->ebx);
+        return;
+    }
+
+    // SYS_FD_WRITE(fd, buf, size)：ebx=fd，ecx=用户缓冲区，edx=写入长度；
+    // 成功返回实际写入字节数，失败返回负值。当前只允许写 RAMFS 文件，不改变 stdout SYS_WRITE 语义。
+    if (frame->eax == SYS_FD_WRITE) {
+        frame->eax = (unsigned int)process_write_file((int)frame->ebx, (const char*)frame->ecx, (int)frame->edx);
+        return;
+    }
+
     // 未知 syscall：当前统一返回 -1，并在控制台打印一条最小调试信息。
     print_string("unknown syscall\n");
     frame->eax = (unsigned int)-1;

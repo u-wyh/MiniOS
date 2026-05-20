@@ -131,3 +131,21 @@
   - `rm <file>`
 - `ls` / `cat` / `stat` 以及 `run ls` / `run cat` / `run stat` 现在都能观察 RAMFS 文件。
 - 当前写入语义保持最小化：只支持覆盖写入文本，不支持 append，不支持 `write(fd)`。
+
+## Task63：RAMFS fd 写入 / write syscall 雏形
+
+- 当前继续承接 Task62，把 RAMFS 写入能力从 shell 内建命令推进到 fd / syscall 层。
+- 新增用户态 `writefile`，支持：
+  - `run writefile /note.txt hello`
+- 新增教学版写入 syscall：
+  - `SYS_OPEN_WRITE`
+  - `SYS_FD_WRITE`
+- 当前用户态 `writefile` 通过：
+  - `open_write`
+  - `fd_write`
+  - `close`
+  这条链路写入 RAMFS 文件。
+- shell 内建 `writefile` 继续保留，因此现在同时存在：
+  - `writefile /note.txt hello`：内建命令
+  - `run writefile /note.txt hello`：用户态程序
+- 当前仍只允许写 RAMFS 文件，不允许修改内置只读文件。

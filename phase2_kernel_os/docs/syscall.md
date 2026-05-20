@@ -36,15 +36,17 @@
 | 18 | `SYS_SET_BACKGROUND` | `user_set_background` | `ebx=pid` `ecx=flag` | 成功返回 `0`，失败返回负值 | 给后台任务打标记 |
 | 19 | `SYS_GET_TICKS` | `user_get_ticks` | 无 | 当前系统 tick 数 | 当前 `uptime/ticks` 命令主要使用的时间接口 |
 | 20 | `SYS_CLEAR_SCREEN` | `user_clear_screen` | 无 | `0` / 负值 | 清空 VGA 文本屏幕 |
-| 21 | `SYS_OPEN` | `user_open` | `ebx=path` | `fd` 或负值 | 打开一个内置只读文件 |
+| 21 | `SYS_OPEN` | `user_open` | `ebx=path` | `fd` 或负值 | 以只读方式打开一个当前可见文件 |
 | 22 | `SYS_READ` | `user_read` | `ebx=fd` `ecx=buf` `edx=size` | 字节数 / `0` / 负值 | 从 fd 当前 offset 读取数据 |
 | 23 | `SYS_CLOSE` | `user_close` | `ebx=fd` | `0` 或负值 | 关闭一个已打开 fd |
-| 24 | `SYS_FILE_COUNT` | `user_file_count` | 无 | 文件数量 / 负值 | 返回当前内置只读文件数量 |
+| 24 | `SYS_FILE_COUNT` | `user_file_count` | 无 | 文件数量 / 负值 | 返回当前可见文件数量 |
 | 25 | `SYS_FILE_INFO` | `user_file_info` | `ebx=index` `ecx=buf` `edx=max_len` | 文件大小 / 负值 | 复制指定索引文件路径并返回大小 |
-| 26 | `SYS_STAT` | `user_stat` | `ebx=path` `ecx=minios_stat*` | `0` / 负值 | 查询单个只读文件的教学版元信息 |
+| 26 | `SYS_STAT` | `user_stat` | `ebx=path` `ecx=minios_stat*` | `0` / 负值 | 查询单个文件的教学版元信息 |
 | 27 | `SYS_TOUCH` | `user_touch` | `ebx=path` | `0` / 负值 | 创建空 RAMFS 文件 |
 | 28 | `SYS_WRITEFILE` | `user_writefile` | `ebx=path` `ecx=text` | `0` / 负值 | 覆盖写入 RAMFS 文本文件 |
 | 29 | `SYS_RM` | `user_rm` | `ebx=path` | `0` / 负值 | 删除一个 RAMFS 文件 |
+| 30 | `SYS_OPEN_WRITE` | `user_open_write` | `ebx=path` | `fd` / 负值 | 以可写方式打开一个已存在的 RAMFS 文件 |
+| 31 | `SYS_FD_WRITE` | `user_fd_write` | `ebx=fd` `ecx=buf` `edx=size` | 字节数 / 负值 | 通过 fd 向 RAMFS 文件写入文本内容 |
 
 说明：
 
@@ -194,3 +196,20 @@ Task62 继续把“可写内存文件”暴露到 shell 用户体验中，但当
 2. `SYS_WRITEFILE` 当前要求文件已存在，推荐先 `touch`
 3. RAMFS 文件内容超过上限时直接失败
 4. 这组接口当前主要服务于 shell 内建命令，尚未扩展成 `write(fd)` 语义
+
+## 11. SYS_OPEN_WRITE / SYS_FD_WRITE 当前语义
+
+Task63 继续把 RAMFS 写入能力暴露给用户态程序，但保持最小教学版设计。
+
+1. `SYS_OPEN_WRITE(path)`：
+   - 文件必须已存在
+   - 文件必须是 RAMFS 文件
+   - 成功返回一个可写 fd
+   - 如果目标是内置只读文件或不存在，则返回负值
+2. `SYS_FD_WRITE(fd, buf, size)`：
+   - 只接受通过 `SYS_OPEN_WRITE` 打开的 RAMFS 文件 fd
+   - 成功返回实际写入字节数
+   - 当前采用覆盖写语义，不支持 append
+   - 写入超过 RAMFS 文件大小上限时失败
+
+当前 `SYS_WRITE` 仍然保持原来的 stdout 输出语义，没有被改成通用 `write(fd, buf, size)`。这是为了不破坏已有 `user_write` / shell 输出 ABI。

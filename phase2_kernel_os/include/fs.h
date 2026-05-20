@@ -18,7 +18,7 @@ struct builtin_text_file {
     uint32_t size;
 };
 
-// 教学版文件类型：当前只支持内置只读文本文件。
+// 教学版文件类型：当前最小支持内置只读文本文件与 RAMFS 内存文本文件。
 #define MINIOS_FILE_TYPE_READONLY_TEXT 1
 // 教学版 RAMFS 文件类型：表示运行时创建的内存文本文件。
 #define MINIOS_FILE_TYPE_RAMFS_TEXT 2
@@ -47,8 +47,8 @@ struct minios_stat {
 // 统一的内置只读文本文件清单：同时供内核文件表和用户态 shell 的 ls/cat 复用。
 #define MINIOS_BUILTIN_TEXT_FILE_LIST(X)                                                                    \
     X("/readme.txt", "MiniOS Phase2 builtin read-only files\nThis is a teaching kernel, not a disk fs.\n") \
-    X("/programs", "hello\necho\nls\ncat\nstat\nloop\nloop_exit\nsleep_test\n")                             \
-    X("/help.txt", "help\nps\njobs\nuptime\nrun\nstart\nwait\nkill\nls\ncat\n")
+    X("/programs", "hello\necho\nls\ncat\nstat\nwritefile\nloop\nloop_exit\nsleep_test\n")                 \
+    X("/help.txt", "help\nps\njobs\nuptime\nrun\nstart\nwait\nkill\nls\ncat\ntouch\nwritefile\nrm\n")
 
 // 根据程序镜像文件名查找文件，找到返回文件指针，否则返回空指针
 struct file* fs_find(const char* name);
@@ -69,6 +69,8 @@ int fs_builtin_file_info(int index, char* path_buf, int max_len);
 int fs_builtin_file_stat(const char* path, struct minios_stat* out_stat);
 // 按路径与 offset 读取一个当前可见文本文件的内容；成功返回字节数，EOF 返回 0。
 int fs_read_text_file(const char* path, uint32_t offset, char* out_buf, int max_len);
+// 按路径与 offset 写入一个 RAMFS 文本文件；成功返回写入字节数，失败返回负值。
+int fs_write_text_file(const char* path, uint32_t offset, const char* in_buf, int size);
 // 创建一个空 RAMFS 文件；成功返回 0，失败返回负值。
 int fs_create_ramfs_file(const char* path);
 // 覆盖写入一个 RAMFS 文件；成功返回 0，失败返回负值。

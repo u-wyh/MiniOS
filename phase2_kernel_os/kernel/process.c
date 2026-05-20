@@ -248,6 +248,7 @@ static void process_clear_fd_table(struct process* proc) {
     for (i = 0; i < PROCESS_MAX_OPEN_FILES; i++) {
         proc->fd_table[i].used = 0;
         proc->fd_table[i].path[0] = '\0';
+        proc->fd_table[i].can_write = 0;
         proc->fd_table[i].offset = 0;
     }
 }
@@ -1206,14 +1207,62 @@ int process_open_file(const char* path) {
         if (j == MAX_FS_PATH_LEN - 1 && path[j] != '\0') {
             proc->fd_table[i].used = 0;
             proc->fd_table[i].path[0] = '\0';
+            proc->fd_table[i].can_write = 0;
             return -4;
         }
         proc->fd_table[i].path[MAX_FS_PATH_LEN - 1] = '\0';
+        proc->fd_table[i].can_write = 0;
         proc->fd_table[i].offset = 0;
         return PROCESS_FD_BASE + i;
     }
 
     return -3;
+}
+
+// 以写模式打开一个 RAMFS 文本文件：当前只给运行时内存文件分配可写 fd，内置只读文件一律拒绝。
+int process_open_file_write(const char* path) {
+    struct process* proc = current_process;
+    struct minios_stat st;
+    int i;
+    int j;
+
+    if (proc == (struct process*)0 || path == (const char*)0 || path[0] == '\0') {
+        return -1;
+    }
+
+    if (fs_builtin_file_stat(path, &st) < 0) {
+        return -2;
+    }
+
+    if (st.type != MINIOS_FILE_TYPE_RAMFS_TEXT) {
+        return -3;
+    }
+
+    for (i = 0; i < PROCESS_MAX_OPEN_FILES; i++) {
+        if (proc->fd_table[i].used != 0) {
+            continue;
+        }
+
+        proc->fd_table[i].used = 1;
+        for (j = 0; j < MAX_FS_PATH_LEN - 1; j++) {
+            proc->fd_table[i].path[j] = path[j];
+            if (path[j] == '\0') {
+                break;
+            }
+        }
+        if (j == MAX_FS_PATH_LEN - 1 && path[j] != '\0') {
+            proc->fd_table[i].used = 0;
+            proc->fd_table[i].path[0] = '\0';
+            proc->fd_table[i].can_write = 0;
+            return -5;
+        }
+        proc->fd_table[i].path[MAX_FS_PATH_LEN - 1] = '\0';
+        proc->fd_table[i].can_write = 1;
+        proc->fd_table[i].offset = 0;
+        return PROCESS_FD_BASE + i;
+    }
+
+    return -4;
 }
 
 // 从当前进程已打开 fd 读取数据：每次按路径重新解析文件，便于统一支持只读文件和 RAMFS 文件。
@@ -1253,6 +1302,47 @@ int process_read_file(int fd, char* user_buf, int size) {
     return read_result;
 }
 
+// 向当前进程已打开的可写 fd 写入数据：当前只支持 RAMFS 文件，写入后 offset 向前推进。
+int process_write_file(int fd, const char* user_buf, int size) {
+    struct process* proc = current_process;
+    struct process_fd_entry* entry;
+    int slot;
+    int write_result;
+
+    if (proc == (struct process*)0 || user_buf == (const char*)0) {
+        return -1;
+    }
+
+    if (size < 0) {
+        return -2;
+    }
+
+    if (size == 0) {
+        return 0;
+    }
+
+    slot = fd - PROCESS_FD_BASE;
+    if (slot < 0 || slot >= PROCESS_MAX_OPEN_FILES) {
+        return -3;
+    }
+
+    entry = &proc->fd_table[slot];
+    if (entry->used == 0 || entry->path[0] == '\0') {
+        return -4;
+    }
+
+    if (entry->can_write == 0) {
+        return -5;
+    }
+
+    write_result = fs_write_text_file(entry->path, entry->offset, user_buf, size);
+    if (write_result > 0) {
+        entry->offset += (uint32_t)write_result;
+    }
+
+    return write_result;
+}
+
 // 关闭当前进程的一个教学版只读 fd：只释放表项，不涉及底层文件对象释放。
 int process_close_file(int fd) {
     struct process* proc = current_process;
@@ -1273,6 +1363,7 @@ int process_close_file(int fd) {
 
     proc->fd_table[slot].used = 0;
     proc->fd_table[slot].path[0] = '\0';
+    proc->fd_table[slot].can_write = 0;
     proc->fd_table[slot].offset = 0;
     return 0;
 }

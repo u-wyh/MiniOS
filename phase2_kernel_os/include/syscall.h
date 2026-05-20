@@ -49,6 +49,9 @@
 #define SYS_TOUCH 27
 #define SYS_WRITEFILE 28
 #define SYS_RM 29
+// RAMFS fd 写入雏形：避免破坏已有 stdout SYS_WRITE ABI。
+#define SYS_OPEN_WRITE 30
+#define SYS_FD_WRITE 31
 
 // int 0x80 进入内核后，栈上会按 pusha + CPU 自动压栈的顺序保存现场
 struct interrupt_frame {
