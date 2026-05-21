@@ -2507,3 +2507,35 @@ TODO：
 - 暂不支持或暂不推荐 `<` 与 `>` 组合。
 - 暂不支持复杂引号解析。
 - 当前仍不支持真实磁盘、持久化、inode、权限和目录树。
+
+## ✅ Task68：组合重定向 < + > 雏形 / run ... < input > output
+
+本轮目标：
+
+- 把 Task66 的 stdout 重定向与 Task67 的 stdin 重定向组合起来。
+- 支持 `run cat < /readme.txt > /copy.txt`。
+- 让用户态程序形成教学版 `file -> stdin -> stdout -> file` 数据流。
+
+已完成：
+
+- shell 已支持：
+  - `run cat < /readme.txt > /copy.txt`
+  - `run cat < /input.txt > /output.txt`
+  - `run cat < /input.txt >> /log.txt`
+- shell 解析时会把 `<` / `>` / `>>` 以及对应路径从用户程序 argv 中剥离。
+- shell 创建子进程时可以同时设置：
+  - stdin 重定向路径
+  - stdout 重定向路径
+- `SYS_READ(fd=0)` 继续从输入文件读取。
+- `SYS_WRITE` 继续根据 stdout 重定向配置把输出写入 RAMFS。
+- 单独的 `<`、`>`、`>>` 行为都保持原样可用。
+
+当前限制：
+
+- 当前不是完整 `dup2`/fd 复制模型。
+- 暂不支持管道 `|`。
+- 暂不支持 stderr 重定向。
+- 暂不支持后台任务重定向。
+- 暂不支持多个输入或多个输出重定向。
+- 暂不支持复杂引号解析。
+- 暂不支持真实磁盘、持久化、inode、权限和目录树。

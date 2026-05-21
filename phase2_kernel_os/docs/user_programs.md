@@ -654,3 +654,38 @@ run cat < /readme.txt
 4. 普通 `run cat` 在没有 stdin 重定向时会安全结束，不崩溃
 5. 当前不支持或暂不推荐 `<` 与 `>` 组合
 6. 当前不支持 `run cat /readme.txt < /input.txt` 这种 argv 文件模式和 stdin 重定向混用
+
+## 26. run 用户程序组合重定向
+
+Task68 当前把 stdin 和 stdout 重定向组合起来，支持：
+
+```text
+run cat < /readme.txt > /copy.txt
+run cat < /input.txt > /output.txt
+run cat < /input.txt >> /log.txt
+```
+
+当前规则：
+
+1. `<`、`>`、`>>` 以及后面的路径都不会传入用户程序 argv
+2. `cat` 在没有 argv 文件名时会从 `fd=0` 读取
+3. `SYS_WRITE` 会根据 stdout 重定向配置把输出写到目标文件
+4. `>`：
+   - 不存在则自动创建 RAMFS 文件
+   - 存在则覆盖写
+5. `>>`：
+   - 目标文件必须已存在
+   - 目标文件必须是 RAMFS 文件
+6. 只读内置文件不能作为输出目标
+7. 当前仍不支持：
+   - 管道
+   - stderr 重定向
+   - 多个输入/输出重定向
+   - 复杂 quoting
+
+当前最典型示例：
+
+```text
+run cat < /readme.txt > /copy.txt
+cat /copy.txt
+```

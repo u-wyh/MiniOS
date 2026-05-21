@@ -306,3 +306,38 @@ sys_read(0, buf, size)
 ```
 
 当前这仍不是完整 `dup2` / fd 复制 / tty 模型，只是教学版“按进程记录 stdin 来源”。
+
+## 16. Task68 组合重定向下的 SYS_READ / SYS_WRITE
+
+Task68 不新增新的重定向 syscall，而是把 Task66 / Task67 已有两条链路同时启用。
+
+例如：
+
+```text
+run cat < /readme.txt > /copy.txt
+```
+
+当前行为是：
+
+1. shell 在创建子进程后：
+   - 调用 `SYS_SET_STDIN_REDIRECT(pid, "/readme.txt")`
+   - 调用 `SYS_SET_STDOUT_REDIRECT(pid, "/copy.txt", 0)`
+2. 用户程序 `cat` 本身不需要知道自己被重定向
+3. `cat` 调用：
+   - `sys_read(0, buf, size)` 时，内核从输入文件读取
+   - `sys_write(text)` 时，内核把输出写到目标 RAMFS 文件
+
+如果使用：
+
+```text
+run cat < /input.txt >> /log.txt
+```
+
+则 `SYS_WRITE` 继续按追加语义工作。
+
+因此，Task68 的重点不是新增 syscall，而是让：
+
+1. `SYS_READ(fd=0)`
+2. `SYS_WRITE`
+
+在同一个进程中同时根据各自的重定向字段独立工作。

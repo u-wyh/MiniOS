@@ -201,3 +201,18 @@
 - 用户态 `cat` 在没有 argv 文件名时，会进入 stdin 模式并循环读取 `fd=0` 直到 EOF。
 - 普通 `run cat /readme.txt` 仍保持原有 argv 文件模式，不受 stdin 重定向实现影响。
 - 当前仍不是完整 `dup2` / tty 模型，不支持真实键盘 stdin、here-doc、管道、多重输入重定向和 `<` 与 `>` 组合。
+
+## Task68：组合重定向 < + > 雏形 / run ... < input > output
+
+- 当前继续承接 Task66/67，把 stdin 与 stdout 重定向组合为单进程文件数据流。
+- shell 现在支持：
+  - `run cat < /readme.txt > /copy.txt`
+  - `run cat < /input.txt > /output.txt`
+  - `run cat < /input.txt >> /log.txt`
+- shell 会在解析 `run` 时同时识别 `<` 与 `>` / `>>`，并把这些 token 从用户程序 argv 中剥离。
+- 子进程可以同时启用：
+  - `stdin_redirect_*`
+  - `stdout_redirect_*`
+- 组合重定向下的数据流是：
+  - 输入文件 -> `SYS_READ(fd=0)` -> 用户程序 -> `SYS_WRITE` -> 输出文件
+- 当前仍不是完整 `dup2` / pipe 模型，不支持 stderr、后台任务重定向、多重重定向和复杂 shell 语法。

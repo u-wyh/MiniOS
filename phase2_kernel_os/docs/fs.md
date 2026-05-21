@@ -515,3 +515,70 @@ run cat < /readme.txt
 7. 暂不支持多个输入重定向
 8. 暂不支持复杂 quoting
 9. 暂不支持或暂不推荐 `<` 与 `>` 组合
+
+## 17. Task68：组合重定向 < + > / < + >>
+
+Task68 把前两轮的 stdin/stdout 重定向组合起来，形成教学版：
+
+```text
+run cat < /readme.txt > /copy.txt
+run cat < /input.txt >> /log.txt
+```
+
+### 当前数据流
+
+组合重定向下的数据流是：
+
+```text
+输入文件 -> sys_read(0, buf, size) -> 用户程序 -> sys_write(text) -> 输出文件
+```
+
+其中：
+
+1. `SYS_READ(fd=0)` 负责从 `stdin_redirect_path` 读取
+2. `SYS_WRITE` 负责根据 `stdout_redirect_path` 把文本写入 RAMFS
+
+### 输入文件与输出文件规则
+
+输入文件：
+
+1. 必须已存在
+2. 可以是内置只读文件
+3. 可以是 RAMFS 文件
+
+输出文件：
+
+1. `>`：
+   - 若目标不存在，则在第一次写入时自动创建 RAMFS 文件
+   - 若目标已存在且是 RAMFS 文件，则覆盖写入
+2. `>>`：
+   - 目标文件必须已存在
+   - 目标文件必须是 RAMFS 文件
+   - 写入按追加语义进行
+3. 内置只读文件不能作为输出目标
+
+### 与真实 Linux 的区别
+
+真实系统常见做法是：
+
+1. `open(input)`
+2. `dup2(input_fd, 0)`
+3. `open(output)`
+4. `dup2(output_fd, 1)`
+5. `exec(program)`
+
+MiniOS 当前没有完整 `dup2` / fd 复制，因此仍采用教学版 PCB 字段：
+
+1. `stdin_redirect_*`
+2. `stdout_redirect_*`
+
+### 当前限制
+
+1. 暂不支持 pipe
+2. 暂不支持 dup2
+3. 暂不支持 fd 复制
+4. 暂不支持 stderr 重定向
+5. 暂不支持后台任务重定向
+6. 暂不支持多个输入或多个输出重定向
+7. 暂不支持复杂 quoting
+8. 暂不支持真实磁盘和持久化
