@@ -90,6 +90,20 @@ struct process {
     int requested_exit;
     // 教学版每进程 fd 表：当前只用于只读文本文件，不处理 pipe、dup 和写入。
     struct process_fd_entry fd_table[PROCESS_MAX_OPEN_FILES];
+    // stdout_redirect_enabled 为 1 时，当前进程后续 SYS_WRITE 将写入 RAMFS 文件而不是前台屏幕。
+    int stdout_redirect_enabled;
+    // stdout_redirect_append 为 1 表示 shell 使用 >>；为 0 表示 shell 使用 >。
+    int stdout_redirect_append;
+    // stdout_redirect_started 用于区分第一次写入：> 首次覆盖写，后续多次 SYS_WRITE 统一改为追加。
+    int stdout_redirect_started;
+    // stdout_redirect_path 保存 stdout 重定向目标；必须复制到 PCB，不能引用 shell 临时 token 缓冲区。
+    char stdout_redirect_path[MAX_FS_PATH_LEN];
+    // stdin_redirect_enabled 为 1 时，当前进程的 SYS_READ(fd=0) 将从指定文件读取，而不是走默认空输入语义。
+    int stdin_redirect_enabled;
+    // stdin_redirect_path 保存 stdin 重定向源文件路径；当前允许内置只读文件和 RAMFS 文件。
+    char stdin_redirect_path[MAX_FS_PATH_LEN];
+    // stdin_redirect_offset 记录当前从 stdin 文件已经读取到的位置，EOF 后 SYS_READ(fd=0) 返回 0。
+    uint32_t stdin_redirect_offset;
 
     // 扩展字段：记录程序名与槽位占用，便于 ps 展示与管理
     const char* name;
@@ -145,6 +159,14 @@ const char* process_state_name(int state);
 int process_current_pid(void);
 // 返回当前进程是否被标记为后台任务
 int process_current_is_background(void);
+// 为指定 pid 的进程配置教学版 stdout 重定向：后续该进程的 SYS_WRITE 将根据该配置写 RAMFS。
+int process_set_stdout_redirect_by_pid(int pid, const char* path, int is_append);
+// 为指定 pid 的进程配置教学版 stdin 重定向：后续该进程的 SYS_READ(fd=0) 将根据该配置从文件读取。
+int process_set_stdin_redirect_by_pid(int pid, const char* path);
+// 返回当前进程是否启用了 stdout 重定向。
+int process_current_has_stdout_redirect(void);
+// 把当前进程的一次 SYS_WRITE 文本输出写到 RAMFS 重定向目标；成功返回写入字节数。
+int process_write_stdout_redirect(const char* text);
 // 返回是否存在正在等待键盘输入的用户进程，供键盘 IRQ 区分用户 shell 与内核 shell
 int process_has_read_char_waiter(void);
 // 返回进程表中是否仍有用户进程存在；键盘 IRQ 用它避免用户态运行期间误回内核 shell

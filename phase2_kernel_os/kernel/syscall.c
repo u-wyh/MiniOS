@@ -83,6 +83,12 @@ void syscall_handle(struct interrupt_frame* frame) {
             process_mark_current_requested_exit();
         }
 
+        // Task66：若当前进程启用了 stdout 重定向，则把整段输出写入 RAMFS，而不是直接落到前台屏幕。
+        if (process_current_has_stdout_redirect() != 0) {
+            frame->eax = (unsigned int)process_write_stdout_redirect(text);
+            return;
+        }
+
         // 教学版后台任务先不占用前台输出，避免 start 出来的测试程序把 shell 提示符冲乱。
         if (process_current_is_background() != 0) {
             frame->eax = 0;
@@ -310,6 +316,7 @@ void syscall_handle(struct interrupt_frame* frame) {
     }
 
     // SYS_READ(fd, buf, size)：ebx=fd，ecx=用户缓冲区，edx=读取长度；成功返回字节数，EOF 返回 0。
+    // 若 fd=0 且当前进程启用了 stdin 重定向，则该读取会改为从目标文件读取。
     if (frame->eax == SYS_READ) {
         frame->eax = (unsigned int)process_read_file((int)frame->ebx, (char*)frame->ecx, (int)frame->edx);
         return;
@@ -377,6 +384,20 @@ void syscall_handle(struct interrupt_frame* frame) {
     // 成功返回追加字节数，失败返回负值。当前只支持把文本追加到 RAMFS 文件末尾。
     if (frame->eax == SYS_APPEND_FILE) {
         frame->eax = (unsigned int)fs_append_ramfs_file((const char*)frame->ebx, (const char*)frame->ecx);
+        return;
+    }
+
+    // SYS_SET_STDOUT_REDIRECT(pid, path, append)：ebx=目标 pid，ecx=目标路径，edx=是否使用 >>；
+    // shell 在 fork 成功后调用它，为即将 exec 的子进程设置 stdout 重定向。
+    if (frame->eax == SYS_SET_STDOUT_REDIRECT) {
+        frame->eax = (unsigned int)process_set_stdout_redirect_by_pid((int)frame->ebx, (const char*)frame->ecx, (int)frame->edx);
+        return;
+    }
+
+    // SYS_SET_STDIN_REDIRECT(pid, path)：ebx=目标 pid，ecx=输入文件路径；
+    // shell 在 fork 成功后调用它，为即将 exec 的子进程设置 stdin 重定向。
+    if (frame->eax == SYS_SET_STDIN_REDIRECT) {
+        frame->eax = (unsigned int)process_set_stdin_redirect_by_pid((int)frame->ebx, (const char*)frame->ecx);
         return;
     }
 

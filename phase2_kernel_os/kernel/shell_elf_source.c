@@ -26,6 +26,8 @@
 #define SYS_WRITEFILE 28
 #define SYS_RM 29
 #define SYS_APPEND_FILE 32
+#define SYS_SET_STDOUT_REDIRECT 33
+#define SYS_SET_STDIN_REDIRECT 34
 // 当前内核默认把 PIT 配置为 20Hz，因此 1 tick 约等于 50ms。
 #define SHELL_UPTIME_TICKS_PER_SECOND 20
 
@@ -208,6 +210,16 @@ static int user_appendfile(const char* path, const char* text) {
     return user_syscall2(SYS_APPEND_FILE, (int)path, (int)text);
 }
 
+// 为指定 pid 的子进程启用教学版 stdout 重定向；后续该子进程的 SYS_WRITE 会根据配置写入 RAMFS。
+static int user_set_stdout_redirect(int pid, const char* path, int is_append) {
+    return user_syscall3(SYS_SET_STDOUT_REDIRECT, pid, (int)path, is_append);
+}
+
+// 为指定 pid 的子进程启用教学版 stdin 重定向；后续该子进程的 SYS_READ(fd=0) 会从文件读取。
+static int user_set_stdin_redirect(int pid, const char* path) {
+    return user_syscall2(SYS_SET_STDIN_REDIRECT, pid, (int)path);
+}
+
 // 比较两个字符串是否相等。
 static int shell_streq(const char* left, const char* right) {
     int i = 0;
@@ -237,6 +249,11 @@ static int shell_is_redirect_token(const char* token) {
     }
 
     return 0;
+}
+
+// 判断一个 token 是否是当前教学版 shell 支持的输入重定向符号。
+static int shell_is_input_redirect_token(const char* token) {
+    return shell_streq(token, "<");
 }
 
 // 输出进程状态名：ps 和 jobs 共用同一套教学版状态展示，避免两处状态文案不一致。
@@ -377,6 +394,31 @@ static int shell_find_redirect(int argc, char** argv, int* out_index, int* out_i
 
     *out_index = found_index;
     *out_is_append = found_is_append;
+    return 0;
+}
+
+// 扫描当前命令是否包含 <；如果找到则返回其位置。
+static int shell_find_input_redirect(int argc, char** argv, int* out_index) {
+    int i;
+    int found_index = -1;
+
+    if (out_index == (int*)0) {
+        return -1;
+    }
+
+    for (i = 0; i < argc; i++) {
+        if (shell_is_input_redirect_token(argv[i]) == 0) {
+            continue;
+        }
+
+        if (found_index >= 0) {
+            return -2;
+        }
+
+        found_index = i;
+    }
+
+    *out_index = found_index;
     return 0;
 }
 
@@ -669,8 +711,8 @@ static int shell_validate_program_args(int argc, char** argv) {
     return 0;
 }
 
-// 统一处理 run/start/hello 的 fork + exec + waitpid 逻辑。
-static int shell_spawn_program(int program_id, int argc, char** argv, int wait_child, int is_background) {
+// 统一处理 run/start/hello 的 fork + exec + waitpid 逻辑；如提供 redirect_path，则父进程会在 wait 前先给子进程配置 stdout 重定向。
+static int shell_spawn_program(int program_id, int argc, char** argv, int wait_child, int is_background, const char* stdout_redirect_path, int stdout_redirect_is_append, const char* stdin_redirect_path) {
     int pid = user_fork();
 
     if (pid < 0) {
@@ -690,6 +732,28 @@ static int shell_spawn_program(int program_id, int argc, char** argv, int wait_c
 
     if (is_background != 0) {
         user_set_background(pid, 1);
+    }
+
+    if (stdout_redirect_path != (const char*)0) {
+        if (user_set_stdout_redirect(pid, stdout_redirect_path, stdout_redirect_is_append) < 0) {
+            user_kill(pid);
+            if (wait_child != 0) {
+                user_waitpid(pid);
+            }
+            user_write("Redirect setup failed\n");
+            return -1;
+        }
+    }
+
+    if (stdin_redirect_path != (const char*)0) {
+        if (user_set_stdin_redirect(pid, stdin_redirect_path) < 0) {
+            user_kill(pid);
+            if (wait_child != 0) {
+                user_waitpid(pid);
+            }
+            user_write("stdin redirect setup failed\n");
+            return -1;
+        }
     }
 
     if (wait_child != 0) {
@@ -1070,6 +1134,9 @@ static void shell_cmd_help(void) {
     user_write("  echo <text> > <file>\n");
     user_write("  echo <text> >> <file>\n");
     user_write("  run <program> [args]\n");
+    user_write("  run <program> [args] > <file>\n");
+    user_write("  run <program> [args] >> <file>\n");
+    user_write("  run cat < <file>\n");
     user_write("  start <program> [args]\n");
     user_write("  jobs\n");
     user_write("  wait [pid]\n");
@@ -1103,6 +1170,8 @@ void _start(void) {
         int redirect_index;
         int redirect_is_append;
         int redirect_status;
+        int input_redirect_index;
+        int input_redirect_status;
 
         user_write("MiniOS$ ");
         shell_read_line(line, SHELL_LINE_MAX);
@@ -1123,14 +1192,37 @@ void _start(void) {
             continue;
         }
 
+        input_redirect_index = -1;
+        input_redirect_status = shell_find_input_redirect(argc, argv, &input_redirect_index);
+        if (input_redirect_status < 0) {
+            user_write("redirect: invalid input syntax\n");
+            continue;
+        }
+
+        if (redirect_index >= 0 && input_redirect_index >= 0) {
+            user_write("combined redirection is not supported yet\n");
+            continue;
+        }
+
         if (redirect_index >= 0) {
-            if (shell_streq(argv[0], "echo") == 0) {
-                user_write("redirect only supports echo now\n");
+            if (shell_streq(argv[0], "echo") != 0) {
+                shell_cmd_echo_redirect(argc, argv, redirect_index, redirect_is_append);
                 continue;
             }
 
-            shell_cmd_echo_redirect(argc, argv, redirect_index, redirect_is_append);
-            continue;
+            if (shell_streq(argv[0], "run") != 0) {
+                // run 的重定向留到后面的 run 分支统一处理，避免把 > / >> 误传给用户程序 argv。
+            } else {
+                user_write("redirect only supports echo/run now\n");
+                continue;
+            }
+        }
+
+        if (input_redirect_index >= 0) {
+            if (shell_streq(argv[0], "run") == 0) {
+                user_write("input redirect only supports run now\n");
+                continue;
+            }
         }
 
         if (shell_streq(argv[0], "help")) {
@@ -1269,6 +1361,9 @@ void _start(void) {
             int is_start = shell_streq(argv[0], "start");
             int program_id;
             int validate_result;
+            int program_argc = argc - 1;
+            const char* redirect_target = (const char*)0;
+            const char* input_redirect_target = (const char*)0;
 
             if (argc <= 1) {
                 if (is_start != 0) {
@@ -1279,13 +1374,70 @@ void _start(void) {
                 continue;
             }
 
+            if (redirect_index >= 0) {
+                if (is_start != 0) {
+                    user_write("redirect does not support start\n");
+                    continue;
+                }
+
+                if (redirect_index <= 1) {
+                    user_write("redirect: missing program output\n");
+                    continue;
+                }
+
+                if ((redirect_index + 1) >= argc) {
+                    user_write("redirect: missing target file\n");
+                    continue;
+                }
+
+                if ((redirect_index + 2) != argc) {
+                    user_write("redirect: only one target file supported\n");
+                    continue;
+                }
+
+                program_argc = redirect_index - 1;
+                redirect_target = argv[redirect_index + 1];
+            }
+
+            if (input_redirect_index >= 0) {
+                if (is_start != 0) {
+                    user_write("input redirect does not support start\n");
+                    continue;
+                }
+
+                if (input_redirect_index <= 1) {
+                    user_write("redirect: missing program input target\n");
+                    continue;
+                }
+
+                if ((input_redirect_index + 1) >= argc) {
+                    user_write("redirect: missing input file\n");
+                    continue;
+                }
+
+                if ((input_redirect_index + 2) != argc) {
+                    user_write("redirect: only one input file supported\n");
+                    continue;
+                }
+
+                program_argc = input_redirect_index - 1;
+                input_redirect_target = argv[input_redirect_index + 1];
+
+                // 当前教学版 stdin 重定向只支持“程序本身无额外文件参数”的最小模式，
+                // 例如 run cat < /readme.txt；像 run cat /a.txt < /b.txt 暂不支持。
+                if (program_argc != 1) {
+                    user_write("stdin redirect does not support extra args yet\n");
+                    continue;
+                }
+            }
+
             program_id = shell_program_id_from_name(argv[1]);
             if (program_id == PROGRAM_INVALID) {
                 user_write("Unknown program\n");
                 continue;
             }
 
-            validate_result = shell_validate_program_args(argc - 1, &argv[1]);
+            validate_result = shell_validate_program_args(program_argc, &argv[1]);
             if (validate_result == -1) {
                 user_write("Too many args\n");
                 continue;
@@ -1295,12 +1447,12 @@ void _start(void) {
                 continue;
             }
 
-            shell_spawn_program(program_id, argc - 1, &argv[1], is_start == 0, is_start != 0);
+            shell_spawn_program(program_id, program_argc, &argv[1], is_start == 0, is_start != 0, redirect_target, redirect_is_append, input_redirect_target);
             continue;
         }
 
         if (shell_streq(argv[0], "hello")) {
-            shell_spawn_program(PROGRAM_HELLO, 1, hello_argv, 1, 0);
+            shell_spawn_program(PROGRAM_HELLO, 1, hello_argv, 1, 0, (const char*)0, 0, (const char*)0);
             continue;
         }
 

@@ -54,6 +54,10 @@
 #define SYS_FD_WRITE 31
 // RAMFS 教学版追加写入接口：按路径把文本追加到文件末尾，不实现完整 POSIX O_APPEND。
 #define SYS_APPEND_FILE 32
+// 教学版 stdout 重定向配置：仅作用于当前进程，不实现完整 dup2/fd 复制语义。
+#define SYS_SET_STDOUT_REDIRECT 33
+// 教学版 stdin 重定向配置：仅作用于当前进程，不实现完整 dup2/fd 复制语义。
+#define SYS_SET_STDIN_REDIRECT 34
 
 // int 0x80 进入内核后，栈上会按 pusha + CPU 自动压栈的顺序保存现场
 struct interrupt_frame {

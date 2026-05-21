@@ -64,7 +64,7 @@ char keyboard_read_char_blocking(void) {
 }
 
 // 将最小 Set 1 扫描码映射成教学版 shell 需要的小写字母、数字和少量标点。
-// 当前补齐路径和重定向常用字符，例如 '.'、'/' 与 Shift + '.' -> '>'。
+// 当前补齐路径和重定向常用字符，例如 ','、'.'、'/' 与 Shift 组合得到的 '<'、'>'。
 static char scancode_to_ascii(unsigned char scancode, int shift_active) {
     switch (scancode) {
         case 0x1E: return 'a';
@@ -104,6 +104,11 @@ static char scancode_to_ascii(unsigned char scancode, int shift_active) {
         case 0x09: return '8';
         case 0x0A: return '9';
         case 0x39: return ' ';
+        case 0x33:
+            if (shift_active != 0) {
+                return '<';
+            }
+            return ',';
         case 0x34:
             if (shift_active != 0) {
                 return '>';

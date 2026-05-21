@@ -27,8 +27,8 @@ struct builtin_text_file {
 #define MAX_FS_PATH_LEN 32
 // 教学版 RAMFS 文件数量上限：当前使用固定数组，不做动态扩容。
 #define MAX_RAMFS_FILES 8
-// 教学版 RAMFS 单文件内容上限：当前只支持小文本文件，超过上限直接拒绝写入。
-#define MAX_RAMFS_FILE_SIZE 64
+// 教学版 RAMFS 单文件内容上限：需要容纳 readme/cat/ls/stat 的重定向结果，超过上限直接拒绝写入。
+#define MAX_RAMFS_FILE_SIZE 256
 
 // 教学版 RAMFS 文件槽位：记录是否占用、规范路径、文本内容与当前大小。
 struct ramfs_file {

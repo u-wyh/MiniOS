@@ -573,3 +573,84 @@ echo world >> /note.txt
 2. 不支持 `run cat /readme.txt > /copy.txt`
 3. 不支持通用用户程序 stdout 捕获
 4. 不支持管道与重定向组合
+
+## 24. run 用户程序 stdout 重定向到 RAMFS
+
+Task66 当前新增的是 `run` 启动用户程序的 stdout 重定向。
+
+当前支持：
+
+```text
+run cat /readme.txt > /copy.txt
+run ls > /files.txt
+run stat /readme.txt > /stat.txt
+```
+
+如需追加：
+
+```text
+run stat /programs >> /stat.txt
+```
+
+这里要和 Task65 的 echo 专用重定向区分：
+
+```text
+echo hello > /note.txt
+```
+
+- shell 直接写 RAMFS
+
+```text
+run cat /readme.txt > /copy.txt
+```
+
+- 用户程序照常调用 `sys_write`
+- 内核根据当前进程的 stdout 重定向配置，把输出写入 RAMFS
+
+当前规则：
+
+1. 普通 `run cat /readme.txt` 仍输出到屏幕
+2. `run ... > file`
+   - 第一次 `SYS_WRITE` 覆盖写
+   - 后续多次 `SYS_WRITE` 自动追加
+3. `run ... >> file`
+   - 目标文件必须已存在
+   - 所有输出都按追加写处理
+4. 只读内置文件不能作为重定向目标
+5. 当前不支持 `start ... > file`
+6. 当前不支持管道和复杂重定向组合
+
+## 25. run 用户程序 stdin 重定向到文件
+
+Task67 当前新增的是 `run ... < file`。
+
+最小支持示例：
+
+```text
+run cat < /readme.txt
+run cat < /programs
+run cat < /input.txt
+```
+
+当前用户态 `cat` 的两种模式是：
+
+```text
+run cat /readme.txt
+```
+
+- argv 文件模式：仍通过 `open/read/close` 读取指定文件
+
+```text
+run cat < /readme.txt
+```
+
+- stdin 模式：当没有文件参数时，`cat` 会循环 `sys_read(0, ...)`，直到 EOF
+
+当前规则：
+
+1. `<` 和目标文件不会传进用户程序 argv
+2. 输入文件既可以是内置只读文件，也可以是 RAMFS 文件
+3. 普通 `run cat /readme.txt` 不受影响
+4. 普通 `run cat` 在没有 stdin 重定向时会安全结束，不崩溃
+5. 当前不支持或暂不推荐 `<` 与 `>` 组合
+6. 当前不支持 `run cat /readme.txt < /input.txt` 这种 argv 文件模式和 stdin 重定向混用

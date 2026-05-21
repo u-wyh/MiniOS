@@ -36,6 +36,8 @@ static void process_clear_user_args(struct process* proc);
 static void process_clear_fd_table(struct process* proc);
 static int process_copy_user_args(struct process* proc, int argc, const char* const* argv);
 static int process_name_equals(const char* a, const char* b);
+static int process_copy_path(char* dst, const char* src, unsigned int max_len);
+static int process_text_length(const char* text);
 static void process_restore_current_user_mapping(void);
 static void process_reparent_children(int old_parent_pid);
 static int process_has_blocked_waiter(struct process* child);
@@ -43,6 +45,8 @@ static void process_reap_init_zombies(void);
 static void process_release_user_image(struct process* proc);
 static struct process* process_pick_next_ready(struct process* current);
 static struct process* process_find_by_pid(int pid);
+static int process_set_stdout_redirect(struct process* proc, const char* path, int is_append);
+static int process_set_stdin_redirect(struct process* proc, const char* path);
 static int process_is_init_waiting_shell_restart(struct process* child, struct process* parent);
 static void process_record_schedule(struct process* proc);
 
@@ -217,6 +221,13 @@ static void process_clear_slot(struct process* proc) {
     proc->schedule_count = 0;
     process_clear_user_args(proc);
     process_clear_fd_table(proc);
+    proc->stdout_redirect_enabled = 0;
+    proc->stdout_redirect_append = 0;
+    proc->stdout_redirect_started = 0;
+    proc->stdout_redirect_path[0] = '\0';
+    proc->stdin_redirect_enabled = 0;
+    proc->stdin_redirect_path[0] = '\0';
+    proc->stdin_redirect_offset = 0;
     proc->requested_exit = 0;
     proc->name = (const char*)0;
     proc->is_background = 0;
@@ -373,6 +384,44 @@ static void process_copy_name(char* dst, const char* src, unsigned int max_len) 
     }
 
     dst[max_len - 1] = '\0';
+}
+
+// 裸机环境下最小路径复制：用于把 shell 传入的重定向目标复制到 PCB，避免引用用户态临时 token 缓冲区。
+static int process_copy_path(char* dst, const char* src, unsigned int max_len) {
+    unsigned int i;
+
+    if (dst == (char*)0 || src == (const char*)0 || max_len == 0) {
+        return -1;
+    }
+
+    for (i = 0; i < max_len - 1; i++) {
+        dst[i] = src[i];
+        if (src[i] == '\0') {
+            return (int)i;
+        }
+    }
+
+    dst[max_len - 1] = '\0';
+    if (src[max_len - 1] != '\0') {
+        return -2;
+    }
+
+    return (int)(max_len - 1);
+}
+
+// 统计一段以 0 结尾的文本长度；stdout 重定向沿用当前 SYS_WRITE 的字符串语义。
+static int process_text_length(const char* text) {
+    int length = 0;
+
+    if (text == (const char*)0) {
+        return -1;
+    }
+
+    while (text[length] != '\0') {
+        length++;
+    }
+
+    return length;
 }
 
 // 最小字符串比较：用于区分当前是否处于 init 启动链路，避免在 shell wait 中走高风险阻塞切换
@@ -1284,6 +1333,24 @@ int process_read_file(int fd, char* user_buf, int size) {
         return 0;
     }
 
+    // 教学版 stdin 重定向：当用户程序读取 fd=0 时，如果 shell 在创建子进程时配置了输入文件，
+    // 就直接按保存的 path + offset 从文件读取，而不是尝试做真实 tty/键盘 stdin。
+    if (fd == 0) {
+        if (proc->stdin_redirect_enabled == 0) {
+            return 0;
+        }
+
+        if (proc->stdin_redirect_path[0] == '\0') {
+            return -3;
+        }
+
+        read_result = fs_read_text_file(proc->stdin_redirect_path, proc->stdin_redirect_offset, user_buf, size);
+        if (read_result > 0) {
+            proc->stdin_redirect_offset += (uint32_t)read_result;
+        }
+        return read_result;
+    }
+
     slot = fd - PROCESS_FD_BASE;
     if (slot < 0 || slot >= PROCESS_MAX_OPEN_FILES) {
         return -3;
@@ -1496,6 +1563,142 @@ int process_current_is_background(void) {
     return current_process->is_background;
 }
 
+// 为指定 PCB 配置教学版 stdout 重定向：> 允许目标缺失，>> 要求目标已存在且必须是 RAMFS 文件。
+static int process_set_stdout_redirect(struct process* proc, const char* path, int is_append) {
+    struct minios_stat st;
+    int stat_result;
+
+    if (proc == (struct process*)0 || path == (const char*)0 || path[0] == '\0') {
+        return -1;
+    }
+
+    if (process_copy_path(proc->stdout_redirect_path, path, MAX_FS_PATH_LEN) < 0) {
+        proc->stdout_redirect_path[0] = '\0';
+        return -2;
+    }
+
+    stat_result = fs_builtin_file_stat(proc->stdout_redirect_path, &st);
+    if (is_append != 0) {
+        if (stat_result < 0) {
+            proc->stdout_redirect_path[0] = '\0';
+            return -3;
+        }
+        if (st.type != MINIOS_FILE_TYPE_RAMFS_TEXT) {
+            proc->stdout_redirect_path[0] = '\0';
+            return -4;
+        }
+    } else if (stat_result == 0 && st.type != MINIOS_FILE_TYPE_RAMFS_TEXT) {
+        proc->stdout_redirect_path[0] = '\0';
+        return -4;
+    }
+
+    proc->stdout_redirect_enabled = 1;
+    proc->stdout_redirect_append = (is_append != 0) ? 1 : 0;
+    proc->stdout_redirect_started = 0;
+    return 0;
+}
+
+// 为指定 PCB 配置教学版 stdin 重定向：当前只要求目标文件存在，并记录从 offset=0 开始读取。
+static int process_set_stdin_redirect(struct process* proc, const char* path) {
+    struct minios_stat st;
+
+    if (proc == (struct process*)0 || path == (const char*)0 || path[0] == '\0') {
+        return -1;
+    }
+
+    if (process_copy_path(proc->stdin_redirect_path, path, MAX_FS_PATH_LEN) < 0) {
+        proc->stdin_redirect_path[0] = '\0';
+        return -2;
+    }
+
+    if (fs_builtin_file_stat(proc->stdin_redirect_path, &st) < 0) {
+        proc->stdin_redirect_path[0] = '\0';
+        return -3;
+    }
+
+    proc->stdin_redirect_enabled = 1;
+    proc->stdin_redirect_offset = 0;
+    return 0;
+}
+
+// 为指定 pid 的子进程配置教学版 stdout 重定向；shell 在 fork 成功后、wait 前调用，避免 child/self 设置的竞态问题。
+int process_set_stdout_redirect_by_pid(int pid, const char* path, int is_append) {
+    struct process* target = process_find_by_pid(pid);
+
+    if (target == (struct process*)0 || target->state == PROCESS_UNUSED) {
+        return -1;
+    }
+
+    return process_set_stdout_redirect(target, path, is_append);
+}
+
+// 为指定 pid 的子进程配置教学版 stdin 重定向；shell 在 fork 成功后、wait 前调用。
+int process_set_stdin_redirect_by_pid(int pid, const char* path) {
+    struct process* target = process_find_by_pid(pid);
+
+    if (target == (struct process*)0 || target->state == PROCESS_UNUSED) {
+        return -1;
+    }
+
+    return process_set_stdin_redirect(target, path);
+}
+
+// 判断当前进程是否启用了 stdout 重定向；供 SYS_WRITE 在屏幕输出与 RAMFS 写入之间分流。
+int process_current_has_stdout_redirect(void) {
+    if (current_process == (struct process*)0 || current_process->state != PROCESS_RUNNING) {
+        return 0;
+    }
+
+    return current_process->stdout_redirect_enabled;
+}
+
+// 把当前进程的一次 SYS_WRITE 文本输出写到 RAMFS 重定向目标：
+// > 第一次写覆盖，其后改为追加；>> 始终追加。
+int process_write_stdout_redirect(const char* text) {
+    struct process* proc = current_process;
+    struct minios_stat st;
+    int text_len;
+    int write_result;
+
+    if (proc == (struct process*)0 || proc->stdout_redirect_enabled == 0) {
+        return -1;
+    }
+
+    if (proc->stdout_redirect_path[0] == '\0') {
+        return -2;
+    }
+
+    text_len = process_text_length(text);
+    if (text_len < 0) {
+        return -3;
+    }
+
+    if (text_len == 0) {
+        return 0;
+    }
+
+    if (proc->stdout_redirect_started == 0 && proc->stdout_redirect_append == 0) {
+        if (fs_builtin_file_stat(proc->stdout_redirect_path, &st) < 0) {
+            write_result = fs_create_ramfs_file(proc->stdout_redirect_path);
+            if (write_result < 0) {
+                return -4;
+            }
+        }
+
+        write_result = fs_write_text_file(proc->stdout_redirect_path, 0, text, text_len);
+        if (write_result > 0) {
+            proc->stdout_redirect_started = 1;
+        }
+        return write_result;
+    }
+
+    write_result = fs_append_ramfs_file(proc->stdout_redirect_path, text);
+    if (write_result > 0 || text_len == 0) {
+        proc->stdout_redirect_started = 1;
+    }
+    return write_result;
+}
+
 // 当前只把用户态 shell 的显式 exit 命令视为“允许 init 自动重启 shell”的正常退出来源。
 void process_mark_current_requested_exit(void) {
     if (current_process == (struct process*)0) {
@@ -1523,6 +1726,13 @@ int process_fork(struct interrupt_frame* frame) {
     child->parent_pid = parent->pid;
     child->name = parent->name;
     child->is_background = 0;
+    child->stdout_redirect_enabled = 0;
+    child->stdout_redirect_append = 0;
+    child->stdout_redirect_started = 0;
+    child->stdout_redirect_path[0] = '\0';
+    child->stdin_redirect_enabled = 0;
+    child->stdin_redirect_path[0] = '\0';
+    child->stdin_redirect_offset = 0;
     child->exit_status = 0;
     child->requested_exit = 0;
     // fork 会创建一个新的进程实体，所以子进程需要拥有新的 create_tick。

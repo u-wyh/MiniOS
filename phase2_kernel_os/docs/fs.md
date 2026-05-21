@@ -346,6 +346,79 @@ echo text >> /file
 6. 暂不支持管道和重定向组合
 7. 暂不支持后台任务重定向
 8. 暂不支持复杂引号解析
+
+## 15. Task66：用户态程序 stdout 重定向到 RAMFS
+
+Task66 把 Task65 的 shell 语法重定向继续推进到 `run` 启动的用户态程序。
+
+当前支持：
+
+```text
+run cat /readme.txt > /copy.txt
+run ls > /files.txt
+run stat /readme.txt > /stat.txt
+run stat /programs >> /stat.txt
+```
+
+### process 级 stdout 重定向字段
+
+当前 PCB 中新增了最小字段：
+
+1. `stdout_redirect_enabled`
+   - 为 1 时表示当前进程的 `SYS_WRITE` 应写入 RAMFS
+2. `stdout_redirect_append`
+   - 为 0 表示 shell 使用 `>`
+   - 为 1 表示 shell 使用 `>>`
+3. `stdout_redirect_started`
+   - 只在 `>` 模式下用来区分第一次写入
+4. `stdout_redirect_path`
+   - 保存目标 RAMFS 文件路径
+
+### `>` 当前语义
+
+对 `run ... > file`：
+
+1. 子进程第一次 `SYS_WRITE`
+   - 如果目标文件不存在，则先创建 RAMFS 文件
+   - 然后做一次覆盖写
+2. 子进程后续 `SYS_WRITE`
+   - 自动改为追加写入
+
+这样可以保证 `run ls > /files.txt` 这类多次输出不会只留下最后一段。
+
+### `>>` 当前语义
+
+对 `run ... >> file`：
+
+1. 目标文件必须已存在
+2. 目标文件必须是 RAMFS 文件
+3. 所有 `SYS_WRITE` 都按追加写入处理
+
+### 与 Task65 echo 重定向的区别
+
+```text
+echo text > /file
+```
+
+- shell 直接调用 RAMFS 覆盖写/追加写接口
+
+```text
+run cat /readme.txt > /copy.txt
+```
+
+- shell 只负责配置子进程 stdout 重定向
+- 真正写入发生在用户程序调用 `SYS_WRITE` 时
+
+### 当前限制
+
+1. 当前不是完整 `dup2` / fd stdout 重定向
+2. 暂不支持 `<`
+3. 暂不支持 `2>` / `2>&1`
+4. 暂不支持管道和重定向组合
+5. 暂不支持后台任务重定向
+6. 暂不支持多个重定向
+7. 暂不支持复杂 quoting
+8. 当前仍不支持真实磁盘和持久化
 5. 如果新内容比旧内容短，旧尾巴会被清理，避免残留脏数据
 
 当前 shell 和用户态的两条写路径同时存在：
@@ -354,3 +427,91 @@ echo text >> /file
 2. 用户态 `run writefile <file> <text>`
 
 其中用户态程序必须通过 syscall 访问 RAMFS，不能直接修改内核文件表。
+
+## 16. Task67：用户态程序 stdin 重定向到文件
+
+Task67 把前一轮的 stdout 重定向继续推进成教学版 stdin 重定向。
+
+当前支持：
+
+```text
+run cat < /readme.txt
+run cat < /programs
+run cat < /input.txt
+```
+
+### process 级 stdin 重定向字段
+
+当前 PCB 中新增了最小字段：
+
+1. `stdin_redirect_enabled`
+   - 为 1 时表示当前进程的 `SYS_READ(fd=0)` 应从文件读取
+2. `stdin_redirect_path`
+   - 保存当前 stdin 重定向源文件路径
+3. `stdin_redirect_offset`
+   - 记录已经读到文件的哪个位置
+
+### `fd=0` 当前语义
+
+当前 `SYS_READ` 的教学版行为是：
+
+1. 若 `fd >= 3`
+   - 继续走已有 fd 表读取逻辑
+2. 若 `fd == 0` 且进程启用了 stdin 重定向
+   - 从 `stdin_redirect_path` 指向的文件读取
+   - 读取成功后推进 `stdin_redirect_offset`
+   - 到 EOF 返回 `0`
+3. 若 `fd == 0` 且没有启用 stdin 重定向
+   - 当前直接返回 `0`
+   - 不做真实 tty/键盘交互输入
+
+输入源允许是：
+
+1. 内置只读文件
+2. RAMFS 文件
+
+### cat 的 stdin 模式
+
+当前用户态 `cat` 有两种模式：
+
+```text
+run cat /readme.txt
+```
+
+- argv 文件模式：按原有 `open/read/close` 路径工作
+
+```text
+run cat < /readme.txt
+```
+
+- stdin 模式：没有文件参数时，循环 `SYS_READ(0, ...)` 直到 EOF
+
+### 与 Task66 的关系
+
+Task66：
+
+```text
+run cat /readme.txt > /copy.txt
+```
+
+- 用户程序输出 -> RAMFS 文件
+
+Task67：
+
+```text
+run cat < /readme.txt
+```
+
+- 文件 -> 用户程序输入
+
+### 当前限制
+
+1. 当前不是完整 `dup2` / fd 复制模型
+2. 暂不支持真实 tty
+3. 暂不支持键盘交互 stdin
+4. 暂不支持 here-doc
+5. 暂不支持管道
+6. 暂不支持后台输入重定向
+7. 暂不支持多个输入重定向
+8. 暂不支持复杂 quoting
+9. 暂不支持或暂不推荐 `<` 与 `>` 组合

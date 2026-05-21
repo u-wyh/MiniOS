@@ -248,3 +248,61 @@ Task65 新增的是 shell 语法层的 `>` / `>>`，本轮没有再新增新的 
 - 不改写通用 stdout
 - 不引入 `dup2`
 - 不支持把任意用户程序输出重定向到文件
+
+## 14. SYS_SET_STDOUT_REDIRECT 与 Task66 的关系
+
+Task66 继续把 shell 重定向推进到用户态程序，但当前仍保持教学版最小接口。
+
+新增：
+
+1. `SYS_SET_STDOUT_REDIRECT(path, append)`
+   - `ebx=path`
+   - `ecx=append`
+   - 作用对象是“当前进程”
+   - 成功返回 `0`
+   - 失败返回负值
+
+当前 shell 在 `run ... > file` / `run ... >> file` 时，会在子进程 `exec` 前先调用该接口，把 stdout 重定向配置写进当前 PCB。
+
+之后用户程序继续正常调用：
+
+1. `SYS_WRITE(text)`
+
+内核在处理 `SYS_WRITE` 时会检查：
+
+1. 当前进程是否启用了 stdout 重定向
+2. 如果没有启用，则仍输出到屏幕
+3. 如果启用了，则把文本写到 RAMFS 文件
+
+当前这不是完整 `dup2` / fd 复制模型，用户程序也看不到新的 fd，只是教学版“按进程记录 stdout 去向”。
+
+## 15. SYS_SET_STDIN_REDIRECT 与 Task67 的关系
+
+Task67 当前新增的是教学版 stdin 重定向配置接口。
+
+新增：
+
+1. `SYS_SET_STDIN_REDIRECT(pid, path)`
+   - `ebx=pid`
+   - `ecx=path`
+   - shell 在 `run ... < file` 时调用它，为即将 exec 的子进程设置 stdin 来源
+
+当前 `SYS_READ` 对 `fd=0` 的教学版行为是：
+
+1. 如果当前进程启用了 stdin 重定向
+   - `SYS_READ(0, buf, size)` 从 `stdin_redirect_path` 指向的文件读取
+   - 每次读取后推进 `stdin_redirect_offset`
+   - 到 EOF 返回 `0`
+2. 如果当前进程没有启用 stdin 重定向
+   - `SYS_READ(0, ...)` 当前直接返回 `0`
+   - 不尝试做真实 tty/键盘 stdin
+3. 如果 `fd >= 3`
+   - 保持 Task58 的原有 fd 读取逻辑
+
+这意味着用户态程序不需要知道“自己是不是被 `< file` 启动的”，它只需要正常调用：
+
+```text
+sys_read(0, buf, size)
+```
+
+当前这仍不是完整 `dup2` / fd 复制 / tty 模型，只是教学版“按进程记录 stdin 来源”。

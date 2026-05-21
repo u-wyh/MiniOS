@@ -176,3 +176,28 @@
 - `>` 对应 RAMFS 覆盖写；目标文件不存在时，会自动创建 RAMFS 文件后再写入。
 - `>>` 对应 RAMFS 追加写；目标文件必须已存在且必须是 RAMFS 文件。
 - 当前只支持 `echo` 的输出重定向，不支持通用用户程序 stdout 重定向、管道组合与 `dup2`。
+
+## Task66：用户态程序 stdout 重定向到 RAMFS / run ... > file
+
+- 当前把 Task65 的 echo 专用重定向继续推进到 `run` 启动的用户态程序。
+- shell 现在支持：
+  - `run <program> [args] > <file>`
+  - `run <program> [args] >> <file>`
+- shell 会在创建子进程时把 stdout 重定向配置写入 PCB，用户程序本身无需感知重定向。
+- `SYS_WRITE` 会根据当前进程是否启用 stdout 重定向，决定输出到屏幕还是 RAMFS。
+- `>` 采用“第一次写覆盖、后续多次 `SYS_WRITE` 自动追加”的教学版语义，避免 `ls/stat/cat` 只留下最后一段输出。
+- `>>` 当前对整个进程都采用追加写入语义。
+- 当前仍不是完整 `dup2` / fd 复制模型，不支持 `<`、`2>`、`2>&1`、管道组合和后台任务重定向。
+
+## Task67：用户态程序 stdin 重定向到 RAMFS / run ... < file
+
+- 当前继续承接 Task66，把用户态程序的输入来源也推进到文件重定向模型。
+- shell 现在支持：
+  - `run cat < /readme.txt`
+  - `run cat < /programs`
+  - `run cat < /input.txt`
+- shell 会在创建子进程时把 stdin 重定向配置写入 PCB，后续 `SYS_READ(fd=0)` 会改为从目标文件读取。
+- 输入源既可以是内置只读文件，也可以是 RAMFS 文件。
+- 用户态 `cat` 在没有 argv 文件名时，会进入 stdin 模式并循环读取 `fd=0` 直到 EOF。
+- 普通 `run cat /readme.txt` 仍保持原有 argv 文件模式，不受 stdin 重定向实现影响。
+- 当前仍不是完整 `dup2` / tty 模型，不支持真实键盘 stdin、here-doc、管道、多重输入重定向和 `<` 与 `>` 组合。

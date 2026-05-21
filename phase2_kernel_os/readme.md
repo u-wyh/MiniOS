@@ -2437,3 +2437,73 @@ TODO：
 - 暂不支持管道与重定向组合。
 - 暂不支持后台任务重定向。
 - 暂不支持复杂引号解析。
+
+## ✅ Task66：用户态程序 stdout 重定向到 RAMFS / run ... > file
+
+本轮目标：
+
+- 把 Task65 的 echo 专用重定向推进到 `run` 启动的用户态程序。
+- 支持 `run cat /readme.txt > /copy.txt`、`run ls > /files.txt`、`run stat /readme.txt > /stat.txt`。
+- 让用户态程序继续调用 `SYS_WRITE`，由内核根据当前进程的 stdout 重定向配置决定输出到屏幕还是 RAMFS。
+
+已完成：
+
+- shell 已支持：
+  - `run <program> [args] > <file>`
+  - `run <program> [args] >> <file>`
+- `>` 的语义是：
+  - 第一次 `SYS_WRITE` 覆盖写入目标 RAMFS 文件
+  - 后续同一进程的多次 `SYS_WRITE` 自动改为追加，避免只保留最后一段输出
+- `>>` 的语义是：
+  - 整个进程生命周期内都按追加写入处理
+- `run cat /readme.txt > /copy.txt`
+  - 当前会把用户态 `cat` 输出完整写入 RAMFS 文件
+- `run ls > /files.txt`
+  - 当前会把用户态 `ls` 的多段输出完整写入 RAMFS 文件
+- `run stat /readme.txt > /stat.txt`
+  - 当前会把用户态 `stat` 的完整元信息输出写入 RAMFS 文件
+- `SYS_WRITE` 已能根据当前进程的 stdout 重定向配置决定写屏幕还是写 RAMFS。
+- Task65 的 `echo > /file` / `echo >> /file` 仍保持原样可用。
+
+当前限制：
+
+- 当前不是完整 `dup2`/fd stdout 重定向模型。
+- 暂不支持 `<`、`2>`、`2>&1`。
+- 暂不支持管道和重定向组合。
+- 暂不支持后台任务重定向。
+- 暂不支持多个重定向。
+- 暂不支持复杂引号解析。
+- 当前仍不支持真实磁盘、持久化、inode、权限和目录树。
+
+## ✅ Task67：用户态程序 stdin 重定向到 RAMFS / run ... < file
+
+本轮目标：
+
+- 把 Task66 的 stdout 重定向继续推进成教学版 stdin 重定向。
+- 支持 `run cat < /readme.txt`、`run cat < /programs`、`run cat < /input.txt`。
+- 让用户态 `cat` 在没有文件参数时，通过 `SYS_READ(fd=0)` 从文件读取内容。
+
+已完成：
+
+- shell 已支持：
+  - `run cat < /readme.txt`
+  - `run cat < /programs`
+  - `run cat < /input.txt`
+- 当前通过在 PCB 里保存 stdin 重定向配置，让 `SYS_READ(fd=0)` 在启用时直接从文件读取。
+- 输入源既可以是内置只读文件，也可以是 RAMFS 文件。
+- 用户态 `cat` 已增加 stdin 模式：
+  - `argc >= 2` 时保持原有 argv 文件模式
+  - `argc < 2` 时循环 `SYS_READ(0, ...)` 直到 EOF
+- 普通 `run cat /readme.txt` 仍保持原有 open/read/close 路径。
+- Task66 的 `run ... > file` stdout 重定向仍保持可用。
+- Task65 的 `echo > /file` / `echo >> /file` 仍保持可用。
+
+当前限制：
+
+- 当前不是完整 `dup2`/fd stdin 重定向模型。
+- 暂不支持真实 tty 和键盘交互 stdin。
+- 暂不支持 here-doc、管道和后台输入重定向。
+- 暂不支持多个 `<`。
+- 暂不支持或暂不推荐 `<` 与 `>` 组合。
+- 暂不支持复杂引号解析。
+- 当前仍不支持真实磁盘、持久化、inode、权限和目录树。

@@ -108,7 +108,9 @@ static void cat_write_error(const char* message, int code) {
     user_write("\n");
 }
 
-// 用户态 cat 主流程：通过 get_arg 获取路径，再经 open/read/close 读取内置只读文件。
+// 用户态 cat 主流程：
+// - argc >= 2 时保持原有 argv 文件模式
+// - argc < 2 时退化为教学版 stdin 模式，从 SYS_READ(fd=0) 读取直到 EOF
 void _start(void) {
     int argc;
     int fd;
@@ -117,8 +119,23 @@ void _start(void) {
 
     argc = user_get_argc();
     if (argc < 2) {
-        user_write("Usage: cat <file>\n");
-        user_exit(1);
+        for (;;) {
+            int read_result = user_read(0, buffer, CAT_READ_CHUNK);
+
+            if (read_result < 0) {
+                cat_write_error("stdin read failed", read_result);
+                user_exit(1);
+            }
+
+            if (read_result == 0) {
+                break;
+            }
+
+            buffer[read_result] = '\0';
+            user_write(buffer);
+        }
+
+        user_exit(0);
     }
 
     if (user_get_arg(1, path, CAT_ARG_MAX_LEN) < 0) {
