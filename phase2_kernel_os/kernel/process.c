@@ -21,6 +21,7 @@ extern void enter_user_mode(unsigned int user_entry, unsigned int user_stack_top
 static struct process process_table[PROCESS_MAX];
 static struct process* current_process = (struct process*)0;
 static struct process* last_exited_process = (struct process*)0;
+static struct process_pipe_buffer process_pipe_buffer;
 static int next_pid = 1;
 // 记录教学版 init 进程 pid：用于孤儿进程 reparent，默认 -1 表示尚未建立 init
 static int init_pid = -1;
@@ -47,6 +48,7 @@ static struct process* process_pick_next_ready(struct process* current);
 static struct process* process_find_by_pid(int pid);
 static int process_set_stdout_redirect(struct process* proc, const char* path, int is_append);
 static int process_set_stdin_redirect(struct process* proc, const char* path);
+static void process_pipe_buffer_clear(void);
 static int process_is_init_waiting_shell_restart(struct process* child, struct process* parent);
 static void process_record_schedule(struct process* proc);
 
@@ -228,10 +230,19 @@ static void process_clear_slot(struct process* proc) {
     proc->stdin_redirect_enabled = 0;
     proc->stdin_redirect_path[0] = '\0';
     proc->stdin_redirect_offset = 0;
+    proc->stdout_redirect_to_pipe = 0;
+    proc->stdin_redirect_from_pipe = 0;
     proc->requested_exit = 0;
     proc->name = (const char*)0;
     proc->is_background = 0;
     proc->used = 0;
+}
+
+// 清空教学版单管道缓冲区：每次执行 run A | run B 前后都调用，避免残留上一次输出内容。
+static void process_pipe_buffer_clear(void) {
+    process_pipe_buffer.used = 0;
+    process_pipe_buffer.size = 0;
+    process_pipe_buffer.read_offset = 0;
 }
 
 // 在真正决定“接下来让哪个进程运行”时记一次调度次数。
@@ -771,6 +782,7 @@ void process_init(void) {
 
     current_process = (struct process*)0;
     last_exited_process = (struct process*)0;
+    process_pipe_buffer_clear();
     next_pid = 1;
     init_pid = -1;
 }
@@ -1333,9 +1345,33 @@ int process_read_file(int fd, char* user_buf, int size) {
         return 0;
     }
 
-    // 教学版 stdin 重定向：当用户程序读取 fd=0 时，如果 shell 在创建子进程时配置了输入文件，
-    // 就直接按保存的 path + offset 从文件读取，而不是尝试做真实 tty/键盘 stdin。
+    // 教学版 stdin 重定向：优先支持“从 pipe buffer 读取”，其次才是“从文件读取”。
     if (fd == 0) {
+        if (proc->stdin_redirect_from_pipe != 0) {
+            uint32_t remaining;
+            uint32_t to_copy;
+            uint32_t i;
+
+            if (process_pipe_buffer.used == 0 || process_pipe_buffer.read_offset >= process_pipe_buffer.size) {
+                return 0;
+            }
+
+            remaining = process_pipe_buffer.size - process_pipe_buffer.read_offset;
+            to_copy = (uint32_t)size;
+            if (to_copy > remaining) {
+                to_copy = remaining;
+            }
+
+            for (i = 0; i < to_copy; i++) {
+                user_buf[i] = process_pipe_buffer.data[process_pipe_buffer.read_offset + i];
+            }
+
+            process_pipe_buffer.read_offset += to_copy;
+            return (int)to_copy;
+        }
+
+        // 当用户程序读取 fd=0 且 shell 已经配置输入文件时，
+        // 继续按保存的 path + offset 从文件读取，而不是尝试做真实 tty/键盘 stdin。
         if (proc->stdin_redirect_enabled == 0) {
             return 0;
         }
@@ -1643,6 +1679,38 @@ int process_set_stdin_redirect_by_pid(int pid, const char* path) {
     return process_set_stdin_redirect(target, path);
 }
 
+// 为指定 pid 的进程启用“stdout -> pipe buffer”模式：当前仅供 shell 顺序执行单管道左侧时使用。
+int process_set_stdout_pipe_by_pid(int pid) {
+    struct process* target = process_find_by_pid(pid);
+
+    if (target == (struct process*)0 || target->state == PROCESS_UNUSED) {
+        return -1;
+    }
+
+    target->stdout_redirect_to_pipe = 1;
+    target->stdout_redirect_enabled = 0;
+    target->stdout_redirect_append = 0;
+    target->stdout_redirect_started = 0;
+    target->stdout_redirect_path[0] = '\0';
+    return 0;
+}
+
+// 为指定 pid 的进程启用“stdin <- pipe buffer”模式：当前仅供 shell 顺序执行单管道右侧时使用。
+int process_set_stdin_pipe_by_pid(int pid) {
+    struct process* target = process_find_by_pid(pid);
+
+    if (target == (struct process*)0 || target->state == PROCESS_UNUSED) {
+        return -1;
+    }
+
+    target->stdin_redirect_from_pipe = 1;
+    target->stdin_redirect_enabled = 0;
+    target->stdin_redirect_path[0] = '\0';
+    target->stdin_redirect_offset = 0;
+    process_pipe_buffer.read_offset = 0;
+    return 0;
+}
+
 // 判断当前进程是否启用了 stdout 重定向；供 SYS_WRITE 在屏幕输出与 RAMFS 写入之间分流。
 int process_current_has_stdout_redirect(void) {
     if (current_process == (struct process*)0 || current_process->state != PROCESS_RUNNING) {
@@ -1650,6 +1718,15 @@ int process_current_has_stdout_redirect(void) {
     }
 
     return current_process->stdout_redirect_enabled;
+}
+
+// 判断当前进程是否启用了 stdout -> pipe：供 SYS_WRITE 把文本优先写入教学版 pipe buffer。
+int process_current_has_stdout_pipe(void) {
+    if (current_process == (struct process*)0 || current_process->state != PROCESS_RUNNING) {
+        return 0;
+    }
+
+    return current_process->stdout_redirect_to_pipe;
 }
 
 // 把当前进程的一次 SYS_WRITE 文本输出写到 RAMFS 重定向目标：
@@ -1699,6 +1776,41 @@ int process_write_stdout_redirect(const char* text) {
     return write_result;
 }
 
+// 把当前进程的一次 SYS_WRITE 文本输出追加到教学版 pipe buffer：当前缓冲区满时直接失败，不做截断。
+int process_write_stdout_pipe(const char* text) {
+    int text_len;
+    uint32_t i;
+
+    if (current_process == (struct process*)0 || current_process->stdout_redirect_to_pipe == 0) {
+        return -1;
+    }
+
+    text_len = process_text_length(text);
+    if (text_len < 0) {
+        return -2;
+    }
+
+    if (text_len == 0) {
+        return 0;
+    }
+
+    if (process_pipe_buffer.size + (uint32_t)text_len > PROCESS_PIPE_BUFFER_SIZE) {
+        return -3;
+    }
+
+    for (i = 0; i < (uint32_t)text_len; i++) {
+        process_pipe_buffer.data[process_pipe_buffer.size + i] = text[i];
+    }
+    process_pipe_buffer.size += (uint32_t)text_len;
+    process_pipe_buffer.used = 1;
+    return text_len;
+}
+
+// 清空教学版单管道缓冲区：shell 在执行 run A | run B 前后都应调用，避免残留旧数据。
+void process_pipe_reset(void) {
+    process_pipe_buffer_clear();
+}
+
 // 当前只把用户态 shell 的显式 exit 命令视为“允许 init 自动重启 shell”的正常退出来源。
 void process_mark_current_requested_exit(void) {
     if (current_process == (struct process*)0) {
@@ -1733,6 +1845,8 @@ int process_fork(struct interrupt_frame* frame) {
     child->stdin_redirect_enabled = 0;
     child->stdin_redirect_path[0] = '\0';
     child->stdin_redirect_offset = 0;
+    child->stdout_redirect_to_pipe = 0;
+    child->stdin_redirect_from_pipe = 0;
     child->exit_status = 0;
     child->requested_exit = 0;
     // fork 会创建一个新的进程实体，所以子进程需要拥有新的 create_tick。

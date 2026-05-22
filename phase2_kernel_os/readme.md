@@ -2539,3 +2539,38 @@ TODO：
 - 暂不支持多个输入或多个输出重定向。
 - 暂不支持复杂引号解析。
 - 暂不支持真实磁盘、持久化、inode、权限和目录树。
+
+## ✅ Task69：单管道 | 雏形 / 用户程序 stdout 接 stdin
+
+本轮目标：
+
+- 在 Task66～68 的重定向基础上，支持教学版单管道：
+  - `run cat /readme.txt | run cat`
+- 让左侧用户程序 stdout 进入内核 pipe buffer，再由右侧用户程序 stdin 读取。
+
+已完成：
+
+- shell 已支持：
+  - `run <program> [args] | run <program> [args]`
+- 当前只支持单个 `|`，并且左右两侧都必须是 `run` 命令。
+- 左侧程序先完整运行，把所有 `SYS_WRITE` 输出写入教学版 pipe buffer。
+- 左侧结束后，右侧程序再运行，并通过 `SYS_READ(fd=0)` 从 pipe buffer 读取。
+- 当前 `run cat /readme.txt | run cat`
+  - 会把 `/readme.txt` 内容显示到屏幕
+  - 左侧输出不会额外直接显示一份
+- 当前 `run cat /programs | run cat`
+  - 会把 `/programs` 内容显示到屏幕
+- RAMFS 文件也可以作为左侧输入，例如：
+  - `run cat /input.txt | run cat`
+
+当前限制：
+
+- 当前不是完整 UNIX pipe。
+- 暂不支持多级管道。
+- 暂不支持并发执行两端。
+- 暂不支持阻塞 pipe。
+- 暂不支持 pipe fd。
+- 暂不支持 dup2。
+- 暂不支持后台管道。
+- 暂不支持管道和重定向组合。
+- 暂不支持复杂引号解析。

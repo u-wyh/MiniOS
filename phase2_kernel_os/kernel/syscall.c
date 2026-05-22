@@ -83,6 +83,12 @@ void syscall_handle(struct interrupt_frame* frame) {
             process_mark_current_requested_exit();
         }
 
+        // Task69：若当前进程的 stdout 被教学版单管道接管，则把文本写入 pipe buffer，而不是屏幕或 RAMFS 文件。
+        if (process_current_has_stdout_pipe() != 0) {
+            frame->eax = (unsigned int)process_write_stdout_pipe(text);
+            return;
+        }
+
         // Task66：若当前进程启用了 stdout 重定向，则把整段输出写入 RAMFS，而不是直接落到前台屏幕。
         if (process_current_has_stdout_redirect() != 0) {
             frame->eax = (unsigned int)process_write_stdout_redirect(text);
@@ -398,6 +404,25 @@ void syscall_handle(struct interrupt_frame* frame) {
     // shell 在 fork 成功后调用它，为即将 exec 的子进程设置 stdin 重定向。
     if (frame->eax == SYS_SET_STDIN_REDIRECT) {
         frame->eax = (unsigned int)process_set_stdin_redirect_by_pid((int)frame->ebx, (const char*)frame->ecx);
+        return;
+    }
+
+    // SYS_PIPE_RESET()：清空教学版单管道缓冲区，供 shell 在执行 run A | run B 前后重置状态。
+    if (frame->eax == SYS_PIPE_RESET) {
+        process_pipe_reset();
+        frame->eax = 0;
+        return;
+    }
+
+    // SYS_SET_STDOUT_PIPE(pid)：把指定 pid 的 stdout 改为写入教学版 pipe buffer。
+    if (frame->eax == SYS_SET_STDOUT_PIPE) {
+        frame->eax = (unsigned int)process_set_stdout_pipe_by_pid((int)frame->ebx);
+        return;
+    }
+
+    // SYS_SET_STDIN_PIPE(pid)：把指定 pid 的 stdin 改为从教学版 pipe buffer 读取。
+    if (frame->eax == SYS_SET_STDIN_PIPE) {
+        frame->eax = (unsigned int)process_set_stdin_pipe_by_pid((int)frame->ebx);
         return;
     }
 

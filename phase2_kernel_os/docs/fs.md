@@ -582,3 +582,53 @@ MiniOS 当前没有完整 `dup2` / fd 复制，因此仍采用教学版 PCB 字�
 6. 暂不支持多个输入或多个输出重定向
 7. 暂不支持复杂 quoting
 8. 暂不支持真实磁盘和持久化
+
+## 18. Task69：教学版单管道 buffer
+
+Task69 当前新增的不是文件系统对象，而是一个教学版内核单管道缓冲区。
+
+支持示例：
+
+```text
+run cat /readme.txt | run cat
+run cat /programs | run cat
+run cat /input.txt | run cat
+```
+
+### 当前执行模型
+
+当前不是 UNIX 并发 pipe，而是顺序执行：
+
+1. 左侧程序先运行
+2. 左侧 `SYS_WRITE` 输出全部写入 pipe buffer
+3. 左侧结束
+4. 右侧程序再运行
+5. 右侧 `SYS_READ(fd=0)` 从 pipe buffer 读取
+
+### pipe buffer 与 RAMFS 的区别
+
+RAMFS：
+
+1. 是文件系统对象
+2. 有路径
+3. 会出现在 `ls`
+4. 可以被 `cat /path` / `stat /path` 观察
+
+pipe buffer：
+
+1. 不是文件系统对象
+2. 没有路径
+3. 不会出现在 `ls`
+4. 不能被 `cat /path` 访问
+5. 只在单次 `run A | run B` 执行期间使用
+
+### 当前限制
+
+1. 暂不支持多级管道
+2. 暂不支持并发 pipe
+3. 暂不支持阻塞 pipe
+4. 暂不支持 pipe fd
+5. 暂不支持 dup2
+6. 暂不支持后台管道
+7. 暂不支持管道和重定向组合
+8. pipe buffer 有固定容量上限

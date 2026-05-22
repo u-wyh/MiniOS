@@ -28,6 +28,8 @@
 #define PROCESS_ROOT_PARENT_PID 0
 // 教学版 kill 退出码：只表示“被 kill 终止”，不是 Unix/Linux 的信号编号。
 #define PROCESS_KILL_EXIT_STATUS -9
+// 教学版单管道缓冲区上限：左侧程序 stdout 全部先写入这里，超过上限直接失败。
+#define PROCESS_PIPE_BUFFER_SIZE 512
 
 // 用户态 ps 使用的进程只读摘要：避免直接暴露内核 PCB 结构
 struct process_info {
@@ -52,6 +54,14 @@ struct process_fd_entry {
     // can_write 为 1 表示该 fd 允许写入；当前只给 RAMFS 写打开路径设置，内置只读文件始终为 0。
     int can_write;
     uint32_t offset;
+};
+
+// 教学版单管道缓冲区：当前只支持一条前台 run A | run B，顺序执行而不是并发 pipe。
+struct process_pipe_buffer {
+    int used;
+    char data[PROCESS_PIPE_BUFFER_SIZE];
+    uint32_t size;
+    uint32_t read_offset;
 };
 
 // 最小 PCB：保存进程身份、父子关系、状态与用户态入口现场
@@ -104,6 +114,10 @@ struct process {
     char stdin_redirect_path[MAX_FS_PATH_LEN];
     // stdin_redirect_offset 记录当前从 stdin 文件已经读取到的位置，EOF 后 SYS_READ(fd=0) 返回 0。
     uint32_t stdin_redirect_offset;
+    // stdout_redirect_to_pipe 为 1 时，当前进程的 SYS_WRITE 会写入教学版 pipe buffer，而不是屏幕或 RAMFS 文件。
+    int stdout_redirect_to_pipe;
+    // stdin_redirect_from_pipe 为 1 时，当前进程的 SYS_READ(fd=0) 会从教学版 pipe buffer 读取。
+    int stdin_redirect_from_pipe;
 
     // 扩展字段：记录程序名与槽位占用，便于 ps 展示与管理
     const char* name;
@@ -163,10 +177,20 @@ int process_current_is_background(void);
 int process_set_stdout_redirect_by_pid(int pid, const char* path, int is_append);
 // 为指定 pid 的进程配置教学版 stdin 重定向：后续该进程的 SYS_READ(fd=0) 将根据该配置从文件读取。
 int process_set_stdin_redirect_by_pid(int pid, const char* path);
+// 为指定 pid 的进程启用“stdout 写入教学版 pipe buffer”模式。
+int process_set_stdout_pipe_by_pid(int pid);
+// 为指定 pid 的进程启用“stdin 从教学版 pipe buffer 读取”模式。
+int process_set_stdin_pipe_by_pid(int pid);
 // 返回当前进程是否启用了 stdout 重定向。
 int process_current_has_stdout_redirect(void);
+// 返回当前进程是否启用了 stdout -> pipe。
+int process_current_has_stdout_pipe(void);
 // 把当前进程的一次 SYS_WRITE 文本输出写到 RAMFS 重定向目标；成功返回写入字节数。
 int process_write_stdout_redirect(const char* text);
+// 把当前进程的一次 SYS_WRITE 文本输出写到教学版 pipe buffer；成功返回写入字节数。
+int process_write_stdout_pipe(const char* text);
+// 清空教学版单管道缓冲区，供 shell 在执行 run A | run B 前重置状态。
+void process_pipe_reset(void);
 // 返回是否存在正在等待键盘输入的用户进程，供键盘 IRQ 区分用户 shell 与内核 shell
 int process_has_read_char_waiter(void);
 // 返回进程表中是否仍有用户进程存在；键盘 IRQ 用它避免用户态运行期间误回内核 shell

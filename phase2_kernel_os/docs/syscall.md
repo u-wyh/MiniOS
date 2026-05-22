@@ -341,3 +341,45 @@ run cat < /input.txt >> /log.txt
 2. `SYS_WRITE`
 
 在同一个进程中同时根据各自的重定向字段独立工作。
+
+## 17. Task69：pipe buffer 下的 SYS_READ / SYS_WRITE
+
+Task69 当前新增的是教学版单管道相关 syscall：
+
+1. `SYS_PIPE_RESET`
+   - 清空全局 pipe buffer
+2. `SYS_SET_STDOUT_PIPE(pid)`
+   - 把指定子进程 stdout 改为写入 pipe buffer
+3. `SYS_SET_STDIN_PIPE(pid)`
+   - 把指定子进程 stdin 改为从 pipe buffer 读取
+
+### SYS_WRITE 当前顺序
+
+当前 `SYS_WRITE` 的分流顺序是：
+
+1. 若当前进程启用了 `stdout -> pipe`
+   - 文本写入 pipe buffer
+   - 不输出到屏幕
+2. 否则若当前进程启用了 `stdout -> RAMFS`
+   - 走 Task66 文件重定向
+3. 否则
+   - 正常输出到屏幕
+
+### SYS_READ 当前顺序
+
+当前 `SYS_READ` 的 `fd=0` 行为是：
+
+1. 若当前进程启用了 `stdin <- pipe`
+   - 从 pipe buffer 读取
+   - 读到 EOF 返回 `0`
+2. 否则若启用了 `stdin <- file`
+   - 走 Task67 文件输入重定向
+3. 否则
+   - 当前返回 `0`
+
+### 当前限制
+
+1. 当前不是 pipe fd
+2. 当前不是并发 pipe
+3. 当前不支持阻塞读写
+4. 当前不支持 dup2

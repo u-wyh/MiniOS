@@ -58,6 +58,12 @@
 #define SYS_SET_STDOUT_REDIRECT 33
 // 教学版 stdin 重定向配置：仅作用于当前进程，不实现完整 dup2/fd 复制语义。
 #define SYS_SET_STDIN_REDIRECT 34
+// 教学版单管道：清空全局 pipe buffer。
+#define SYS_PIPE_RESET 35
+// 教学版单管道：把指定 pid 的 stdout 改为写入 pipe buffer。
+#define SYS_SET_STDOUT_PIPE 36
+// 教学版单管道：把指定 pid 的 stdin 改为从 pipe buffer 读取。
+#define SYS_SET_STDIN_PIPE 37
 
 // int 0x80 进入内核后，栈上会按 pusha + CPU 自动压栈的顺序保存现场
 struct interrupt_frame {

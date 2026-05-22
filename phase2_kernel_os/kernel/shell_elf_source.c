@@ -28,6 +28,9 @@
 #define SYS_APPEND_FILE 32
 #define SYS_SET_STDOUT_REDIRECT 33
 #define SYS_SET_STDIN_REDIRECT 34
+#define SYS_PIPE_RESET 35
+#define SYS_SET_STDOUT_PIPE 36
+#define SYS_SET_STDIN_PIPE 37
 // 当前内核默认把 PIT 配置为 20Hz，因此 1 tick 约等于 50ms。
 #define SHELL_UPTIME_TICKS_PER_SECOND 20
 
@@ -232,6 +235,21 @@ static int user_set_stdin_redirect(int pid, const char* path) {
     return user_syscall2(SYS_SET_STDIN_REDIRECT, pid, (int)path);
 }
 
+// 清空教学版单管道缓冲区，供 shell 在执行 run A | run B 前后重置状态。
+static void user_pipe_reset(void) {
+    user_syscall0(SYS_PIPE_RESET);
+}
+
+// 把指定 pid 的 stdout 改为写入教学版 pipe buffer。
+static int user_set_stdout_pipe(int pid) {
+    return user_syscall1(SYS_SET_STDOUT_PIPE, pid);
+}
+
+// 把指定 pid 的 stdin 改为从教学版 pipe buffer 读取。
+static int user_set_stdin_pipe(int pid) {
+    return user_syscall1(SYS_SET_STDIN_PIPE, pid);
+}
+
 // 比较两个字符串是否相等。
 static int shell_streq(const char* left, const char* right) {
     int i = 0;
@@ -266,6 +284,11 @@ static int shell_is_redirect_token(const char* token) {
 // 判断一个 token 是否是当前教学版 shell 支持的输入重定向符号。
 static int shell_is_input_redirect_token(const char* token) {
     return shell_streq(token, "<");
+}
+
+// 判断一个 token 是否是教学版单管道符号。
+static int shell_is_pipe_token(const char* token) {
+    return shell_streq(token, "|");
 }
 
 // 输出进程状态名：ps 和 jobs 共用同一套教学版状态展示，避免两处状态文案不一致。
@@ -420,6 +443,31 @@ static int shell_find_input_redirect(int argc, char** argv, int* out_index) {
 
     for (i = 0; i < argc; i++) {
         if (shell_is_input_redirect_token(argv[i]) == 0) {
+            continue;
+        }
+
+        if (found_index >= 0) {
+            return -2;
+        }
+
+        found_index = i;
+    }
+
+    *out_index = found_index;
+    return 0;
+}
+
+// 扫描当前命令是否包含单个 |；当前只支持一段教学版单管道。
+static int shell_find_pipe(int argc, char** argv, int* out_index) {
+    int i;
+    int found_index = -1;
+
+    if (out_index == (int*)0) {
+        return -1;
+    }
+
+    for (i = 0; i < argc; i++) {
+        if (shell_is_pipe_token(argv[i]) == 0) {
             continue;
         }
 
@@ -817,8 +865,8 @@ static int shell_validate_program_args(int argc, char** argv) {
     return 0;
 }
 
-// 统一处理 run/start/hello 的 fork + exec + waitpid 逻辑；如提供 redirect_path，则父进程会在 wait 前先给子进程配置 stdout 重定向。
-static int shell_spawn_program(int program_id, int argc, char** argv, int wait_child, int is_background, const char* stdout_redirect_path, int stdout_redirect_is_append, const char* stdin_redirect_path) {
+// 统一处理 run/start/hello 的 fork + exec + waitpid 逻辑；可按需为子进程配置文件重定向或教学版 pipe 输入输出。
+static int shell_spawn_program(int program_id, int argc, char** argv, int wait_child, int is_background, const char* stdout_redirect_path, int stdout_redirect_is_append, const char* stdin_redirect_path, int stdout_to_pipe, int stdin_from_pipe) {
     int pid = user_fork();
 
     if (pid < 0) {
@@ -851,6 +899,17 @@ static int shell_spawn_program(int program_id, int argc, char** argv, int wait_c
         }
     }
 
+    if (stdout_to_pipe != 0) {
+        if (user_set_stdout_pipe(pid) < 0) {
+            user_kill(pid);
+            if (wait_child != 0) {
+                user_waitpid(pid);
+            }
+            user_write("pipe stdout setup failed\n");
+            return -1;
+        }
+    }
+
     if (stdin_redirect_path != (const char*)0) {
         if (user_set_stdin_redirect(pid, stdin_redirect_path) < 0) {
             user_kill(pid);
@@ -858,6 +917,17 @@ static int shell_spawn_program(int program_id, int argc, char** argv, int wait_c
                 user_waitpid(pid);
             }
             user_write("stdin redirect setup failed\n");
+            return -1;
+        }
+    }
+
+    if (stdin_from_pipe != 0) {
+        if (user_set_stdin_pipe(pid) < 0) {
+            user_kill(pid);
+            if (wait_child != 0) {
+                user_waitpid(pid);
+            }
+            user_write("pipe stdin setup failed\n");
             return -1;
         }
     }
@@ -874,6 +944,63 @@ static int shell_spawn_program(int program_id, int argc, char** argv, int wait_c
     shell_write_uint(pid);
     user_write("\n");
     return pid;
+}
+
+// 执行教学版单管道：当前采用“左侧先完整运行并写 pipe buffer，右侧再读取 pipe buffer”的顺序模型。
+static void shell_run_single_pipe(int left_argc, char** left_argv, int right_argc, char** right_argv) {
+    int left_program_id;
+    int right_program_id;
+    int validate_result;
+
+    if (left_argc < 2 || right_argc < 2) {
+        user_write("pipe: missing command\n");
+        return;
+    }
+
+    if (shell_streq(left_argv[0], "run") == 0 || shell_streq(right_argv[0], "run") == 0) {
+        user_write("pipe only supports run ... | run ...\n");
+        return;
+    }
+
+    left_program_id = shell_program_id_from_name(left_argv[1]);
+    right_program_id = shell_program_id_from_name(right_argv[1]);
+    if (left_program_id == PROGRAM_INVALID || right_program_id == PROGRAM_INVALID) {
+        user_write("Unknown program\n");
+        return;
+    }
+
+    validate_result = shell_validate_program_args(left_argc - 1, &left_argv[1]);
+    if (validate_result == -1) {
+        user_write("Too many args\n");
+        return;
+    }
+    if (validate_result == -2) {
+        user_write("Arg too long\n");
+        return;
+    }
+
+    validate_result = shell_validate_program_args(right_argc - 1, &right_argv[1]);
+    if (validate_result == -1) {
+        user_write("Too many args\n");
+        return;
+    }
+    if (validate_result == -2) {
+        user_write("Arg too long\n");
+        return;
+    }
+
+    user_pipe_reset();
+    if (shell_spawn_program(left_program_id, left_argc - 1, &left_argv[1], 1, 0, (const char*)0, 0, (const char*)0, 1, 0) < 0) {
+        user_pipe_reset();
+        return;
+    }
+
+    if (shell_spawn_program(right_program_id, right_argc - 1, &right_argv[1], 1, 0, (const char*)0, 0, (const char*)0, 0, 1) < 0) {
+        user_pipe_reset();
+        return;
+    }
+
+    user_pipe_reset();
 }
 
 // 输出 echo 的参数。
@@ -1244,6 +1371,7 @@ static void shell_cmd_help(void) {
     user_write("  run <program> [args] >> <file>\n");
     user_write("  run cat < <file>\n");
     user_write("  run cat < <file> > <file>\n");
+    user_write("  run <program> [args] | run <program> [args]\n");
     user_write("  start <program> [args]\n");
     user_write("  jobs\n");
     user_write("  wait [pid]\n");
@@ -1274,6 +1402,8 @@ void _start(void) {
 
     for (;;) {
         int argc;
+        int pipe_index;
+        int pipe_status;
         int redirect_index;
         int redirect_is_append;
         int redirect_status;
@@ -1292,6 +1422,13 @@ void _start(void) {
             continue;
         }
 
+        pipe_index = -1;
+        pipe_status = shell_find_pipe(argc, argv, &pipe_index);
+        if (pipe_status < 0) {
+            user_write("pipe: only one | is supported\n");
+            continue;
+        }
+
         redirect_index = -1;
         redirect_is_append = 0;
         redirect_status = shell_find_redirect(argc, argv, &redirect_index, &redirect_is_append);
@@ -1304,6 +1441,21 @@ void _start(void) {
         input_redirect_status = shell_find_input_redirect(argc, argv, &input_redirect_index);
         if (input_redirect_status < 0) {
             user_write("redirect: invalid input syntax\n");
+            continue;
+        }
+
+        if (pipe_index >= 0) {
+            if (redirect_index >= 0 || input_redirect_index >= 0) {
+                user_write("pipe with redirection is not supported yet\n");
+                continue;
+            }
+
+            if (pipe_index == 0 || (pipe_index + 1) >= argc) {
+                user_write("pipe: missing command\n");
+                continue;
+            }
+
+            shell_run_single_pipe(pipe_index, argv, argc - pipe_index - 1, &argv[pipe_index + 1]);
             continue;
         }
 
@@ -1540,12 +1692,14 @@ void _start(void) {
                 is_start != 0,
                 run_redirects.stdout_path,
                 run_redirects.stdout_append,
-                run_redirects.stdin_path);
+                run_redirects.stdin_path,
+                0,
+                0);
             continue;
         }
 
         if (shell_streq(argv[0], "hello")) {
-            shell_spawn_program(PROGRAM_HELLO, 1, hello_argv, 1, 0, (const char*)0, 0, (const char*)0);
+            shell_spawn_program(PROGRAM_HELLO, 1, hello_argv, 1, 0, (const char*)0, 0, (const char*)0, 0, 0);
             continue;
         }
 

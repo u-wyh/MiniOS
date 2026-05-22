@@ -689,3 +689,37 @@ run cat < /input.txt >> /log.txt
 run cat < /readme.txt > /copy.txt
 cat /copy.txt
 ```
+
+## 27. run 用户程序教学版单管道
+
+Task69 当前支持：
+
+```text
+run cat /readme.txt | run cat
+run cat /programs | run cat
+run cat /input.txt | run cat
+```
+
+当前规则：
+
+1. 只支持单个 `|`
+2. 左右两侧都必须是 `run`
+3. 左侧程序先完整运行
+4. 左侧 stdout 写入教学版 pipe buffer
+5. 右侧程序再运行
+6. 右侧 stdin 从 pipe buffer 读取
+
+因此：
+
+```text
+run cat /readme.txt | run cat
+```
+
+当前右侧 `cat` 会以 stdin 模式读取 pipe 内容，而不是直接从文件读取。
+
+当前仍不支持：
+
+1. 多级管道
+2. 管道和重定向组合
+3. 后台管道
+4. 复杂 quoting

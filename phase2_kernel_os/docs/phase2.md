@@ -216,3 +216,20 @@
 - 组合重定向下的数据流是：
   - 输入文件 -> `SYS_READ(fd=0)` -> 用户程序 -> `SYS_WRITE` -> 输出文件
 - 当前仍不是完整 `dup2` / pipe 模型，不支持 stderr、后台任务重定向、多重重定向和复杂 shell 语法。
+
+## Task69：单管道 | 雏形 / 用户程序 stdout 接 stdin
+
+- 当前继续承接 Task66～68，把“文件输入/输出重定向”再推进到“进程之间的教学版缓冲区连接”。
+- shell 现在支持：
+  - `run cat /readme.txt | run cat`
+  - `run cat /programs | run cat`
+  - `run cat /input.txt | run cat`
+- 当前执行模型不是 UNIX 并发 pipe，而是顺序执行：
+  - 左侧先完整运行
+  - 左侧 stdout 写入教学版 pipe buffer
+  - 右侧再运行
+  - 右侧 stdin 从 pipe buffer 读取
+- 当前 pipe buffer 不属于文件系统对象：
+  - 不会出现在 `ls`
+  - 不能被 `cat /path` 访问
+- 当前仍不支持多级管道、管道与重定向组合、后台管道和复杂 shell 语法。
