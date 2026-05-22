@@ -424,3 +424,48 @@ run cat /programs | run cat >> /log.txt
 1. 用户程序本身不需要知道自己被组合重定向
 2. 当前仍不是完整 `dup2` / pipe fd 模型
 3. 当前右侧既可以从 pipe 读，也可以向 RAMFS 文件写
+
+## 19. Task71：pipe + input redirect 下的 SYS_READ / SYS_WRITE
+
+Task71 没有新增新的 syscall，而是把 Task67 的 `stdin <- file` 和 Task69 的 `stdout -> pipe` 组合起来。
+
+支持示例：
+
+```text
+run cat < /readme.txt | run cat
+run cat < /programs | run cat
+run cat < /input.txt | run cat
+```
+
+### 当前配合方式
+
+左侧进程：
+
+1. 启用 `stdin <- file`
+2. 启用 `stdout -> pipe`
+3. `SYS_READ(fd=0)` 从输入文件读取
+4. `SYS_WRITE` 把输出写入 pipe buffer
+
+右侧进程：
+
+1. 启用 `stdin <- pipe`
+2. `SYS_READ(fd=0)` 从 pipe buffer 读取
+3. `SYS_WRITE` 正常输出到屏幕
+
+### 当前顺序
+
+1. 左侧 `SYS_READ(fd=0)`
+   - 文件 stdin 优先
+2. 左侧 `SYS_WRITE`
+   - pipe 优先
+3. 右侧 `SYS_READ(fd=0)`
+   - pipe 优先
+4. 右侧 `SYS_WRITE`
+   - 因为没有启用 `stdout -> pipe` 或 `stdout -> file`
+   - 所以继续正常输出到屏幕
+
+### 说明
+
+1. 当前仍不是完整 `dup2` / pipe fd 模型
+2. 当前不需要用户程序感知“自己在管道左侧还是右侧”
+3. 只要程序用 `sys_read(0, ...)` 和 `sys_write(...)`，内核就会按进程标记决定数据流向

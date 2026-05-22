@@ -2613,3 +2613,41 @@ TODO：
 - 暂不支持后台管道。
 - 暂不支持 stderr 重定向。
 - 暂不支持复杂 shell 组合。
+
+## ✅ Task71：管道 + 输入重定向组合雏形 / run A < input | run B
+
+本轮目标：
+
+- 在 Task67 文件 stdin 重定向和 Task69 单管道基础上，继续支持教学版：
+  - `run cat < /readme.txt | run cat`
+  - `run cat < /programs | run cat`
+  - `run cat < /input.txt | run cat`
+- 让左侧程序先从文件读取 stdin，再把输出写进 pipe buffer，最后由右侧程序从 pipe buffer 读取并输出到屏幕。
+
+已完成：
+
+- shell 现在支持：
+  - `run <program> < <file> | run <program> [args]`
+- 左侧进程现在可以同时启用：
+  - `stdin <- file`
+  - `stdout -> pipe`
+- 右侧进程继续启用：
+  - `stdin <- pipe`
+- 当前 `run cat < /readme.txt | run cat`
+  - 会把 `/readme.txt` 内容显示到屏幕
+- 当前 `run cat < /programs | run cat`
+  - 会把 `/programs` 内容显示到屏幕
+- RAMFS 文件也可作为左侧 stdin 输入，例如：
+  - `run cat < /input.txt | run cat`
+
+当前限制：
+
+- 当前仍不是完整 UNIX pipe。
+- 暂不支持多级管道。
+- 暂不支持并发 pipe。
+- 暂不支持阻塞 pipe。
+- 暂不支持 pipe fd。
+- 暂不支持 dup2。
+- 暂不支持后台管道。
+- 暂不支持复杂 shell 组合。
+- 暂不支持 `run A < input | run B > output`。

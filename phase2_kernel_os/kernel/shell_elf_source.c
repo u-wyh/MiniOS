@@ -605,6 +605,21 @@ static int shell_validate_stdout_target(const char* path, int is_append) {
     return 0;
 }
 
+// 校验“stdin <- 文件”源是否可读：当前只要求路径存在，允许内置只读文件和 RAMFS 文件都作为输入源。
+static int shell_validate_stdin_source(const char* path) {
+    struct minios_stat st;
+
+    if (path == (const char*)0 || path[0] == '\0') {
+        return -1;
+    }
+
+    if (user_stat(path, &st) < 0) {
+        return -2;
+    }
+
+    return 0;
+}
+
 // 执行 echo 的教学版 RAMFS 输出重定向：> 覆盖写，必要时自动创建；>> 追加写且要求目标已存在。
 static void shell_cmd_echo_redirect(int argc, char** argv, int redirect_index, int is_append) {
     char text[SHELL_WRITEFILE_MAX_LEN];
@@ -976,7 +991,7 @@ static int shell_spawn_program(int program_id, int argc, char** argv, int wait_c
 }
 
 // 执行教学版单管道：当前采用“左侧先完整运行并写 pipe buffer，右侧再读取 pipe buffer”的顺序模型。
-static void shell_run_single_pipe(int left_argc, char** left_argv, int right_argc, char** right_argv, const char* right_stdout_path, int right_stdout_is_append) {
+static void shell_run_single_pipe(int left_argc, char** left_argv, int right_argc, char** right_argv, const char* left_stdin_path, const char* right_stdout_path, int right_stdout_is_append) {
     int left_program_id;
     int right_program_id;
     int validate_result;
@@ -1018,6 +1033,14 @@ static void shell_run_single_pipe(int left_argc, char** left_argv, int right_arg
         return;
     }
 
+    if (left_stdin_path != (const char*)0) {
+        validate_result = shell_validate_stdin_source(left_stdin_path);
+        if (validate_result < 0) {
+            user_write("pipe input source invalid\n");
+            return;
+        }
+    }
+
     if (right_stdout_path != (const char*)0) {
         validate_result = shell_validate_stdout_target(right_stdout_path, right_stdout_is_append);
         if (validate_result == -2) {
@@ -1035,7 +1058,7 @@ static void shell_run_single_pipe(int left_argc, char** left_argv, int right_arg
     }
 
     user_pipe_reset();
-    if (shell_spawn_program(left_program_id, left_argc - 1, &left_argv[1], 1, 0, (const char*)0, 0, (const char*)0, 1, 0) < 0) {
+    if (shell_spawn_program(left_program_id, left_argc - 1, &left_argv[1], 1, 0, (const char*)0, 0, left_stdin_path, 1, 0) < 0) {
         user_pipe_reset();
         return;
     }
@@ -1417,6 +1440,7 @@ static void shell_cmd_help(void) {
     user_write("  run cat < <file>\n");
     user_write("  run cat < <file> > <file>\n");
     user_write("  run <program> [args] | run <program> [args]\n");
+    user_write("  run <program> < <file> | run <program> [args]\n");
     user_write("  run <program> [args] | run <program> [args] > <file>\n");
     user_write("  run <program> [args] | run <program> [args] >> <file>\n");
     user_write("  start <program> [args]\n");
@@ -1460,7 +1484,10 @@ void _start(void) {
         int right_redirect_is_append;
         int right_redirect_status;
         int right_effective_argc;
+        int left_effective_argc;
+        int left_redirect_status;
         struct shell_redirect_info run_redirects;
+        struct shell_redirect_info left_pipe_redirects;
         struct shell_redirect_info right_pipe_redirects;
 
         user_write("MiniOS$ ");
@@ -1497,19 +1524,52 @@ void _start(void) {
         }
 
         if (pipe_index >= 0) {
-            if (input_redirect_index >= 0) {
-                user_write("pipe with input redirection is not supported yet\n");
+            if (pipe_index == 0 || (pipe_index + 1) >= argc) {
+                user_write("pipe: missing command\n");
                 continue;
             }
 
-            if (pipe_index == 0 || (pipe_index + 1) >= argc) {
-                user_write("pipe: missing command\n");
+            if (input_redirect_index > pipe_index) {
+                user_write("pipe with right-side input redirection is not supported yet\n");
                 continue;
             }
 
             if (redirect_index >= 0 && redirect_index < pipe_index) {
                 user_write("pipe with left-side redirection is not supported yet\n");
                 continue;
+            }
+
+            if (input_redirect_index >= 0 && redirect_index >= 0) {
+                user_write("pipe with input/output redirection is not supported yet\n");
+                continue;
+            }
+
+            left_effective_argc = pipe_index;
+            if (input_redirect_index >= 0) {
+                left_redirect_status = shell_parse_run_redirects(pipe_index, argv, -1, 0, input_redirect_index, &left_pipe_redirects);
+                if (left_redirect_status < 0) {
+                    shell_write_run_redirect_error(left_redirect_status);
+                    continue;
+                }
+
+                if (left_pipe_redirects.first_redirect_index == 1) {
+                    user_write("redirect: missing program target\n");
+                    continue;
+                }
+
+                if (left_pipe_redirects.first_redirect_index > 0) {
+                    left_effective_argc = left_pipe_redirects.first_redirect_index;
+                }
+
+                // 当前教学版 pipe + file stdin 仍只支持“左侧程序无额外文件参数”的最小模式，
+                // 例如 run cat < /readme.txt | run cat；像 run cat /a < /b | run cat 暂不支持。
+                if (left_effective_argc != 2) {
+                    user_write("stdin redirect does not support extra args yet\n");
+                    continue;
+                }
+            } else {
+                left_pipe_redirects.has_stdin = 0;
+                left_pipe_redirects.stdin_path = (const char*)0;
             }
 
             right_redirect_index = -1;
@@ -1543,10 +1603,11 @@ void _start(void) {
             }
 
             shell_run_single_pipe(
-                pipe_index,
+                left_effective_argc,
                 argv,
                 right_effective_argc,
                 &argv[pipe_index + 1],
+                left_pipe_redirects.stdin_path,
                 right_pipe_redirects.stdout_path,
                 right_pipe_redirects.stdout_append);
             continue;

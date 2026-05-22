@@ -250,3 +250,21 @@
   - `stdin <- pipe`
   - `stdout -> file`
 - 当前仍不支持 stdin 重定向 + pipe、多级管道、后台管道和复杂 shell 组合。
+
+## Task71：管道 + 输入重定向组合雏形 / run A < input | run B
+
+- 当前继续承接 Task67 和 Task69，把“文件输入”接到管道左侧程序。
+- shell 现在支持：
+  - `run cat < /readme.txt | run cat`
+  - `run cat < /programs | run cat`
+  - `run cat < /input.txt | run cat`
+- 当前执行模型仍是顺序执行：
+  - 左侧先从文件读取 stdin
+  - 左侧 stdout 写入 pipe buffer
+  - 右侧再从 pipe buffer 读取并输出到屏幕
+- 当前左侧进程可以同时启用：
+  - `stdin <- file`
+  - `stdout -> pipe`
+- 当前右侧进程继续启用：
+  - `stdin <- pipe`
+- 当前仍不支持 `run A < input | run B > output`、多级管道、后台管道和复杂 shell 组合。

@@ -758,3 +758,39 @@ cat /copy.txt
 2. `run cat < /readme.txt | run cat > /x.txt`
 3. 后台管道
 4. 复杂 quoting
+
+## 29. run 用户程序 pipe + stdin 重定向
+
+Task71 当前把 Task67 的文件 stdin 重定向和 Task69 的单管道组合起来，支持：
+
+```text
+run cat < /readme.txt | run cat
+run cat < /programs | run cat
+run cat < /input.txt | run cat
+```
+
+当前规则：
+
+1. `<` 和输入文件路径不会传入左侧用户程序 argv
+2. `|` 不会传入左右任一用户程序 argv
+3. 左侧程序在没有 argv 文件名时，会进入 stdin 模式
+4. 左侧程序通过 `sys_read(0, ...)` 从输入文件读取
+5. 左侧程序通过 `sys_write(...)` 把输出写入 pipe buffer
+6. 右侧程序继续以 stdin 模式从 pipe buffer 读取
+7. 右侧程序继续正常输出到屏幕
+
+因此：
+
+```text
+run cat < /readme.txt | run cat
+```
+
+当前等价于把 `/readme.txt` 内容先喂给左侧 `cat`，再由右侧 `cat` 从 pipe stdin 接着读出并显示。
+
+当前仍不支持：
+
+1. `run cat /readme.txt < /input.txt | run cat`
+2. `run cat < /readme.txt | run cat > /x.txt`
+3. 多级管道
+4. 后台管道
+5. 复杂 quoting
