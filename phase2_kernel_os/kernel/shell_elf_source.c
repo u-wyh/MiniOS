@@ -250,6 +250,11 @@ static int user_set_stdin_pipe(int pid) {
     return user_syscall1(SYS_SET_STDIN_PIPE, pid);
 }
 
+// 查询一个当前可见文件的教学版元信息；供 shell 在真正启动子进程前预检查重定向目标是否合法。
+static int user_stat(const char* path, struct minios_stat* out_stat) {
+    return user_syscall2(SYS_STAT, (int)path, (int)out_stat);
+}
+
 // 比较两个字符串是否相等。
 static int shell_streq(const char* left, const char* right) {
     int i = 0;
@@ -574,6 +579,30 @@ static void shell_write_run_redirect_error(int parse_result) {
     }
 
     user_write("redirect: invalid syntax\n");
+}
+
+// 校验“stdout -> 文件”目标是否允许写入：只读内置文件直接拒绝，>> 仍要求目标已存在且必须是 RAMFS。
+static int shell_validate_stdout_target(const char* path, int is_append) {
+    struct minios_stat st;
+    int stat_result;
+
+    if (path == (const char*)0 || path[0] == '\0') {
+        return -1;
+    }
+
+    stat_result = user_stat(path, &st);
+    if (stat_result == 0) {
+        if (st.type != MINIOS_FILE_TYPE_RAMFS_TEXT) {
+            return -2;
+        }
+        return 0;
+    }
+
+    if (is_append != 0) {
+        return -3;
+    }
+
+    return 0;
 }
 
 // 执行 echo 的教学版 RAMFS 输出重定向：> 覆盖写，必要时自动创建；>> 追加写且要求目标已存在。
@@ -947,7 +976,7 @@ static int shell_spawn_program(int program_id, int argc, char** argv, int wait_c
 }
 
 // 执行教学版单管道：当前采用“左侧先完整运行并写 pipe buffer，右侧再读取 pipe buffer”的顺序模型。
-static void shell_run_single_pipe(int left_argc, char** left_argv, int right_argc, char** right_argv) {
+static void shell_run_single_pipe(int left_argc, char** left_argv, int right_argc, char** right_argv, const char* right_stdout_path, int right_stdout_is_append) {
     int left_program_id;
     int right_program_id;
     int validate_result;
@@ -989,13 +1018,29 @@ static void shell_run_single_pipe(int left_argc, char** left_argv, int right_arg
         return;
     }
 
+    if (right_stdout_path != (const char*)0) {
+        validate_result = shell_validate_stdout_target(right_stdout_path, right_stdout_is_append);
+        if (validate_result == -2) {
+            user_write("pipe redirect target is readonly\n");
+            return;
+        }
+        if (validate_result == -3) {
+            user_write("pipe append target must exist\n");
+            return;
+        }
+        if (validate_result < 0) {
+            user_write("pipe redirect target invalid\n");
+            return;
+        }
+    }
+
     user_pipe_reset();
     if (shell_spawn_program(left_program_id, left_argc - 1, &left_argv[1], 1, 0, (const char*)0, 0, (const char*)0, 1, 0) < 0) {
         user_pipe_reset();
         return;
     }
 
-    if (shell_spawn_program(right_program_id, right_argc - 1, &right_argv[1], 1, 0, (const char*)0, 0, (const char*)0, 0, 1) < 0) {
+    if (shell_spawn_program(right_program_id, right_argc - 1, &right_argv[1], 1, 0, right_stdout_path, right_stdout_is_append, (const char*)0, 0, 1) < 0) {
         user_pipe_reset();
         return;
     }
@@ -1372,6 +1417,8 @@ static void shell_cmd_help(void) {
     user_write("  run cat < <file>\n");
     user_write("  run cat < <file> > <file>\n");
     user_write("  run <program> [args] | run <program> [args]\n");
+    user_write("  run <program> [args] | run <program> [args] > <file>\n");
+    user_write("  run <program> [args] | run <program> [args] >> <file>\n");
     user_write("  start <program> [args]\n");
     user_write("  jobs\n");
     user_write("  wait [pid]\n");
@@ -1409,7 +1456,12 @@ void _start(void) {
         int redirect_status;
         int input_redirect_index;
         int input_redirect_status;
+        int right_redirect_index;
+        int right_redirect_is_append;
+        int right_redirect_status;
+        int right_effective_argc;
         struct shell_redirect_info run_redirects;
+        struct shell_redirect_info right_pipe_redirects;
 
         user_write("MiniOS$ ");
         shell_read_line(line, SHELL_LINE_MAX);
@@ -1445,8 +1497,8 @@ void _start(void) {
         }
 
         if (pipe_index >= 0) {
-            if (redirect_index >= 0 || input_redirect_index >= 0) {
-                user_write("pipe with redirection is not supported yet\n");
+            if (input_redirect_index >= 0) {
+                user_write("pipe with input redirection is not supported yet\n");
                 continue;
             }
 
@@ -1455,7 +1507,48 @@ void _start(void) {
                 continue;
             }
 
-            shell_run_single_pipe(pipe_index, argv, argc - pipe_index - 1, &argv[pipe_index + 1]);
+            if (redirect_index >= 0 && redirect_index < pipe_index) {
+                user_write("pipe with left-side redirection is not supported yet\n");
+                continue;
+            }
+
+            right_redirect_index = -1;
+            right_redirect_is_append = 0;
+            right_effective_argc = argc - pipe_index - 1;
+            if (redirect_index >= 0) {
+                right_redirect_status = shell_find_redirect(argc - pipe_index - 1, &argv[pipe_index + 1], &right_redirect_index, &right_redirect_is_append);
+                if (right_redirect_status < 0) {
+                    user_write("redirect: invalid syntax\n");
+                    continue;
+                }
+
+                right_redirect_status = shell_parse_run_redirects(argc - pipe_index - 1, &argv[pipe_index + 1], right_redirect_index, right_redirect_is_append, -1, &right_pipe_redirects);
+                if (right_redirect_status < 0) {
+                    shell_write_run_redirect_error(right_redirect_status);
+                    continue;
+                }
+
+                if (right_pipe_redirects.first_redirect_index == 1) {
+                    user_write("redirect: missing program target\n");
+                    continue;
+                }
+
+                if (right_pipe_redirects.first_redirect_index > 0) {
+                    right_effective_argc = right_pipe_redirects.first_redirect_index;
+                }
+            } else {
+                right_pipe_redirects.has_stdout = 0;
+                right_pipe_redirects.stdout_append = 0;
+                right_pipe_redirects.stdout_path = (const char*)0;
+            }
+
+            shell_run_single_pipe(
+                pipe_index,
+                argv,
+                right_effective_argc,
+                &argv[pipe_index + 1],
+                right_pipe_redirects.stdout_path,
+                right_pipe_redirects.stdout_append);
             continue;
         }
 

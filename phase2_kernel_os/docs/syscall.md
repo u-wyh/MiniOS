@@ -383,3 +383,44 @@ Task69 当前新增的是教学版单管道相关 syscall：
 2. 当前不是并发 pipe
 3. 当前不支持阻塞读写
 4. 当前不支持 dup2
+
+## 18. Task70：pipe + output redirect 下的 SYS_READ / SYS_WRITE
+
+Task70 没有新增新的 pipe syscall，而是把 Task69 与 Task66 的已有行为组合起来。
+
+支持示例：
+
+```text
+run cat /readme.txt | run cat > /copy.txt
+run cat /programs | run cat >> /log.txt
+```
+
+### 当前配合方式
+
+左侧进程：
+
+1. 启用 `stdout -> pipe`
+2. `SYS_WRITE` 继续把文本写入 pipe buffer
+
+右侧进程：
+
+1. 启用 `stdin <- pipe`
+2. 启用 `stdout -> RAMFS file`
+3. `SYS_READ(fd=0)` 从 pipe buffer 读取
+4. `SYS_WRITE` 再把输出写入目标 RAMFS 文件
+
+### 当前顺序
+
+1. 左侧 `SYS_WRITE`
+   - pipe 优先
+2. 右侧 `SYS_READ(fd=0)`
+   - pipe 优先于文件 stdin
+3. 右侧 `SYS_WRITE`
+   - 因为右侧没有启用 `stdout -> pipe`
+   - 所以继续走 Task66 的 `stdout -> file`
+
+### 说明
+
+1. 用户程序本身不需要知道自己被组合重定向
+2. 当前仍不是完整 `dup2` / pipe fd 模型
+3. 当前右侧既可以从 pipe 读，也可以向 RAMFS 文件写

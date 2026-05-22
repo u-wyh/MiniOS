@@ -723,3 +723,38 @@ run cat /readme.txt | run cat
 2. 管道和重定向组合
 3. 后台管道
 4. 复杂 quoting
+
+## 28. run 用户程序 pipe + stdout 重定向
+
+Task70 当前把 Task69 的单管道和 Task66 的 stdout 文件重定向组合起来，支持：
+
+```text
+run cat /readme.txt | run cat > /copy.txt
+run cat /programs | run cat > /programs_copy.txt
+run cat /programs | run cat >> /log.txt
+```
+
+当前规则：
+
+1. 左侧程序仍然把 stdout 写入 pipe buffer
+2. 右侧程序仍然从 stdin 读取 pipe 内容
+3. 右侧程序的 stdout 不再直接输出到屏幕
+4. 右侧程序的 stdout 会写入目标 RAMFS 文件
+5. `>` 表示覆盖写
+6. `>>` 表示追加写
+
+因此：
+
+```text
+run cat /readme.txt | run cat > /copy.txt
+cat /copy.txt
+```
+
+当前等价于把左侧 `cat` 的输出，经由右侧 `cat` 再落到 RAMFS 文件。
+
+当前仍不支持：
+
+1. 多级管道
+2. `run cat < /readme.txt | run cat > /x.txt`
+3. 后台管道
+4. 复杂 quoting

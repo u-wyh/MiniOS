@@ -2574,3 +2574,42 @@ TODO：
 - 暂不支持后台管道。
 - 暂不支持管道和重定向组合。
 - 暂不支持复杂引号解析。
+
+## ✅ Task70：管道 + 输出重定向组合雏形 / run A | run B > file
+
+本轮目标：
+
+- 在 Task69 单管道基础上，继续支持教学版：
+  - `run cat /readme.txt | run cat > /copy.txt`
+  - `run cat /programs | run cat > /programs_copy.txt`
+  - `run cat /programs | run cat >> /log.txt`
+- 让左侧程序 stdout 先进 pipe buffer，再由右侧程序从 pipe buffer 读取并写入 RAMFS 文件。
+
+已完成：
+
+- shell 现在支持：
+  - `run <program> [args] | run <program> [args] > <file>`
+  - `run <program> [args] | run <program> [args] >> <file>`
+- 左侧进程继续启用 `stdout -> pipe`。
+- 右侧进程现在可以同时启用：
+  - `stdin <- pipe`
+  - `stdout -> RAMFS file`
+- 当前 `run cat /readme.txt | run cat > /copy.txt`
+  - 会把 `/readme.txt` 内容写入 `/copy.txt`
+- 当前 `run cat /programs | run cat > /programs_copy.txt`
+  - 会把 `/programs` 内容写入目标 RAMFS 文件
+- 当前 `run cat /programs | run cat >> /log.txt`
+  - 会把右侧输出追加到已有 RAMFS 文件末尾
+
+当前限制：
+
+- 当前仍不是完整 UNIX pipe。
+- 暂不支持多级管道。
+- 暂不支持并发 pipe。
+- 暂不支持阻塞 pipe。
+- 暂不支持 pipe fd。
+- 暂不支持 dup2。
+- 暂不支持 stdin 重定向 + pipe。
+- 暂不支持后台管道。
+- 暂不支持 stderr 重定向。
+- 暂不支持复杂 shell 组合。

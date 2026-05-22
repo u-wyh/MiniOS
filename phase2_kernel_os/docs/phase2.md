@@ -233,3 +233,20 @@
   - 不会出现在 `ls`
   - 不能被 `cat /path` 访问
 - 当前仍不支持多级管道、管道与重定向组合、后台管道和复杂 shell 语法。
+
+## Task70：管道 + 输出重定向组合雏形 / run A | run B > file
+
+- 当前继续承接 Task69 和 Task66，把“进程到进程的数据流”继续推进到“进程到进程再到文件”。
+- shell 现在支持：
+  - `run cat /readme.txt | run cat > /copy.txt`
+  - `run cat /programs | run cat > /programs_copy.txt`
+  - `run cat /programs | run cat >> /log.txt`
+- 当前执行模型仍是顺序执行：
+  - 左侧先完整运行并把 stdout 写入 pipe buffer
+  - 右侧再运行
+  - 右侧 stdin 从 pipe buffer 读取
+  - 右侧 stdout 再按 Task66 规则写入 RAMFS 文件
+- 当前右侧进程可以同时启用：
+  - `stdin <- pipe`
+  - `stdout -> file`
+- 当前仍不支持 stdin 重定向 + pipe、多级管道、后台管道和复杂 shell 组合。

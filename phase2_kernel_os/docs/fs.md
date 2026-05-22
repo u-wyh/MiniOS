@@ -632,3 +632,46 @@ pipe buffer：
 6. 暂不支持后台管道
 7. 暂不支持管道和重定向组合
 8. pipe buffer 有固定容量上限
+
+## 19. Task70：pipe buffer + RAMFS 输出文件
+
+Task70 当前把 Task69 的 pipe buffer 再接到 Task66 的 stdout 文件重定向，形成：
+
+```text
+左程序 stdout -> pipe buffer -> 右程序 stdin -> 右程序 stdout -> RAMFS 文件
+```
+
+支持示例：
+
+```text
+run cat /readme.txt | run cat > /copy.txt
+run cat /programs | run cat > /programs_copy.txt
+run cat /programs | run cat >> /log.txt
+```
+
+### 当前语义
+
+1. 左侧进程继续把 `SYS_WRITE` 输出写入 pipe buffer
+2. 右侧进程继续通过 `SYS_READ(fd=0)` 从 pipe buffer 读取
+3. 右侧进程的 `SYS_WRITE` 不再输出到屏幕，而是按 Task66 规则写入 RAMFS 文件
+4. `>` 仍表示首次覆盖写，后续同一进程多次 `SYS_WRITE` 自动追加
+5. `>>` 仍表示始终追加到已有 RAMFS 文件
+
+### pipe buffer 与 RAMFS 文件的关系
+
+1. pipe buffer 仍然只是临时内核缓冲区
+2. pipe buffer 本身不会出现在 `ls`
+3. 真正可被 `cat /path` / `stat /path` 观察的是右侧输出文件
+4. 也就是说，可见结果属于 RAMFS，pipe buffer 只是中间传输层
+
+### 当前限制
+
+1. 暂不支持多级管道
+2. 暂不支持并发 pipe
+3. 暂不支持阻塞 pipe
+4. 暂不支持 pipe fd
+5. 暂不支持 dup2
+6. 暂不支持 stdin 重定向 + pipe
+7. 暂不支持后台管道
+8. 暂不支持 stderr 重定向
+9. 暂不支持复杂 quoting
