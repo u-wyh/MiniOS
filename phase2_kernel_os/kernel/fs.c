@@ -76,6 +76,7 @@ static const unsigned char info_elf[] = {
 #include "writefile_elf.inc"
 // append 文件：用户态通过 syscall 追加写入 RAMFS 文件
 #include "append_elf.inc"
+#include "wc_elf.inc"
 
 
 // fork 文件：父进程 fork 后等待子进程退出，子进程输出后以状态码 7 退出
@@ -250,6 +251,7 @@ static struct file file_table[] = {
     {"stat", (void*)stat_elf, (uint32_t)sizeof(stat_elf)},
     {"writefile", (void*)writefile_elf, (uint32_t)sizeof(writefile_elf)},
     {"append", (void*)append_elf, (uint32_t)sizeof(append_elf)},
+    {"wc", (void*)wc_elf, (uint32_t)sizeof(wc_elf)},
     {"fork", (void*)fork_elf, (uint32_t)sizeof(fork_elf)},
     {"execchild", (void*)execchild_elf, (uint32_t)sizeof(execchild_elf)},
     {"forkexec", (void*)forkexec_elf, (uint32_t)sizeof(forkexec_elf)}

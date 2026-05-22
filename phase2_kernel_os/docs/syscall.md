@@ -515,3 +515,29 @@ run cat < /input.txt | run cat >> /log.txt
 1. 当前仍不是完整 `dup2` / pipe fd 模型
 2. 用户程序本身不需要知道自己处于“文件输入 + 管道 + 文件输出”的组合链路
 3. 只要左侧按 stdin 模式读取、右侧按 stdin 模式读取，内核就会按进程标记自动完成数据转发
+
+## 21. Task73：wc 程序依赖的 syscall 数据流
+
+Task73 没有新增 syscall，而是用新的用户态 `wc` 程序验证已有 syscall 组合已经能承载“读入数据 -> 用户态处理 -> 输出结果”。
+
+`wc` 当前主要依赖：
+
+1. `SYS_READ(fd=0)`
+2. `SYS_WRITE`
+3. `SYS_EXIT`
+
+### 当前读取来源
+
+1. `run wc < /readme.txt`
+   - `SYS_READ(fd=0)` 来自文件 stdin 重定向
+2. `run cat /readme.txt | run wc`
+   - `SYS_READ(fd=0)` 来自 pipe buffer
+3. `run cat < /input.txt | run wc > /count.txt`
+   - `SYS_READ(fd=0)` 来自 pipe buffer
+   - `SYS_WRITE` 写入 RAMFS 文件
+
+### 说明
+
+1. `wc` 当前不直接打开路径
+2. `wc` 统一把 stdin 当作输入源
+3. `fd=0` 当前仍然来自文件 stdin 重定向或 pipe，不是交互式 tty

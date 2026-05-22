@@ -2690,3 +2690,38 @@ TODO：
 - 暂不支持后台管道。
 - 暂不支持 stderr 重定向。
 - 暂不支持复杂 shell 组合。
+
+## ✅ Task73：用户态 wc 程序 / stdin 数据流验证
+
+本轮目标：
+
+- 新增一个最小用户态 `wc` 程序，专门验证：
+  - `stdin -> 用户程序处理 -> stdout`
+  - `stdin <- file`
+  - `stdin <- pipe`
+  - `stdout -> RAMFS file`
+
+已完成：
+
+- 新增用户态 `wc` 程序，当前通过 `sys_read(0, ...)` 从 stdin 读取数据。
+- `wc` 当前输出：
+  - `bytes`
+  - `lines`
+  - `words`
+- 当前支持：
+  - `run wc`
+  - `run wc < /readme.txt`
+  - `run cat /readme.txt | run wc`
+  - `run cat < /input.txt | run wc > /count.txt`
+- `wc` 通过 `sys_write(...)` 输出统计结果，因此可以自然复用：
+  - 屏幕输出
+  - `stdout` 重定向
+  - pipe 输入链路
+
+当前限制：
+
+- 当前仍是教学版 `wc`。
+- 暂不支持 Linux `wc` 参数。
+- 暂不支持 `-l` / `-w` / `-c`。
+- 暂无交互式 tty stdin。
+- 暂不支持 `run wc /file` 这种 argv 文件模式；当前统一通过 stdin 读取。

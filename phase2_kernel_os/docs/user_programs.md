@@ -831,3 +831,31 @@ cat /copy.txt
 2. 后台管道
 3. stderr 重定向
 4. 复杂 quoting
+
+## 31. 用户态 wc 程序
+
+Task73 当前新增了一个最小用户态 `wc` 程序，用来验证 stdin / pipe / stdout redirect 数据流。
+
+当前用法：
+
+```text
+run wc
+run wc < /readme.txt
+run cat /readme.txt | run wc
+run cat < /input.txt | run wc > /count.txt
+```
+
+当前输出格式：
+
+```text
+bytes: 80
+lines: 2
+words: 14
+```
+
+当前语义：
+
+1. `wc` 不读取 argv 文件路径
+2. `wc` 统一通过 `sys_read(0, ...)` 从 stdin 读取
+3. 当 stdin 没有重定向时，当前会安全读到 EOF 并输出 0 统计
+4. `wc` 的结果通过 `sys_write(...)` 输出，因此既可以显示到屏幕，也可以继续重定向到 RAMFS 文件

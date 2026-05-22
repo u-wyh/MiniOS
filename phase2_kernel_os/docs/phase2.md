@@ -289,3 +289,21 @@
   - `stdin <- pipe`
   - `stdout -> file`
 - 当前仍不支持多级管道、后台管道和复杂 shell 组合。
+
+## Task73：用户态 wc 程序 / stdin 数据流验证
+
+- 当前新增了一个最小用户态 `wc` 程序，用来验证 “stdin -> 用户程序处理 -> stdout” 这条链路已经真正可用。
+- `wc` 当前通过 `sys_read(0, ...)` 从 stdin 读取：
+  - 文件 stdin 重定向
+  - pipe stdin
+- `wc` 当前通过 `sys_write(...)` 输出统计结果，因此可以继续走：
+  - 屏幕输出
+  - `stdout` 重定向写文件
+- 当前最小验证链路包括：
+  - `run wc < /readme.txt`
+  - `run cat /readme.txt | run wc`
+  - `run cat < /input.txt | run wc > /count.txt`
+- 当前 `wc` 至少统计：
+  - `bytes`
+  - `lines`
+  - `words`

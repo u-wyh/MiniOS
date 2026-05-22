@@ -26,7 +26,8 @@
     X(PROGRAM_LS, 13, "ls", 1)                                  \
     X(PROGRAM_STAT, 14, "stat", 1)                              \
     X(PROGRAM_WRITEFILE, 15, "writefile", 1)                    \
-    X(PROGRAM_APPEND, 16, "append", 1)
+    X(PROGRAM_APPEND, 16, "append", 1)                          \
+    X(PROGRAM_WC, 17, "wc", 1)
 
 // program_id：统一表达内置用户程序身份，避免在 shell / exec / process 里散落魔法数字。
 enum user_program_id {
