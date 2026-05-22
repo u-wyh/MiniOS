@@ -232,6 +232,7 @@ static void process_clear_slot(struct process* proc) {
     proc->stdin_redirect_offset = 0;
     proc->stdout_redirect_to_pipe = 0;
     proc->stdin_redirect_from_pipe = 0;
+    proc->launch_ready = 0;
     proc->requested_exit = 0;
     proc->name = (const char*)0;
     proc->is_background = 0;
@@ -1711,6 +1712,31 @@ int process_set_stdin_pipe_by_pid(int pid) {
     return 0;
 }
 
+// 为指定 pid 的 shell 子进程解除启动门闩：父进程完成重定向/pipe 配置后再把它切回 READY。
+int process_mark_launch_ready_by_pid(int pid) {
+    struct process* target = process_find_by_pid(pid);
+
+    if (target == (struct process*)0 || target->state == PROCESS_UNUSED) {
+        return -1;
+    }
+
+    target->launch_ready = 1;
+    if (target->state == PROCESS_BLOCKED) {
+        target->state = PROCESS_READY;
+    }
+
+    return 0;
+}
+
+// 返回当前运行进程的启动门闩状态；默认 1 代表“不需要等待”，仅 shell run/start 子分支会主动轮询它。
+int process_current_launch_ready(void) {
+    if (current_process == (struct process*)0 || current_process->state != PROCESS_RUNNING) {
+        return 1;
+    }
+
+    return current_process->launch_ready;
+}
+
 // 判断当前进程是否启用了 stdout 重定向；供 SYS_WRITE 在屏幕输出与 RAMFS 写入之间分流。
 int process_current_has_stdout_redirect(void) {
     if (current_process == (struct process*)0 || current_process->state != PROCESS_RUNNING) {
@@ -1847,6 +1873,7 @@ int process_fork(struct interrupt_frame* frame) {
     child->stdin_redirect_offset = 0;
     child->stdout_redirect_to_pipe = 0;
     child->stdin_redirect_from_pipe = 0;
+    child->launch_ready = 0;
     child->exit_status = 0;
     child->requested_exit = 0;
     // fork 会创建一个新的进程实体，所以子进程需要拥有新的 create_tick。
@@ -1867,6 +1894,7 @@ int process_fork(struct interrupt_frame* frame) {
     child->saved_frame = *frame;
     child->saved_frame.eax = 0;
     child->has_saved_frame = 1;
+    // fork 的默认语义仍保持 READY；只有 shell 的 run/start 子分支会主动等待 launch_ready 门闩。
     child->state = PROCESS_READY;
 
     // fork 调试输出：验证父子 pid、parent_pid、返回点 eip 和用户栈物理页都符合预期

@@ -11,6 +11,7 @@
 #define SYS_PS 12
 #define SYS_KILL 13
 #define SYS_WAIT_ANY 14
+#define SYS_YIELD 15
 #define SYS_SLEEP 16
 #define SYS_SLEEP_PID 17
 #define SYS_SET_BACKGROUND 18
@@ -31,6 +32,8 @@
 #define SYS_PIPE_RESET 35
 #define SYS_SET_STDOUT_PIPE 36
 #define SYS_SET_STDIN_PIPE 37
+#define SYS_SET_LAUNCH_READY 38
+#define SYS_GET_LAUNCH_READY 39
 // 当前内核默认把 PIT 配置为 20Hz，因此 1 tick 约等于 50ms。
 #define SHELL_UPTIME_TICKS_PER_SECOND 20
 
@@ -250,9 +253,24 @@ static int user_set_stdin_pipe(int pid) {
     return user_syscall1(SYS_SET_STDIN_PIPE, pid);
 }
 
+// 通知内核：该 shell 子进程的重定向/pipe 配置已经完成，可以开始真正执行用户态子分支。
+static int user_set_launch_ready(int pid) {
+    return user_syscall1(SYS_SET_LAUNCH_READY, pid);
+}
+
+// 当前 shell 子分支在 exec 前轮询该标志，避免父进程还没挂好重定向时就提前开始读写。
+static int user_get_launch_ready(void) {
+    return user_syscall0(SYS_GET_LAUNCH_READY);
+}
+
 // 查询一个当前可见文件的教学版元信息；供 shell 在真正启动子进程前预检查重定向目标是否合法。
 static int user_stat(const char* path, struct minios_stat* out_stat) {
     return user_syscall2(SYS_STAT, (int)path, (int)out_stat);
+}
+
+// 主动让出 CPU，供 launch_ready 等门闩场景在父进程补齐配置前短暂等待。
+static int user_yield(void) {
+    return user_syscall0(SYS_YIELD);
 }
 
 // 比较两个字符串是否相等。
@@ -919,6 +937,12 @@ static int shell_spawn_program(int program_id, int argc, char** argv, int wait_c
     }
 
     if (pid == 0) {
+        // 子进程先等待父进程补齐 stdin/stdout/pipe 配置，再真正 exec 到目标程序。
+        // 这样可以避免 run + 重定向/管道 场景里出现“子进程先跑、父进程后挂配置”的竞态。
+        while (user_get_launch_ready() == 0) {
+            user_yield();
+        }
+
         int exec_result = user_exec_args(program_id, argc, (const char* const*)argv);
 
         if (exec_result != 0) {
@@ -974,6 +998,15 @@ static int shell_spawn_program(int program_id, int argc, char** argv, int wait_c
             user_write("pipe stdin setup failed\n");
             return -1;
         }
+    }
+
+    if (user_set_launch_ready(pid) < 0) {
+        user_kill(pid);
+        if (wait_child != 0) {
+            user_waitpid(pid);
+        }
+        user_write("launch setup failed\n");
+        return -1;
     }
 
     if (wait_child != 0) {
@@ -1441,6 +1474,8 @@ static void shell_cmd_help(void) {
     user_write("  run cat < <file> > <file>\n");
     user_write("  run <program> [args] | run <program> [args]\n");
     user_write("  run <program> < <file> | run <program> [args]\n");
+    user_write("  run <program> < <file> | run <program> [args] > <file>\n");
+    user_write("  run <program> < <file> | run <program> [args] >> <file>\n");
     user_write("  run <program> [args] | run <program> [args] > <file>\n");
     user_write("  run <program> [args] | run <program> [args] >> <file>\n");
     user_write("  start <program> [args]\n");
@@ -1539,11 +1574,6 @@ void _start(void) {
                 continue;
             }
 
-            if (input_redirect_index >= 0 && redirect_index >= 0) {
-                user_write("pipe with input/output redirection is not supported yet\n");
-                continue;
-            }
-
             left_effective_argc = pipe_index;
             if (input_redirect_index >= 0) {
                 left_redirect_status = shell_parse_run_redirects(pipe_index, argv, -1, 0, input_redirect_index, &left_pipe_redirects);
@@ -1561,8 +1591,9 @@ void _start(void) {
                     left_effective_argc = left_pipe_redirects.first_redirect_index;
                 }
 
-                // 当前教学版 pipe + file stdin 仍只支持“左侧程序无额外文件参数”的最小模式，
-                // 例如 run cat < /readme.txt | run cat；像 run cat /a < /b | run cat 暂不支持。
+                // 当前教学版 pipe 左侧 file stdin 仍只支持“左侧程序无额外文件参数”的最小模式，
+                // 例如 run cat < /readme.txt | run cat 或 run cat < /readme.txt | run cat > /copy.txt；
+                // 像 run cat /a < /b | run cat 暂不支持。
                 if (left_effective_argc != 2) {
                     user_write("stdin redirect does not support extra args yet\n");
                     continue;

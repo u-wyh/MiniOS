@@ -716,5 +716,48 @@ run cat < /input.txt | run cat
 4. 暂不支持 pipe fd
 5. 暂不支持 dup2
 6. 暂不支持后台管道
-7. 暂不支持 `run A < input | run B > output`
+7. 暂不支持复杂 quoting
+
+## 21. Task72：输入文件 + pipe buffer + 输出文件
+
+Task72 当前把 Task71 的“输入文件 -> pipe”与 Task70 的“pipe -> 输出文件”组合起来，形成：
+
+```text
+输入文件 -> 左程序 stdin -> 左程序 stdout -> pipe buffer -> 右程序 stdin -> 右程序 stdout -> RAMFS 文件
+```
+
+支持示例：
+
+```text
+run cat < /readme.txt | run cat > /copy.txt
+run cat < /programs | run cat > /programs_copy.txt
+run cat < /input.txt | run cat > /output.txt
+run cat < /input.txt | run cat >> /log.txt
+```
+
+### 当前语义
+
+1. 左侧进程通过 `SYS_READ(fd=0)` 从输入文件读取
+2. 左侧进程通过 `SYS_WRITE` 把输出写入 pipe buffer
+3. 左侧结束后，右侧进程再运行
+4. 右侧进程通过 `SYS_READ(fd=0)` 从 pipe buffer 读取
+5. 右侧进程通过 `SYS_WRITE` 把输出写入 RAMFS 文件
+
+### 输入文件、pipe buffer 与输出文件的关系
+
+1. 输入源可以是内置只读文件
+2. 输入源也可以是 RAMFS 文件
+3. pipe buffer 仍然只是临时内核缓冲区
+4. pipe buffer 不会出现在 `ls`
+5. 真正可被 `cat /path` / `stat /path` 观察的是输出 RAMFS 文件
+
+### 当前限制
+
+1. 暂不支持多级管道
+2. 暂不支持并发 pipe
+3. 暂不支持阻塞 pipe
+4. 暂不支持 pipe fd
+5. 暂不支持 dup2
+6. 暂不支持后台管道
+7. 暂不支持 stderr 重定向
 8. 暂不支持复杂 quoting

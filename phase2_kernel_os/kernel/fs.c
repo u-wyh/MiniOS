@@ -415,19 +415,30 @@ static int fs_text_path_equal(const char* input, const char* path) {
 
 // 按路径查找 RAMFS 文件；找到返回槽位指针，否则返回空指针。
 static struct ramfs_file* fs_ramfs_find(const char* path) {
+    char normalized[MAX_FS_PATH_LEN];
     int i;
+    int j;
 
-    if (path == (const char*)0 || path[0] == '\0') {
+    if (fs_normalize_path(path, normalized, MAX_FS_PATH_LEN) < 0) {
         return (struct ramfs_file*)0;
     }
 
     for (i = 0; i < MAX_RAMFS_FILES; i++) {
-        if (ramfs_files[i].used == 0) {
+        struct ramfs_file* slot = &ramfs_files[i];
+
+        if (slot->used == 0) {
             continue;
         }
 
-        if (fs_text_path_equal(path, ramfs_files[i].path) != 0) {
-            return &ramfs_files[i];
+        // RAMFS 槽位内部统一保存规范路径，这里直接按规范路径逐字节比对，避免走只读文件的兼容匹配分支。
+        for (j = 0; j < MAX_FS_PATH_LEN; j++) {
+            if (normalized[j] != slot->path[j]) {
+                break;
+            }
+
+            if (normalized[j] == '\0') {
+                return slot;
+            }
         }
     }
 
@@ -494,15 +505,25 @@ const struct builtin_text_file* fs_builtin_file_at(uint32_t index) {
 
 // 按路径查找内置只读文本文件，供 shell 的 cat 和后续 open/read 雏形复用。
 const struct builtin_text_file* fs_builtin_file_find(const char* path) {
+    char normalized[MAX_FS_PATH_LEN];
     uint32_t i;
+    uint32_t j;
 
-    if (path == (const char*)0 || path[0] == '\0') {
+    if (fs_normalize_path(path, normalized, MAX_FS_PATH_LEN) < 0) {
         return (const struct builtin_text_file*)0;
     }
 
-    for (i = 0; i < fs_builtin_file_count(); i++) {
-        if (fs_text_path_equal(path, builtin_text_files[i].path) != 0) {
-            return &builtin_text_files[i];
+    for (i = 0; i < fs_builtin_text_file_count_only(); i++) {
+        for (j = 0; j < MAX_FS_PATH_LEN; j++) {
+            char builtin_ch = builtin_text_files[i].path[j];
+
+            if (normalized[j] != builtin_ch) {
+                break;
+            }
+
+            if (builtin_ch == '\0') {
+                return &builtin_text_files[i];
+            }
         }
     }
 

@@ -267,4 +267,25 @@
   - `stdout -> pipe`
 - 当前右侧进程继续启用：
   - `stdin <- pipe`
-- 当前仍不支持 `run A < input | run B > output`、多级管道、后台管道和复杂 shell 组合。
+- 当前仍不支持多级管道、后台管道和复杂 shell 组合。
+
+## Task72：完整单管道数据流雏形 / run A < input | run B > output
+
+- 当前继续承接 Task70 和 Task71，把“文件输入 -> 左进程 -> pipe -> 右进程 -> 文件输出”串起来。
+- shell 现在支持：
+  - `run cat < /readme.txt | run cat > /copy.txt`
+  - `run cat < /programs | run cat > /programs_copy.txt`
+  - `run cat < /input.txt | run cat > /output.txt`
+  - `run cat < /input.txt | run cat >> /log.txt`
+- 当前执行模型仍是顺序执行：
+  - 左侧先从文件读取 stdin
+  - 左侧 stdout 写入 pipe buffer
+  - 右侧再从 pipe buffer 读取
+  - 右侧 stdout 再写入 RAMFS 文件
+- 当前左侧进程可以同时启用：
+  - `stdin <- file`
+  - `stdout -> pipe`
+- 当前右侧进程可以同时启用：
+  - `stdin <- pipe`
+  - `stdout -> file`
+- 当前仍不支持多级管道、后台管道和复杂 shell 组合。

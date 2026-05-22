@@ -794,3 +794,40 @@ run cat < /readme.txt | run cat
 3. 多级管道
 4. 后台管道
 5. 复杂 quoting
+
+## 30. run 用户程序完整单管道数据流
+
+Task72 当前把 Task71 和 Task70 组合起来，支持：
+
+```text
+run cat < /readme.txt | run cat > /copy.txt
+run cat < /programs | run cat > /programs_copy.txt
+run cat < /input.txt | run cat > /output.txt
+run cat < /input.txt | run cat >> /log.txt
+```
+
+当前规则：
+
+1. `<` 和输入文件路径不会传入左侧用户程序 argv
+2. `>` / `>>` 和输出文件路径不会传入右侧用户程序 argv
+3. `|` 不会传入左右任一用户程序 argv
+4. 左侧程序在没有 argv 文件名时，会从 `fd=0` 读取输入文件
+5. 左侧程序的 `sys_write(...)` 会把输出写入 pipe buffer
+6. 右侧程序继续通过 `sys_read(0, ...)` 从 pipe buffer 读取
+7. 右侧程序的 `sys_write(...)` 会把输出写入目标 RAMFS 文件
+
+因此：
+
+```text
+run cat < /readme.txt | run cat > /copy.txt
+cat /copy.txt
+```
+
+当前等价于把 `/readme.txt` 的内容经由两个用户态程序后再写入 RAMFS 文件。
+
+当前仍不支持：
+
+1. 多级管道
+2. 后台管道
+3. stderr 重定向
+4. 复杂 quoting

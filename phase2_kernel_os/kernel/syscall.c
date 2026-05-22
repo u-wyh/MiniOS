@@ -426,6 +426,18 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    // SYS_SET_LAUNCH_READY(pid)：shell 完成子进程重定向/pipe 配置后，显式放行它开始执行。
+    if (frame->eax == SYS_SET_LAUNCH_READY) {
+        frame->eax = (unsigned int)process_mark_launch_ready_by_pid((int)frame->ebx);
+        return;
+    }
+
+    // SYS_GET_LAUNCH_READY()：shell 子分支在 exec 前轮询父进程是否已完成重定向/pipe 配置。
+    if (frame->eax == SYS_GET_LAUNCH_READY) {
+        frame->eax = (unsigned int)process_current_launch_ready();
+        return;
+    }
+
     // 未知 syscall：当前统一返回 -1，并在控制台打印一条最小调试信息。
     print_string("unknown syscall\n");
     frame->eax = (unsigned int)-1;

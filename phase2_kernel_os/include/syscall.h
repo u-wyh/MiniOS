@@ -64,6 +64,10 @@
 #define SYS_SET_STDOUT_PIPE 36
 // 教学版单管道：把指定 pid 的 stdin 改为从 pipe buffer 读取。
 #define SYS_SET_STDIN_PIPE 37
+// shell 在 fork 后、子进程真正开始执行前，显式放行该子进程进入 READY。
+#define SYS_SET_LAUNCH_READY 38
+// shell 子分支在 exec 前轮询父进程是否已经完成重定向/pipe 配置。
+#define SYS_GET_LAUNCH_READY 39
 
 // int 0x80 进入内核后，栈上会按 pusha + CPU 自动压栈的顺序保存现场
 struct interrupt_frame {

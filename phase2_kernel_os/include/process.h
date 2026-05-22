@@ -118,6 +118,8 @@ struct process {
     int stdout_redirect_to_pipe;
     // stdin_redirect_from_pipe 为 1 时，当前进程的 SYS_READ(fd=0) 会从教学版 pipe buffer 读取。
     int stdin_redirect_from_pipe;
+    // launch_ready 为 0 时，shell 仍在给 fork 子进程补齐重定向/pipe 配置；就绪前不应开始执行子分支。
+    int launch_ready;
 
     // 扩展字段：记录程序名与槽位占用，便于 ps 展示与管理
     const char* name;
@@ -181,6 +183,10 @@ int process_set_stdin_redirect_by_pid(int pid, const char* path);
 int process_set_stdout_pipe_by_pid(int pid);
 // 为指定 pid 的进程启用“stdin 从教学版 pipe buffer 读取”模式。
 int process_set_stdin_pipe_by_pid(int pid);
+// 为指定 pid 的 shell 子进程解除启动门闩，让它进入 READY 并允许被调度。
+int process_mark_launch_ready_by_pid(int pid);
+// 返回当前运行进程的启动门闩状态；仅供 shell 子分支在 exec 前等待父进程配置完成。
+int process_current_launch_ready(void);
 // 返回当前进程是否启用了 stdout 重定向。
 int process_current_has_stdout_redirect(void);
 // 返回当前进程是否启用了 stdout -> pipe。

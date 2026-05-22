@@ -2650,4 +2650,43 @@ TODO：
 - 暂不支持 dup2。
 - 暂不支持后台管道。
 - 暂不支持复杂 shell 组合。
-- 暂不支持 `run A < input | run B > output`。
+
+## ✅ Task72：完整单管道数据流雏形 / run A < input | run B > output
+
+本轮目标：
+
+- 在 Task70 和 Task71 基础上，继续支持教学版完整数据流：
+  - `run cat < /readme.txt | run cat > /copy.txt`
+  - `run cat < /programs | run cat > /programs_copy.txt`
+  - `run cat < /input.txt | run cat > /output.txt`
+- 让左侧程序从文件读取 stdin，再把输出写进 pipe buffer，最后由右侧程序从 pipe buffer 读取并写入 RAMFS 文件。
+
+已完成：
+
+- shell 现在支持：
+  - `run <program> < <file> | run <program> [args] > <file>`
+  - `run <program> < <file> | run <program> [args] >> <file>`
+- 左侧进程现在可以同时启用：
+  - `stdin <- file`
+  - `stdout -> pipe`
+- 右侧进程现在可以同时启用：
+  - `stdin <- pipe`
+  - `stdout -> file`
+- 当前 `run cat < /readme.txt | run cat > /copy.txt`
+  - 会把 `/readme.txt` 内容写入 `/copy.txt`
+- 当前 `run cat < /programs | run cat > /programs_copy.txt`
+  - 会把 `/programs` 内容写入目标 RAMFS 文件
+- RAMFS 文件也可同时作为输入和输出，例如：
+  - `run cat < /input.txt | run cat > /output.txt`
+
+当前限制：
+
+- 当前仍不是完整 UNIX pipe。
+- 暂不支持多级管道。
+- 暂不支持并发 pipe。
+- 暂不支持阻塞 pipe。
+- 暂不支持 pipe fd。
+- 暂不支持 dup2。
+- 暂不支持后台管道。
+- 暂不支持 stderr 重定向。
+- 暂不支持复杂 shell 组合。
