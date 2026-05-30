@@ -541,3 +541,31 @@ Task73 没有新增 syscall，而是用新的用户态 `wc` 程序验证已有 s
 1. `wc` 当前不直接打开路径
 2. `wc` 统一把 stdin 当作输入源
 3. `fd=0` 当前仍然来自文件 stdin 重定向或 pipe，不是交互式 tty
+
+## 22. Task74：grep 程序依赖的 syscall 数据流
+
+Task74 没有新增 syscall，而是用新的用户态 `grep` 程序验证已有 syscall 组合已经能承载“读入文本 -> 用户态过滤 -> 输出匹配行”。
+
+`grep` 当前主要依赖：
+
+1. `SYS_READ(fd=0)`
+2. `SYS_WRITE`
+3. `SYS_EXIT`
+4. `SYS_GET_ARGC`
+5. `SYS_GET_ARG`
+
+### 当前读取来源
+
+1. `run grep MiniOS < /readme.txt`
+   - `SYS_READ(fd=0)` 来自文件 stdin 重定向
+2. `run cat /readme.txt | run grep MiniOS`
+   - `SYS_READ(fd=0)` 来自 pipe buffer
+3. `run cat < /readme.txt | run grep MiniOS > /grep.txt`
+   - `SYS_READ(fd=0)` 来自 pipe buffer
+   - `SYS_WRITE` 写入 RAMFS 文件
+
+### 说明
+
+1. `grep` 当前不直接打开路径
+2. `grep` 第一个参数只作为关键字
+3. `fd=0` 当前仍然来自文件 stdin 重定向或 pipe，不是交互式 tty

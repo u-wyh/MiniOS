@@ -2725,3 +2725,37 @@ TODO：
 - 暂不支持 `-l` / `-w` / `-c`。
 - 暂无交互式 tty stdin。
 - 暂不支持 `run wc /file` 这种 argv 文件模式；当前统一通过 stdin 读取。
+
+## ✅ Task74：用户态 grep 程序 / pipe 文本过滤验证
+
+本轮目标：
+
+- 新增一个最小用户态 `grep` 程序，用来验证：
+  - `stdin -> 用户态按行过滤 -> stdout`
+  - `stdin <- file`
+  - `stdin <- pipe`
+  - `stdout -> RAMFS file`
+
+已完成：
+
+- 新增用户态 `grep` 程序，当前第一个参数作为关键字。
+- `grep` 当前通过 `sys_read(0, ...)` 从 stdin 读取数据。
+- `grep` 当前通过 `sys_write(...)` 输出“包含关键字的整行”。
+- 当前匹配为教学版 ASCII 大小写无关匹配。
+- 当前支持：
+  - `run grep MiniOS < /readme.txt`
+  - `run cat /readme.txt | run grep MiniOS`
+  - `run cat < /readme.txt | run grep MiniOS > /grep.txt`
+- `grep` 可以验证：
+  - 文件 stdin
+  - pipe stdin
+  - stdout 重定向到 RAMFS 文件
+
+当前限制：
+
+- 当前仍是教学版 `grep`。
+- 暂不支持正则表达式。
+- 暂不支持 `-i` / `-n` / `-v` 等参数。
+- 暂不支持多文件输入。
+- 暂无交互式 tty stdin。
+- 暂不支持 `run grep keyword /file` 这种 argv 文件模式；当前统一通过 stdin 读取。

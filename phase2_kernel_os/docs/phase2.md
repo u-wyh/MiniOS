@@ -307,3 +307,21 @@
   - `bytes`
   - `lines`
   - `words`
+
+## Task74：用户态 grep 程序 / pipe 文本过滤验证
+
+- 当前新增了一个最小用户态 `grep` 程序，用来验证 “stdin -> 用户程序过滤 -> stdout” 这条链路已经真正可用。
+- `grep` 当前第一个参数作为关键字，并通过 `sys_read(0, ...)` 从 stdin 读取：
+  - 文件 stdin 重定向
+  - pipe stdin
+- `grep` 当前通过 `sys_write(...)` 输出包含关键字的整行，因此可以继续走：
+  - 屏幕输出
+  - `stdout` 重定向写文件
+- 当前最小验证链路包括：
+  - `run grep MiniOS < /readme.txt`
+  - `run cat /readme.txt | run grep MiniOS`
+  - `run cat < /readme.txt | run grep MiniOS > /grep.txt`
+- 当前 `grep` 为教学版：
+  - ASCII 大小写无关匹配
+  - 不支持正则
+  - 不支持多文件

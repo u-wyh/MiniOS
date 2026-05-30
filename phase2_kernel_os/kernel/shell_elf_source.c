@@ -1591,13 +1591,6 @@ void _start(void) {
                     left_effective_argc = left_pipe_redirects.first_redirect_index;
                 }
 
-                // 当前教学版 pipe 左侧 file stdin 仍只支持“左侧程序无额外文件参数”的最小模式，
-                // 例如 run cat < /readme.txt | run cat 或 run cat < /readme.txt | run cat > /copy.txt；
-                // 像 run cat /a < /b | run cat 暂不支持。
-                if (left_effective_argc != 2) {
-                    user_write("stdin redirect does not support extra args yet\n");
-                    continue;
-                }
             } else {
                 left_pipe_redirects.has_stdin = 0;
                 left_pipe_redirects.stdin_path = (const char*)0;
@@ -1843,14 +1836,6 @@ void _start(void) {
 
             if (run_redirects.first_redirect_index > 0) {
                 program_argc = run_redirects.first_redirect_index - 1;
-            }
-
-            // 当前教学版 stdin 重定向只支持“程序本身无额外文件参数”的最小模式，
-            // 例如 run cat < /readme.txt 或 run cat < /readme.txt > /copy.txt；
-            // 像 run cat /a.txt < /b.txt 暂不支持。
-            if (run_redirects.has_stdin != 0 && program_argc != 1) {
-                user_write("stdin redirect does not support extra args yet\n");
-                continue;
             }
 
             program_id = shell_program_id_from_name(argv[1]);

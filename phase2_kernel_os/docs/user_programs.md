@@ -859,3 +859,25 @@ words: 14
 2. `wc` 统一通过 `sys_read(0, ...)` 从 stdin 读取
 3. 当 stdin 没有重定向时，当前会安全读到 EOF 并输出 0 统计
 4. `wc` 的结果通过 `sys_write(...)` 输出，因此既可以显示到屏幕，也可以继续重定向到 RAMFS 文件
+
+## 32. 用户态 grep 程序
+
+Task74 当前新增了一个最小用户态 `grep` 程序，用来验证 stdin / pipe / stdout redirect 下的数据过滤。
+
+当前用法：
+
+```text
+run grep MiniOS
+run grep MiniOS < /readme.txt
+run cat /readme.txt | run grep MiniOS
+run cat < /readme.txt | run grep MiniOS > /grep.txt
+```
+
+当前语义：
+
+1. `grep` 的第一个参数作为关键字
+2. `grep` 当前不读取 argv 文件路径
+3. `grep` 统一通过 `sys_read(0, ...)` 从 stdin 读取
+4. `grep` 会按行判断是否包含关键字，并输出匹配行
+5. `grep` 当前采用教学版 ASCII 大小写无关匹配
+6. `grep` 的结果通过 `sys_write(...)` 输出，因此既可以显示到屏幕，也可以继续重定向到 RAMFS 文件

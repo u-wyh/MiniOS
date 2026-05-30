@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 // 教学版用户程序参数上限：当前 shell/run/start 与内核 PCB 暂存区统一复用这一组约束。
-#define USER_PROGRAM_MAX_ARGS 8
+#define USER_PROGRAM_MAX_ARGS 10
 #define USER_PROGRAM_MAX_ARG_LEN 32
 
 // 统一的内置用户程序清单：同时给 shell 名字解析、program_id 管理和内核镜像查询复用。
@@ -27,7 +27,8 @@
     X(PROGRAM_STAT, 14, "stat", 1)                              \
     X(PROGRAM_WRITEFILE, 15, "writefile", 1)                    \
     X(PROGRAM_APPEND, 16, "append", 1)                          \
-    X(PROGRAM_WC, 17, "wc", 1)
+    X(PROGRAM_WC, 17, "wc", 1)                                  \
+    X(PROGRAM_GREP, 18, "grep", 1)
 
 // program_id：统一表达内置用户程序身份，避免在 shell / exec / process 里散落魔法数字。
 enum user_program_id {
