@@ -881,3 +881,27 @@ run cat < /readme.txt | run grep MiniOS > /grep.txt
 4. `grep` 会按行判断是否包含关键字，并输出匹配行
 5. `grep` 当前采用教学版 ASCII 大小写无关匹配
 6. `grep` 的结果通过 `sys_write(...)` 输出，因此既可以显示到屏幕，也可以继续重定向到 RAMFS 文件
+
+## 33. 用户态 head 程序
+
+Task75 当前新增了一个最小用户态 `head` 程序，用来验证 stdin / pipe / stdout redirect 下的数据截断。
+
+当前用法：
+
+```text
+run head
+run head < /readme.txt
+run head -n 3 < /readme.txt
+run cat /readme.txt | run head
+run cat < /readme.txt | run head -n 3 > /head.txt
+```
+
+当前语义：
+
+1. `head` 默认输出前 10 行
+2. `head -n N` 会输出前 N 行
+3. `head` 当前不读取 argv 文件路径，统一从 stdin 读取
+4. `head` 通过 `sys_read(0, ...)` 兼容文件 stdin 与 pipe stdin
+5. `head` 通过 `sys_write(...)` 输出，因此既可以显示到屏幕，也可以继续重定向到 RAMFS 文件
+6. `head -n 0` 会正常不输出并退出
+7. 当前不支持多个文件参数，也不支持完整 GNU `head` 参数

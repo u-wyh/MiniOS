@@ -2759,3 +2759,37 @@ TODO：
 - 暂不支持多文件输入。
 - 暂无交互式 tty stdin。
 - 暂不支持 `run grep keyword /file` 这种 argv 文件模式；当前统一通过 stdin 读取。
+
+## ✅ Task75：用户态 head 程序 / 读取前 N 行
+
+本轮目标：
+
+- 新增一个最小用户态 `head` 程序，用来验证：
+  - `stdin -> 用户态按行截断 -> stdout`
+  - `stdin <- file`
+  - `stdin <- pipe`
+  - `stdout -> RAMFS file`
+
+已完成：
+
+- 新增用户态 `head` 程序，默认输出前 `10` 行。
+- `head` 当前支持 `-n N` 参数，用于指定输出前 N 行。
+- `head` 当前统一通过 `sys_read(0, ...)` 从 stdin 读取数据。
+- `head` 当前通过 `sys_write(...)` 输出前 N 行。
+- 当前支持：
+  - `run head < /readme.txt`
+  - `run head -n 3 < /readme.txt`
+  - `run cat /readme.txt | run head`
+  - `run cat < /readme.txt | run head -n 3 > /head.txt`
+- `head` 可以验证：
+  - 文件 stdin
+  - pipe stdin
+  - stdout 重定向到 RAMFS 文件
+
+当前限制：
+
+- 当前仍是教学版 `head`。
+- 暂不支持多个文件参数。
+- 暂不支持完整 GNU `head` 参数。
+- 暂不支持 `run head /file` 这种 argv 文件模式；当前统一通过 stdin 读取。
+- 暂不支持真正 UNIX pipe、pipe fd 和 `dup2`。

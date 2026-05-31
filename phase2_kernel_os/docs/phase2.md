@@ -325,3 +325,24 @@
   - ASCII 大小写无关匹配
   - 不支持正则
   - 不支持多文件
+
+## Task75：用户态 head 程序 / 读取前 N 行
+
+- 当前新增了一个最小用户态 `head` 程序，用来验证 “stdin / pipe -> 用户程序截断 -> stdout” 这条链路已经真正可用。
+- `head` 当前默认输出前 `10` 行，并支持 `-n N` 指定输出行数：
+  - `run head < /readme.txt`
+  - `run head -n 3 < /readme.txt`
+- `head` 当前统一通过 `sys_read(0, ...)` 从 stdin 读取，因此可以复用：
+  - 文件 stdin 重定向
+  - pipe stdin
+- `head` 当前通过 `sys_write(...)` 输出前 N 行，因此可以继续走：
+  - 屏幕输出
+  - `stdout` 重定向写文件
+- 当前最小验证链路包括：
+  - `run cat /readme.txt | run head`
+  - `run cat /readme.txt | run head -n 3`
+  - `run cat < /readme.txt | run head -n 3 > /head.txt`
+- 当前 `head` 为教学版：
+  - 不支持多个文件参数
+  - 不支持 GNU `head` 的复杂参数
+  - 不支持真实 UNIX pipe / pipe fd / `dup2`
