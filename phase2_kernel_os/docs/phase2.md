@@ -346,3 +346,29 @@
   - 不支持多个文件参数
   - 不支持 GNU `head` 的复杂参数
   - 不支持真实 UNIX pipe / pipe fd / `dup2`
+
+## Task76：用户态 tail 程序 / 简化版尾部输出
+
+- 当前新增了一个最小用户态 `tail` 程序，用来验证 “stdin / pipe -> 用户态缓存尾部 -> stdout” 这条链路。
+- `tail` 当前默认输出最后 `10` 行，并支持 `-n N` 指定输出行数：
+  - `run tail < /readme.txt`
+  - `run tail -n 3 < /readme.txt`
+- `tail` 当前统一通过 `sys_read(0, ...)` 从 stdin 读取，因此可以复用：
+  - 文件 stdin 重定向
+  - pipe stdin
+- `tail` 当前在用户态内部维护一个固定窗口，读取完成后再从后往前定位最后 N 行。
+- `tail` 当前通过 `sys_write(...)` 输出结果，因此可以继续走：
+  - 屏幕输出
+  - `stdout` 重定向写文件
+- 当前 Phase2 用户态文本工具链已经包括：
+  - `cat / wc / grep / head / tail`
+- 当前最小验证链路包括：
+  - `run cat /readme.txt | run tail`
+  - `run cat /readme.txt | run tail -n 3`
+  - `run cat < /readme.txt | run tail -n 3 > /tail.txt`
+- 当前 `tail` 为教学版：
+  - 不支持多个文件参数
+  - 不支持 GNU `tail` 的复杂参数
+  - 不支持 `-f`
+  - 使用固定缓冲区
+  - 不支持真实 UNIX pipe / pipe fd / `dup2`

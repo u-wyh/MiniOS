@@ -34,6 +34,12 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `PROGRAM_CAT = 12`
 - `PROGRAM_LS = 13`
 - `PROGRAM_STAT = 14`
+- `PROGRAM_WRITEFILE = 15`
+- `PROGRAM_APPEND = 16`
+- `PROGRAM_WC = 17`
+- `PROGRAM_GREP = 18`
+- `PROGRAM_HEAD = 19`
+- `PROGRAM_TAIL = 20`
 
 其中：
 
@@ -56,6 +62,12 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `cat -> PROGRAM_CAT`
 - `ls -> PROGRAM_LS`
 - `stat -> PROGRAM_STAT`
+- `writefile -> PROGRAM_WRITEFILE`
+- `append -> PROGRAM_APPEND`
+- `wc -> PROGRAM_WC`
+- `grep -> PROGRAM_GREP`
+- `head -> PROGRAM_HEAD`
+- `tail -> PROGRAM_TAIL`
 
 其中 shell 默认直接暴露给用户的程序主要是：
 
@@ -64,6 +76,12 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `ls`
 - `cat`
 - `stat`
+- `writefile`
+- `append`
+- `wc`
+- `grep`
+- `head`
+- `tail`
 - `loop`
 - `loop_exit`
 - `sleep_test`
@@ -905,3 +923,34 @@ run cat < /readme.txt | run head -n 3 > /head.txt
 5. `head` 通过 `sys_write(...)` 输出，因此既可以显示到屏幕，也可以继续重定向到 RAMFS 文件
 6. `head -n 0` 会正常不输出并退出
 7. 当前不支持多个文件参数，也不支持完整 GNU `head` 参数
+
+## 34. 用户态 tail 程序
+
+Task76 当前新增了一个最小用户态 `tail` 程序，用来验证 stdin / pipe / stdout redirect 下的“尾部截断”。
+
+当前用法：
+
+```text
+run tail
+run tail < /readme.txt
+run tail -n 3 < /readme.txt
+run cat /readme.txt | run tail
+run cat < /readme.txt | run tail -n 3 > /tail.txt
+```
+
+当前语义：
+
+1. `tail` 默认输出最后 10 行
+2. `tail -n N` 会输出最后 N 行
+3. `tail -n 0` 会正常不输出并退出
+4. `tail` 当前不读取 argv 文件路径，统一从 stdin 读取
+5. `tail` 通过 `sys_read(0, ...)` 兼容文件 stdin 与 pipe stdin
+6. `tail` 在用户态内部使用固定缓冲区缓存最近输入，再从后往前找最后 N 行
+7. `tail` 通过 `sys_write(...)` 输出，因此既可以显示到屏幕，也可以继续重定向到 RAMFS 文件
+8. 当前不支持多个文件参数，不支持完整 GNU `tail` 参数，也不支持 `-f`
+9. 当前使用固定缓冲区，因此只保证窗口范围内的最后 N 行
+
+与 `head` 的区别：
+
+1. `head` 可以边读边截断前 N 行
+2. `tail` 需要先读完输入，再决定最后 N 行从哪里开始输出

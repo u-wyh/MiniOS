@@ -2793,3 +2793,46 @@ TODO：
 - 暂不支持完整 GNU `head` 参数。
 - 暂不支持 `run head /file` 这种 argv 文件模式；当前统一通过 stdin 读取。
 - 暂不支持真正 UNIX pipe、pipe fd 和 `dup2`。
+
+## ✅ Task76：用户态 tail 程序 / 简化版尾部输出
+
+本轮目标：
+
+- 新增一个最小用户态 `tail` 程序，用来验证：
+  - `stdin -> 用户态缓存 -> 尾部行截断 -> stdout`
+  - `stdin <- file`
+  - `stdin <- pipe`
+  - `stdout -> RAMFS file`
+
+已完成：
+
+- 新增用户态 `tail` 程序，默认输出最后 `10` 行。
+- `tail` 当前支持 `-n N` 参数，用于指定输出最后 N 行。
+- `tail` 当前统一通过 `sys_read(0, ...)` 从 stdin 读取数据。
+- `tail` 当前会先缓存固定窗口，再从后往前定位最后 N 行的起始位置。
+- 当前支持：
+  - `run tail < /readme.txt`
+  - `run tail -n 3 < /readme.txt`
+  - `run cat /readme.txt | run tail`
+  - `run cat < /readme.txt | run tail -n 3 > /tail.txt`
+- 当前用户态文本工具链已经包括：
+  - `cat / wc / grep / head / tail`
+- `tail` 可以继续验证：
+  - 文件 stdin
+  - pipe stdin
+  - stdout 重定向到 RAMFS 文件
+
+当前限制：
+
+- 当前仍是教学版 `tail`。
+- 暂不支持多个文件参数。
+- 暂不支持完整 GNU `tail` 参数。
+- 暂不支持 `-f`。
+- 暂不支持 `run tail /file` 这种 argv 文件模式；当前统一通过 stdin 读取。
+- 使用固定缓冲区，只保证窗口范围内的最后 N 行。
+- 暂不支持真正 UNIX pipe、pipe fd 和 `dup2`。
+
+TODO：
+
+- 可继续推进 `sort` 等更复杂的用户态文本工具。
+- 可进一步整理 pipe buffer 容量限制与错误提示。
