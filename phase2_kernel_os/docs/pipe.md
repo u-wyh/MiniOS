@@ -20,7 +20,22 @@
 4. shell 再运行右侧程序
 5. 右侧程序从 pipe buffer 读取直到 EOF
 
-## 2. pipe buffer 结构
+## 2. pipe fd 与 pipe buffer
+
+Task79 之后，当前教学版 pipe 已经开始进入 fd 体系。
+
+最小语义是：
+
+1. `pipe read fd`
+   只能读，不能写。
+2. `pipe write fd`
+   只能写，不能读。
+3. 两者都不直接持有独立 pipe object。
+4. 当前仍然统一绑定到同一个全局教学版 pipe buffer。
+
+也就是说，这一轮还不是完整 UNIX pipe，只是把“左右端”先抽象进 fd 类型。
+
+## 3. pipe buffer 结构
 
 当前 pipe buffer 位于进程子系统里，核心状态包括：
 
@@ -35,7 +50,7 @@
 5. `overflowed`
    表示本次 pipe 是否已经发生过“写满”事件，用来保证错误提示只输出一次。
 
-## 3. 容量限制
+## 4. 容量限制
 
 当前 pipe buffer 的固定容量是：
 
@@ -50,16 +65,22 @@ PROCESS_PIPE_BUFFER_SIZE = 512
 3. 阻塞等待空间
 4. 背压机制
 
-## 4. 写入流程
+## 5. 写入流程
 
 当左侧程序的 `stdout` 被配置为写 pipe 时：
 
 1. `SYS_WRITE` 进入内核
 2. syscall 分发识别到当前进程启用了 `stdout -> pipe`
-3. 文本输出进入 `process_write_stdout_pipe(...)`
+3. 当前进程会通过自己绑定的 `pipe write fd` 进入 `process_write_pipe_fd(...)`
 4. 写入前先计算剩余空间
 5. 只把还能放下的字节写进 `data`
 6. 更新 `size`
+
+如果用户态或内核路径直接调用 `SYS_FD_WRITE(fd, ...)`：
+
+1. 普通文件 fd 仍走文件写入逻辑
+2. `pipe write fd` 会写入同一个教学版 pipe buffer
+3. `pipe read fd` 上调用写会返回错误
 
 当前写满时的行为：
 
@@ -76,15 +97,22 @@ pipe: buffer full
 
 这是一种教学版“截断 + 单次提示”策略，不追求 POSIX 语义。
 
-## 5. 读取流程
+## 6. 读取流程
 
 当右侧程序的 `stdin` 被配置为从 pipe 读取时：
 
 1. 用户态执行 `SYS_READ(fd=0, ...)`
-2. 内核检测到该进程启用了 `stdin <- pipe`
-3. 从 `data + read_offset` 开始拷贝
-4. 最多读取剩余的 `size - read_offset` 字节
-5. 读取成功后推进 `read_offset`
+2. 当前进程会把 `fd=0` 映射到自己绑定的 `pipe read fd`
+3. 内核进入 `process_read_pipe_fd(...)`
+4. 从 `data + read_offset` 开始拷贝
+5. 最多读取剩余的 `size - read_offset` 字节
+6. 读取成功后推进 `read_offset`
+
+如果用户态或内核路径直接调用 `SYS_READ(fd, ...)`：
+
+1. 普通文件 fd 仍走文件读取逻辑
+2. `pipe read fd` 从 pipe buffer 读取
+3. `pipe write fd` 上调用读会返回错误
 
 EOF 语义：
 
@@ -94,7 +122,7 @@ EOF 语义：
 
 因此当前 pipe 的读完语义就是最小 EOF 语义。
 
-## 6. 初始化与清理
+## 7. 初始化与清理
 
 每次执行 `run A | run B` 时：
 
@@ -110,7 +138,7 @@ EOF 语义：
 2. 避免右侧读到上一次命令残留
 3. 让每条 pipe 命令拥有独立的最小生命周期
 
-## 7. 与 redirect 的组合
+## 8. 与 redirect 的组合
 
 当前支持的典型组合包括：
 
@@ -126,16 +154,18 @@ EOF 语义：
 3. 右侧 `stdout` 若继续重定向，则写 RAMFS 文件
 4. 左侧若还有 `stdin redirect`，会先从输入文件读取，再写入 pipe
 
-## 8. 当前不支持的真实 UNIX pipe 能力
+## 9. 当前不支持的真实 UNIX pipe 能力
 
 当前教学版 pipe 还不支持：
 
-1. `pipe()` 创建读写 fd
+1. 用户态 `pipe()` syscall
 2. `dup2()`
-3. 两端并发执行
-4. 阻塞读写
-5. 多级管道
-6. 动态扩容
-7. 调度器驱动的生产者/消费者并发协作
+3. fork 后共享 pipe fd
+4. 两端并发执行
+5. 阻塞读写
+6. 多级管道
+7. 动态扩容
+8. 多个 pipe object
+9. 调度器驱动的生产者/消费者并发协作
 
 所以它更像“内核里的一个临时顺序缓冲区”，而不是完整 UNIX pipe 子系统。

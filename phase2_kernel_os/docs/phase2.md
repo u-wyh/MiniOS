@@ -427,3 +427,35 @@
   - 并发执行
   - 多级管道
   - 动态扩容
+
+## Task79：真正 pipe fd 雏形
+
+- 当前任务是从“教学版 pipe buffer 特判路径”走向“最小 pipe fd 抽象”的过渡步骤。
+- 当前 Phase2 数据流链路可以概括为：
+  - 文件系统
+  - `-> fd`
+  - `-> stdin/stdout`
+  - `-> redirect`
+  - `-> pipe fd`
+  - `-> 用户态文本工具`
+- 本轮之后，fd 表已经能区分：
+  - 普通文件 fd
+  - `pipe read fd`
+  - `pipe write fd`
+- 当前仍然只保留一个教学版全局 pipe buffer，但 shell 已经会为左右程序绑定最小 pipe fd 端点。
+- 当前分发关系是：
+  - `SYS_READ(fd, ...)` 读普通文件 fd 或 pipe read fd
+  - `SYS_FD_WRITE(fd, ...)` 写普通文件 fd 或 pipe write fd
+  - `SYS_WRITE(...)` 在 stdout 被 pipe 接管时，会通过当前进程绑定的 pipe write fd 落到 pipe buffer
+- 当前 pipe 仍然是顺序执行，不是并发 UNIX pipe：
+  - 左侧先写
+  - 右侧后读
+  - 共享同一个教学版 pipe buffer
+- 当前仍不支持：
+  - 用户态 `pipe()`
+  - `dup2`
+  - fork 后共享 pipe fd
+  - 阻塞读写
+  - 并发 pipe
+  - 多级管道
+  - 多个 pipe object

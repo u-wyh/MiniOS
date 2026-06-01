@@ -176,6 +176,8 @@ static void process_clear_slot(struct process* proc) {
     proc->stdin_redirect_enabled = 0;
     proc->stdin_redirect_path[0] = '\0';
     proc->stdin_redirect_offset = 0;
+    proc->stdin_pipe_fd = -1;
+    proc->stdout_pipe_fd = -1;
     proc->stdout_redirect_to_pipe = 0;
     proc->stdin_redirect_from_pipe = 0;
     proc->launch_ready = 0;
@@ -218,10 +220,53 @@ static void process_clear_fd_table(struct process* proc) {
 
     for (i = 0; i < PROCESS_MAX_OPEN_FILES; i++) {
         proc->fd_table[i].used = 0;
+        proc->fd_table[i].type = PROCESS_FD_TYPE_NONE;
         proc->fd_table[i].path[0] = '\0';
         proc->fd_table[i].can_write = 0;
         proc->fd_table[i].offset = 0;
     }
+}
+
+// 在当前 PCB 的 fd 表里寻找一个空闲槽位；找到返回槽位下标，失败返回 -1。
+static int process_alloc_fd_slot(struct process* proc) {
+    int i;
+
+    if (proc == (struct process*)0) {
+        return -1;
+    }
+
+    for (i = 0; i < PROCESS_MAX_OPEN_FILES; i++) {
+        if (proc->fd_table[i].used == 0) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+// 为当前教学版 pipe 分配一个 fd 端点；当前只支持 read end / write end 两种最小类型。
+static int process_alloc_pipe_fd(struct process* proc, int fd_type) {
+    int slot;
+
+    if (proc == (struct process*)0) {
+        return -1;
+    }
+
+    if (fd_type != PROCESS_FD_TYPE_PIPE_READ && fd_type != PROCESS_FD_TYPE_PIPE_WRITE) {
+        return -2;
+    }
+
+    slot = process_alloc_fd_slot(proc);
+    if (slot < 0) {
+        return -3;
+    }
+
+    proc->fd_table[slot].used = 1;
+    proc->fd_table[slot].type = fd_type;
+    proc->fd_table[slot].path[0] = '\0';
+    proc->fd_table[slot].can_write = (fd_type == PROCESS_FD_TYPE_PIPE_WRITE) ? 1 : 0;
+    proc->fd_table[slot].offset = 0;
+    return PROCESS_FD_BASE + slot;
 }
 
 // 清空 PCB 中保存的教学版 argv，避免旧程序参数泄漏到新程序上下文

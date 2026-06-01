@@ -2919,3 +2919,50 @@ TODO：
 - 可继续进入 Task79：真正 pipe fd 雏形
 - 可继续整理 shell parser 和错误提示
 - 可补一组 Phase2 数据流演示脚本
+
+## ✅ Task79：真正 pipe fd 雏形
+
+本轮目标：
+
+- 不新增用户态程序，而是让教学版 pipe 开始进入 fd 体系。
+- 引入最小的 `pipe read fd / pipe write fd` 概念。
+- 让 `sys_read / sys_write` 开始能按 fd 类型分发到普通文件或 pipe。
+
+已完成：
+
+- fd 表现在可以区分：
+  - 普通文件 fd
+  - `pipe read fd`
+  - `pipe write fd`
+- 当前仍然只保留一个教学版全局 pipe buffer，但左右端已经能通过 fd 类型与它建立关系。
+- shell 执行 `run A | run B` 时：
+  - 左侧程序内部绑定一个 `pipe write fd`
+  - 右侧程序内部绑定一个 `pipe read fd`
+- `SYS_READ(fd, ...)` 当前已经能识别 `pipe read fd`，并从 pipe buffer 读取。
+- `SYS_FD_WRITE(fd, ...)` 与 `SYS_WRITE(...)` 当前已经能识别 `pipe write fd`，并把内容写入 pipe buffer。
+- 对 `pipe write fd` 调用读会返回错误；对 `pipe read fd` 调用写也会返回错误。
+- pipe 写满仍沿用 Task78：
+  - 固定容量 `512` 字节
+  - 尽量写满剩余空间
+  - 只提示一次 `pipe: buffer full`
+  - 后续返回 `0`
+- 当前数据流链路已经更接近：
+  - 文件系统 -> fd -> stdin/stdout -> redirect -> pipe fd -> `cat / wc / grep / head / tail / sort`
+
+当前限制：
+
+- 不支持用户态 `pipe()`
+- 不支持 `dup2`
+- 不支持 fork 后共享 pipe fd
+- 不支持阻塞读写
+- 不支持并发 pipe
+- 不支持多级管道
+- 不支持多个 pipe object
+- 当前仍然保留少量兼容字段，后续还可继续向统一 fd 抽象收口
+
+TODO：
+
+- 可继续做 Task80：fd 抽象清理
+- 可继续做 `dup2` 雏形
+- 可继续做 pipe syscall 雏形
+- 可继续整理 shell 数据流演示文档

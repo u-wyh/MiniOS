@@ -60,6 +60,8 @@ static int process_set_stdout_redirect(struct process* proc, const char* path, i
     proc->stdout_redirect_enabled = 1;
     proc->stdout_redirect_append = (is_append != 0) ? 1 : 0;
     proc->stdout_redirect_started = 0;
+    proc->stdout_pipe_fd = -1;
+    proc->stdout_redirect_to_pipe = 0;
     return 0;
 }
 
@@ -83,6 +85,8 @@ static int process_set_stdin_redirect(struct process* proc, const char* path) {
 
     proc->stdin_redirect_enabled = 1;
     proc->stdin_redirect_offset = 0;
+    proc->stdin_pipe_fd = -1;
+    proc->stdin_redirect_from_pipe = 0;
     return 0;
 }
 
@@ -111,11 +115,18 @@ int process_set_stdin_redirect_by_pid(int pid, const char* path) {
 // 为指定 pid 的进程启用“stdout -> pipe buffer”模式：当前仅供 shell 顺序执行单管道左侧时使用。
 int process_set_stdout_pipe_by_pid(int pid) {
     struct process* target = process_find_by_pid(pid);
+    int pipe_fd;
 
     if (target == (struct process*)0 || target->state == PROCESS_UNUSED) {
         return -1;
     }
 
+    pipe_fd = process_alloc_pipe_fd(target, PROCESS_FD_TYPE_PIPE_WRITE);
+    if (pipe_fd < 0) {
+        return -2;
+    }
+
+    target->stdout_pipe_fd = pipe_fd;
     target->stdout_redirect_to_pipe = 1;
     process_pipe_buffer.active = 1;
     target->stdout_redirect_enabled = 0;
@@ -128,11 +139,18 @@ int process_set_stdout_pipe_by_pid(int pid) {
 // 为指定 pid 的进程启用“stdin <- pipe buffer”模式：当前仅供 shell 顺序执行单管道右侧时使用。
 int process_set_stdin_pipe_by_pid(int pid) {
     struct process* target = process_find_by_pid(pid);
+    int pipe_fd;
 
     if (target == (struct process*)0 || target->state == PROCESS_UNUSED) {
         return -1;
     }
 
+    pipe_fd = process_alloc_pipe_fd(target, PROCESS_FD_TYPE_PIPE_READ);
+    if (pipe_fd < 0) {
+        return -2;
+    }
+
+    target->stdin_pipe_fd = pipe_fd;
     target->stdin_redirect_from_pipe = 1;
     process_pipe_buffer.active = 1;
     target->stdin_redirect_enabled = 0;
@@ -179,6 +197,10 @@ int process_current_has_stdout_redirect(void) {
 // 判断当前进程是否启用了 stdout -> pipe：供 SYS_WRITE 把文本优先写入教学版 pipe buffer。
 int process_current_has_stdout_pipe(void) {
     if (current_process == (struct process*)0 || current_process->state != PROCESS_RUNNING) {
+        return 0;
+    }
+
+    if (current_process->stdout_pipe_fd < PROCESS_FD_BASE) {
         return 0;
     }
 
@@ -235,12 +257,10 @@ int process_write_stdout_redirect(const char* text) {
 // 把当前进程的一次 SYS_WRITE 文本输出追加到教学版 pipe buffer：
 // 当前采用“尽量写入剩余空间 + 满时只提示一次”的教学版策略，避免越界和 panic。
 int process_write_stdout_pipe(const char* text) {
+    struct process* proc = current_process;
     int text_len;
-    uint32_t remaining;
-    uint32_t to_copy;
-    uint32_t i;
 
-    if (current_process == (struct process*)0 || current_process->stdout_redirect_to_pipe == 0) {
+    if (proc == (struct process*)0 || proc->stdout_redirect_to_pipe == 0) {
         return -1;
     }
 
@@ -253,33 +273,11 @@ int process_write_stdout_pipe(const char* text) {
         return 0;
     }
 
-    process_pipe_buffer.active = 1;
-    remaining = PROCESS_PIPE_BUFFER_SIZE - process_pipe_buffer.size;
-    if (remaining == 0) {
-        if (process_pipe_buffer.overflowed == 0) {
-            print_string("pipe: buffer full\n");
-            process_pipe_buffer.overflowed = 1;
-        }
-        return 0;
+    if (proc->stdout_pipe_fd < PROCESS_FD_BASE) {
+        return -3;
     }
 
-    to_copy = (uint32_t)text_len;
-    if (to_copy > remaining) {
-        to_copy = remaining;
-        if (process_pipe_buffer.overflowed == 0) {
-            print_string("pipe: buffer full\n");
-            process_pipe_buffer.overflowed = 1;
-        }
-    }
-
-    for (i = 0; i < to_copy; i++) {
-        process_pipe_buffer.data[process_pipe_buffer.size + i] = text[i];
-    }
-    process_pipe_buffer.size += to_copy;
-    if (process_pipe_buffer.size > 0) {
-        process_pipe_buffer.used = 1;
-    }
-    return (int)to_copy;
+    return process_write_pipe_fd(proc, proc->stdout_pipe_fd, text, text_len);
 }
 
 // 清空教学版单管道缓冲区：shell 在执行 run A | run B 前后都应调用，避免残留旧数据。

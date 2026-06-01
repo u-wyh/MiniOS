@@ -23,6 +23,8 @@ int process_fork(struct interrupt_frame* frame) {
     child->stdin_redirect_enabled = 0;
     child->stdin_redirect_path[0] = '\0';
     child->stdin_redirect_offset = 0;
+    child->stdin_pipe_fd = -1;
+    child->stdout_pipe_fd = -1;
     child->stdout_redirect_to_pipe = 0;
     child->stdin_redirect_from_pipe = 0;
     child->launch_ready = 0;

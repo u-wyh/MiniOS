@@ -254,7 +254,7 @@ void syscall_handle(struct interrupt_frame* frame) {
     }
 
     // SYS_READ(fd, buf, size)：ebx=fd，ecx=用户缓冲区，edx=读取长度；成功返回字节数，EOF 返回 0。
-    // 若 fd=0 且当前进程启用了 stdin 重定向，则该读取会改为从目标文件读取。
+    // Task79 之后：fd=0 仍是教学版 stdin 入口；普通文件 fd 走文件读取，pipe read fd 走 pipe buffer 读取。
     if (frame->eax == SYS_READ) {
         frame->eax = (unsigned int)process_read_file((int)frame->ebx, (char*)frame->ecx, (int)frame->edx);
         return;
@@ -312,7 +312,7 @@ void syscall_handle(struct interrupt_frame* frame) {
     }
 
     // SYS_FD_WRITE(fd, buf, size)：ebx=fd，ecx=用户缓冲区，edx=写入长度；
-    // 成功返回实际写入字节数，失败返回负值。当前只允许写 RAMFS 文件，不改变 stdout SYS_WRITE 语义。
+    // 成功返回实际写入字节数，失败返回负值。Task79 之后普通文件 fd 继续写文件，pipe write fd 则写 pipe buffer。
     if (frame->eax == SYS_FD_WRITE) {
         frame->eax = (unsigned int)process_write_file((int)frame->ebx, (const char*)frame->ecx, (int)frame->edx);
         return;

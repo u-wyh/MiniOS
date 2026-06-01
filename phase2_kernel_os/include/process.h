@@ -24,6 +24,11 @@
 #define PROCESS_MAX_OPEN_FILES 8
 // 教学版文件描述符起始编号。
 #define PROCESS_FD_BASE 3
+// 教学版 fd 类型：当前最小区分普通文件、pipe read end 和 pipe write end。
+#define PROCESS_FD_TYPE_NONE 0
+#define PROCESS_FD_TYPE_FILE 1
+#define PROCESS_FD_TYPE_PIPE_READ 2
+#define PROCESS_FD_TYPE_PIPE_WRITE 3
 // init 的父进程约定：0 表示没有普通父进程，是 MiniOS 进程树的根。
 #define PROCESS_ROOT_PARENT_PID 0
 // 教学版 kill 退出码：只表示“被 kill 终止”，不是 Unix/Linux 的信号编号。
@@ -47,9 +52,11 @@ struct process_info {
     char name[PROCESS_NAME_MAX_LEN];
 };
 
-// 教学版文件描述符表项：记录 fd 是否占用、当前打开的是哪个路径、是否允许写入，以及当前偏移。
+// 教学版文件描述符表项：记录 fd 是否占用、当前类型、当前打开的是哪个路径、是否允许写入，以及当前偏移。
+// 对 pipe fd 来说，path 当前为空字符串；真正的数据仍绑定到全局教学版 pipe buffer。
 struct process_fd_entry {
     int used;
+    int type;
     char path[MAX_FS_PATH_LEN];
     // can_write 为 1 表示该 fd 允许写入；当前只给 RAMFS 写打开路径设置，内置只读文件始终为 0。
     int can_write;
@@ -102,7 +109,7 @@ struct process {
     char user_argv[PROCESS_MAX_USER_ARGS][PROCESS_MAX_ARG_LEN];
     // 记录本次退出是否来自用户态 shell 主动执行 exit 命令，供 init 决定是否自动重启 shell
     int requested_exit;
-    // 教学版每进程 fd 表：当前只用于只读文本文件，不处理 pipe、dup 和写入。
+    // 教学版每进程 fd 表：当前最小支持普通文件 fd 与教学版 pipe fd，不实现 dup / dup2 / 共享引用计数。
     struct process_fd_entry fd_table[PROCESS_MAX_OPEN_FILES];
     // stdout_redirect_enabled 为 1 时，当前进程后续 SYS_WRITE 将写入 RAMFS 文件而不是前台屏幕。
     int stdout_redirect_enabled;
@@ -118,6 +125,9 @@ struct process {
     char stdin_redirect_path[MAX_FS_PATH_LEN];
     // stdin_redirect_offset 记录当前从 stdin 文件已经读取到的位置，EOF 后 SYS_READ(fd=0) 返回 0。
     uint32_t stdin_redirect_offset;
+    // stdin_pipe_fd / stdout_pipe_fd 表示当前进程绑定到教学版 pipe 的 fd 端点；-1 表示未绑定。
+    int stdin_pipe_fd;
+    int stdout_pipe_fd;
     // stdout_redirect_to_pipe 为 1 时，当前进程的 SYS_WRITE 会写入教学版 pipe buffer，而不是屏幕或 RAMFS 文件。
     int stdout_redirect_to_pipe;
     // stdin_redirect_from_pipe 为 1 时，当前进程的 SYS_READ(fd=0) 会从教学版 pipe buffer 读取。
