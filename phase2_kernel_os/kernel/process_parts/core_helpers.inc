@@ -187,7 +187,9 @@ static void process_clear_slot(struct process* proc) {
 
 // 清空教学版单管道缓冲区：每次执行 run A | run B 前后都调用，避免残留上一次输出内容。
 static void process_pipe_buffer_clear(void) {
+    process_pipe_buffer.active = 0;
     process_pipe_buffer.used = 0;
+    process_pipe_buffer.overflowed = 0;
     process_pipe_buffer.size = 0;
     process_pipe_buffer.read_offset = 0;
 }

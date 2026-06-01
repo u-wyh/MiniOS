@@ -1,0 +1,141 @@
+# MiniOS Phase2 Pipe 文档
+
+## 1. 当前定位
+
+当前 MiniOS Phase2 的 pipe 不是完整 UNIX pipe。
+
+它是一个教学版顺序 pipe，目标是验证：
+
+```text
+左侧程序 stdout
+  -> 内核 pipe buffer
+    -> 右侧程序 stdin
+```
+
+也就是说，当前并不是两个进程并发读写同一个 pipe，而是：
+
+1. shell 先运行左侧程序
+2. 左侧程序把输出完整写到 pipe buffer
+3. 左侧程序结束
+4. shell 再运行右侧程序
+5. 右侧程序从 pipe buffer 读取直到 EOF
+
+## 2. pipe buffer 结构
+
+当前 pipe buffer 位于进程子系统里，核心状态包括：
+
+1. `data`
+   保存当前 pipe 的字节内容。
+2. `size`
+   表示当前 buffer 中已有多少有效字节。
+3. `read_offset`
+   表示右侧程序已经读取到哪个位置。
+4. `active`
+   表示当前是否正处在一条教学版 pipe 命令的生命周期内。
+5. `overflowed`
+   表示本次 pipe 是否已经发生过“写满”事件，用来保证错误提示只输出一次。
+
+## 3. 容量限制
+
+当前 pipe buffer 的固定容量是：
+
+```text
+PROCESS_PIPE_BUFFER_SIZE = 512
+```
+
+当前不支持：
+
+1. 动态扩容
+2. 环形缓冲区
+3. 阻塞等待空间
+4. 背压机制
+
+## 4. 写入流程
+
+当左侧程序的 `stdout` 被配置为写 pipe 时：
+
+1. `SYS_WRITE` 进入内核
+2. syscall 分发识别到当前进程启用了 `stdout -> pipe`
+3. 文本输出进入 `process_write_stdout_pipe(...)`
+4. 写入前先计算剩余空间
+5. 只把还能放下的字节写进 `data`
+6. 更新 `size`
+
+当前写满时的行为：
+
+1. 不允许越界写
+2. 尽量把剩余空间写满
+3. 只输出一次：
+
+```text
+pipe: buffer full
+```
+
+4. 后续继续写时返回 `0`
+5. 不 panic
+
+这是一种教学版“截断 + 单次提示”策略，不追求 POSIX 语义。
+
+## 5. 读取流程
+
+当右侧程序的 `stdin` 被配置为从 pipe 读取时：
+
+1. 用户态执行 `SYS_READ(fd=0, ...)`
+2. 内核检测到该进程启用了 `stdin <- pipe`
+3. 从 `data + read_offset` 开始拷贝
+4. 最多读取剩余的 `size - read_offset` 字节
+5. 读取成功后推进 `read_offset`
+
+EOF 语义：
+
+1. `read_offset >= size` 时返回 `0`
+2. 空 pipe 返回 `0`
+3. 未激活 pipe 的路径下也不会 panic
+
+因此当前 pipe 的读完语义就是最小 EOF 语义。
+
+## 6. 初始化与清理
+
+每次执行 `run A | run B` 时：
+
+1. shell 在执行前调用 `pipe reset`
+2. 清空 `active / size / read_offset / overflowed / data 语义状态`
+3. 运行左侧程序并写入 pipe
+4. 运行右侧程序并读取 pipe
+5. 执行结束后再次 `pipe reset`
+
+这样做的目的是：
+
+1. 避免连续 pipe 命令复用旧数据
+2. 避免右侧读到上一次命令残留
+3. 让每条 pipe 命令拥有独立的最小生命周期
+
+## 7. 与 redirect 的组合
+
+当前支持的典型组合包括：
+
+1. `run A | run B`
+2. `run A | run B > output`
+3. `run A < input | run B`
+4. `run A < input | run B > output`
+
+当前约束下的分工是：
+
+1. 左侧 `stdout` 若指向 pipe，则不再落到屏幕
+2. 右侧 `stdin` 若来自 pipe，则从 pipe buffer 读
+3. 右侧 `stdout` 若继续重定向，则写 RAMFS 文件
+4. 左侧若还有 `stdin redirect`，会先从输入文件读取，再写入 pipe
+
+## 8. 当前不支持的真实 UNIX pipe 能力
+
+当前教学版 pipe 还不支持：
+
+1. `pipe()` 创建读写 fd
+2. `dup2()`
+3. 两端并发执行
+4. 阻塞读写
+5. 多级管道
+6. 动态扩容
+7. 调度器驱动的生产者/消费者并发协作
+
+所以它更像“内核里的一个临时顺序缓冲区”，而不是完整 UNIX pipe 子系统。

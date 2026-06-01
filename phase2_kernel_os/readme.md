@@ -2878,3 +2878,44 @@ TODO：
 - 可继续整理 pipe buffer 的容量限制与错误处理。
 - 可继续推进真正的 pipe fd / `dup2` 雏形。
 - 可补充一组 Phase2 数据流演示脚本与讲解文档。
+
+## ✅ Task78：pipe buffer 容量限制与错误处理整理
+
+本轮目标：
+
+- 不新增用户态程序，只整理教学版单管道 `pipe buffer` 的边界行为。
+- 明确当前 pipe 是“左侧先写完，右侧再读取”的顺序模型。
+- 明确固定容量、满写行为、空读 / EOF 语义，以及每次命令前后的初始化与清理。
+
+已完成：
+
+- 补清楚教学版 `pipe buffer` 的状态语义：`active / size / read_offset / overflowed`。
+- 明确当前固定容量为 `512` 字节。
+- 每次执行 `run A | run B` 前后仍会显式清空 pipe 状态，避免残留旧数据。
+- 左侧程序写 pipe 时会先检查剩余空间，不再允许越界写入。
+- 当 pipe 写满时，当前策略是：
+  - 尽量把剩余空间写满
+  - 只输出一次 `pipe: buffer full`
+  - 后续写入返回 `0`，不 panic
+- 右侧程序从 pipe 读取时：
+  - `read_offset >= size` 返回 `0`
+  - 空 pipe 或未激活 pipe 也返回 `0`
+  - 统一表现为最小 EOF 语义
+- 当前教学版数据流链路仍然是：
+  - 文件系统 -> stdin/stdout -> redirect -> pipe -> `cat / wc / grep / head / tail / sort`
+
+当前限制：
+
+- 不支持真正 UNIX pipe
+- 不支持 pipe fd
+- 不支持 `dup2`
+- 不支持阻塞读写
+- 不支持并发 pipe
+- 不支持多级管道
+- 不支持动态扩容 pipe buffer
+
+TODO：
+
+- 可继续进入 Task79：真正 pipe fd 雏形
+- 可继续整理 shell parser 和错误提示
+- 可补一组 Phase2 数据流演示脚本

@@ -117,6 +117,7 @@ int process_set_stdout_pipe_by_pid(int pid) {
     }
 
     target->stdout_redirect_to_pipe = 1;
+    process_pipe_buffer.active = 1;
     target->stdout_redirect_enabled = 0;
     target->stdout_redirect_append = 0;
     target->stdout_redirect_started = 0;
@@ -133,6 +134,7 @@ int process_set_stdin_pipe_by_pid(int pid) {
     }
 
     target->stdin_redirect_from_pipe = 1;
+    process_pipe_buffer.active = 1;
     target->stdin_redirect_enabled = 0;
     target->stdin_redirect_path[0] = '\0';
     target->stdin_redirect_offset = 0;
@@ -230,9 +232,12 @@ int process_write_stdout_redirect(const char* text) {
     return write_result;
 }
 
-// 把当前进程的一次 SYS_WRITE 文本输出追加到教学版 pipe buffer：当前缓冲区满时直接失败，不做截断。
+// 把当前进程的一次 SYS_WRITE 文本输出追加到教学版 pipe buffer：
+// 当前采用“尽量写入剩余空间 + 满时只提示一次”的教学版策略，避免越界和 panic。
 int process_write_stdout_pipe(const char* text) {
     int text_len;
+    uint32_t remaining;
+    uint32_t to_copy;
     uint32_t i;
 
     if (current_process == (struct process*)0 || current_process->stdout_redirect_to_pipe == 0) {
@@ -248,16 +253,33 @@ int process_write_stdout_pipe(const char* text) {
         return 0;
     }
 
-    if (process_pipe_buffer.size + (uint32_t)text_len > PROCESS_PIPE_BUFFER_SIZE) {
-        return -3;
+    process_pipe_buffer.active = 1;
+    remaining = PROCESS_PIPE_BUFFER_SIZE - process_pipe_buffer.size;
+    if (remaining == 0) {
+        if (process_pipe_buffer.overflowed == 0) {
+            print_string("pipe: buffer full\n");
+            process_pipe_buffer.overflowed = 1;
+        }
+        return 0;
     }
 
-    for (i = 0; i < (uint32_t)text_len; i++) {
+    to_copy = (uint32_t)text_len;
+    if (to_copy > remaining) {
+        to_copy = remaining;
+        if (process_pipe_buffer.overflowed == 0) {
+            print_string("pipe: buffer full\n");
+            process_pipe_buffer.overflowed = 1;
+        }
+    }
+
+    for (i = 0; i < to_copy; i++) {
         process_pipe_buffer.data[process_pipe_buffer.size + i] = text[i];
     }
-    process_pipe_buffer.size += (uint32_t)text_len;
-    process_pipe_buffer.used = 1;
-    return text_len;
+    process_pipe_buffer.size += to_copy;
+    if (process_pipe_buffer.size > 0) {
+        process_pipe_buffer.used = 1;
+    }
+    return (int)to_copy;
 }
 
 // 清空教学版单管道缓冲区：shell 在执行 run A | run B 前后都应调用，避免残留旧数据。

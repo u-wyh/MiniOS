@@ -106,13 +106,14 @@ int process_read_file(int fd, char* user_buf, int size) {
     }
 
     // 教学版 stdin 重定向：优先支持“从 pipe buffer 读取”，其次才是“从文件读取”。
+    // pipe 读取遵循最小 EOF 语义：没有有效数据、尚未启用 pipe，或 read_offset 到达 size 时统一返回 0。
     if (fd == 0) {
         if (proc->stdin_redirect_from_pipe != 0) {
             uint32_t remaining;
             uint32_t to_copy;
             uint32_t i;
 
-            if (process_pipe_buffer.used == 0 || process_pipe_buffer.read_offset >= process_pipe_buffer.size) {
+            if (process_pipe_buffer.active == 0 || process_pipe_buffer.used == 0 || process_pipe_buffer.read_offset >= process_pipe_buffer.size) {
                 return 0;
             }
 

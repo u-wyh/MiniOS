@@ -28,7 +28,7 @@
 #define PROCESS_ROOT_PARENT_PID 0
 // 教学版 kill 退出码：只表示“被 kill 终止”，不是 Unix/Linux 的信号编号。
 #define PROCESS_KILL_EXIT_STATUS -9
-// 教学版单管道缓冲区上限：左侧程序 stdout 全部先写入这里，超过上限直接失败。
+// 教学版单管道缓冲区上限：左侧程序 stdout 全部先写入这里；当前固定容量，不做动态扩容。
 #define PROCESS_PIPE_BUFFER_SIZE 512
 
 // 用户态 ps 使用的进程只读摘要：避免直接暴露内核 PCB 结构
@@ -57,8 +57,12 @@ struct process_fd_entry {
 };
 
 // 教学版单管道缓冲区：当前只支持一条前台 run A | run B，顺序执行而不是并发 pipe。
+// active 为 1 表示 shell 正在执行一条教学版 pipe 命令；size 表示当前有效字节数；
+// read_offset 表示右侧程序已经读取到的位置；overflowed 用于保证“buffer full”提示只输出一次。
 struct process_pipe_buffer {
+    int active;
     int used;
+    int overflowed;
     char data[PROCESS_PIPE_BUFFER_SIZE];
     uint32_t size;
     uint32_t read_offset;
