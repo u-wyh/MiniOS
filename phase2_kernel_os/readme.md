@@ -2836,3 +2836,45 @@ TODO：
 
 - 可继续推进 `sort` 等更复杂的用户态文本工具。
 - 可进一步整理 pipe buffer 容量限制与错误提示。
+
+## ✅ Task77：用户态 sort 程序 / 小输入行排序
+
+本轮目标：
+
+- 新增一个最小用户态 `sort` 程序，用来验证：
+  - `stdin -> 用户态缓存 -> 按行切分 -> 排序 -> stdout`
+  - `stdin <- file`
+  - `stdin <- pipe`
+  - `stdout -> RAMFS file`
+
+已完成：
+
+- 新增用户态 `sort` 程序，当前按行做字典序升序排序。
+- `sort` 当前统一通过 `sys_read(0, ...)` 从 stdin 读取全部输入。
+- `sort` 当前在用户态内部使用固定缓冲区和固定行表，先切分文本行，再做简单排序。
+- 当前支持：
+  - `run sort < /readme.txt`
+  - `run cat /readme.txt | run sort`
+  - `run cat < /readme.txt | run sort > /sorted.txt`
+- 当前用户态文本工具链已经包括：
+  - `cat / wc / grep / head / tail / sort`
+- `sort` 可以继续验证：
+  - 文件 stdin
+  - pipe stdin
+  - stdout 重定向到 RAMFS 文件
+
+当前限制：
+
+- 当前仍是教学版 `sort`。
+- 暂不支持多个文件参数。
+- 暂不支持完整 GNU `sort` 参数。
+- 暂不支持 `-r`、`-n`、去重和外部排序。
+- 暂不支持 `run sort /file` 这种 argv 文件模式；当前统一通过 stdin 读取。
+- 使用固定缓冲区和固定最大行数；超限时返回简单错误提示。
+- 暂不支持真正 UNIX pipe、pipe fd 和 `dup2`。
+
+TODO：
+
+- 可继续整理 pipe buffer 的容量限制与错误处理。
+- 可继续推进真正的 pipe fd / `dup2` 雏形。
+- 可补充一组 Phase2 数据流演示脚本与讲解文档。

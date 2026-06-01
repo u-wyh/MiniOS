@@ -372,3 +372,28 @@
   - 不支持 `-f`
   - 使用固定缓冲区
   - 不支持真实 UNIX pipe / pipe fd / `dup2`
+
+## Task77：用户态 sort 程序 / 小输入行排序
+
+- 当前新增了一个最小用户态 `sort` 程序，用来验证 “stdin / pipe -> 用户态缓存与切行 -> 行排序 -> stdout” 这条链路。
+- `sort` 当前按字节字典序对每一行做升序排序：
+  - `run sort < /readme.txt`
+  - `run cat /readme.txt | run sort`
+- `sort` 当前统一通过 `sys_read(0, ...)` 从 stdin 读取，因此可以复用：
+  - 文件 stdin 重定向
+  - pipe stdin
+- `sort` 当前会先把输入读入固定缓冲区，再按 `\n` 切成若干行，最后在用户态内部做简单排序。
+- `sort` 当前通过 `sys_write(...)` 输出结果，因此可以继续走：
+  - 屏幕输出
+  - `stdout` 重定向写文件
+- 当前 Phase2 用户态文本工具链已经包括：
+  - `cat / wc / grep / head / tail / sort`
+- 当前最小验证链路包括：
+  - `run sort < /readme.txt > /sorted.txt`
+  - `run cat < /readme.txt | run sort > /sorted2.txt`
+- 当前 `sort` 为教学版：
+  - 不支持多个文件参数
+  - 不支持 GNU `sort` 的复杂参数
+  - 不支持 `-r`、`-n` 和外部排序
+  - 使用固定缓冲区和固定最大行数
+  - 不支持真实 UNIX pipe / pipe fd / `dup2`

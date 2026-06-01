@@ -30,7 +30,8 @@
     X(PROGRAM_WC, 17, "wc", 1)                                  \
     X(PROGRAM_GREP, 18, "grep", 1)                              \
     X(PROGRAM_HEAD, 19, "head", 1)                              \
-    X(PROGRAM_TAIL, 20, "tail", 1)
+    X(PROGRAM_TAIL, 20, "tail", 1)                              \
+    X(PROGRAM_SORT, 21, "sort", 1)
 
 // program_id：统一表达内置用户程序身份，避免在 shell / exec / process 里散落魔法数字。
 enum user_program_id {

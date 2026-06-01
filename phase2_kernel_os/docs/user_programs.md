@@ -40,6 +40,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `PROGRAM_GREP = 18`
 - `PROGRAM_HEAD = 19`
 - `PROGRAM_TAIL = 20`
+- `PROGRAM_SORT = 21`
 
 其中：
 
@@ -68,6 +69,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `grep -> PROGRAM_GREP`
 - `head -> PROGRAM_HEAD`
 - `tail -> PROGRAM_TAIL`
+- `sort -> PROGRAM_SORT`
 
 其中 shell 默认直接暴露给用户的程序主要是：
 
@@ -82,6 +84,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `grep`
 - `head`
 - `tail`
+- `sort`
 - `loop`
 - `loop_exit`
 - `sleep_test`
@@ -954,3 +957,46 @@ run cat < /readme.txt | run tail -n 3 > /tail.txt
 
 1. `head` 可以边读边截断前 N 行
 2. `tail` 需要先读完输入，再决定最后 N 行从哪里开始输出
+
+## 35. 用户态 sort 程序
+
+Task77 当前新增了一个最小用户态 `sort` 程序，用来验证 stdin / pipe / stdout redirect 下的“整段缓存、切行、排序、重组输出”。
+
+当前用法：
+
+```text
+run sort
+run sort < /readme.txt
+run cat /readme.txt | run sort
+run sort < /readme.txt > /sorted.txt
+run cat < /readme.txt | run sort > /sorted2.txt
+```
+
+当前语义：
+
+1. `sort` 当前不接收额外参数，统一从 stdin 读取
+2. `sort` 会把输入按 `\n` 切成若干行
+3. `sort` 会按字节字典序升序排列每一行
+4. 当前比较规则是逐字符比较；前缀相同时较短行排在前面
+5. `sort` 通过 `sys_read(0, ...)` 兼容文件 stdin 与 pipe stdin
+6. `sort` 通过 `sys_write(...)` 输出，因此既可以显示到屏幕，也可以继续重定向到 RAMFS 文件
+7. 最后一行即使没有换行，也会参与排序并正常输出
+8. 空输入时会正常退出
+9. 输入过大或行数过多时会给出简单错误提示，不做复杂外部排序
+
+当前限制：
+
+1. 不支持多个文件参数
+2. 不支持完整 GNU `sort` 参数
+3. 不支持 `-r`
+4. 不支持 `-n`
+5. 不支持去重
+6. 不支持 locale 相关排序
+7. 使用固定缓冲区和固定最大行数
+
+与 `head` / `tail` / `grep` / `wc` 的区别：
+
+1. `wc` 只做统计，不重排输入
+2. `grep` 只做按行过滤，不改变保留下来的行顺序
+3. `head` / `tail` 只做截断
+4. `sort` 需要先缓存全部输入，再切行、比较并交换行顺序
