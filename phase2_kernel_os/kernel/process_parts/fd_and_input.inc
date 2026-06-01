@@ -1,6 +1,5 @@
 // 从教学版 pipe read fd 读取数据：读到末尾或 pipe 未激活时返回 0，表示最小 EOF 语义。
 static int process_read_pipe_fd(struct process* proc, int fd, char* user_buf, int size) {
-    int slot;
     struct process_fd_entry* entry;
     uint32_t remaining;
     uint32_t to_copy;
@@ -10,12 +9,11 @@ static int process_read_pipe_fd(struct process* proc, int fd, char* user_buf, in
         return -1;
     }
 
-    slot = fd - PROCESS_FD_BASE;
-    if (slot < 0 || slot >= PROCESS_MAX_OPEN_FILES) {
+    entry = process_fd_get_entry(proc, fd);
+    if (entry == (struct process_fd_entry*)0) {
         return -2;
     }
 
-    entry = &proc->fd_table[slot];
     if (entry->used == 0 || entry->type != PROCESS_FD_TYPE_PIPE_READ) {
         return -3;
     }
@@ -40,7 +38,6 @@ static int process_read_pipe_fd(struct process* proc, int fd, char* user_buf, in
 
 // 向教学版 pipe write fd 写入数据：容量限制与“buffer full”提示沿用 Task78 的整理结果。
 static int process_write_pipe_fd(struct process* proc, int fd, const char* user_buf, int size) {
-    int slot;
     struct process_fd_entry* entry;
     uint32_t remaining;
     uint32_t to_copy;
@@ -50,12 +47,11 @@ static int process_write_pipe_fd(struct process* proc, int fd, const char* user_
         return -1;
     }
 
-    slot = fd - PROCESS_FD_BASE;
-    if (slot < 0 || slot >= PROCESS_MAX_OPEN_FILES) {
+    entry = process_fd_get_entry(proc, fd);
+    if (entry == (struct process_fd_entry*)0) {
         return -2;
     }
 
-    entry = &proc->fd_table[slot];
     if (entry->used == 0 || entry->type != PROCESS_FD_TYPE_PIPE_WRITE) {
         return -3;
     }
@@ -120,11 +116,9 @@ int process_open_file(const char* path) {
             }
         }
         if (j == MAX_FS_PATH_LEN - 1 && path[j] != '\0') {
-            proc->fd_table[i].used = 0;
-            proc->fd_table[i].path[0] = '\0';
-            proc->fd_table[i].can_write = 0;
-            return -4;
-        }
+        process_fd_reset_slot(proc, i);
+        return -4;
+    }
         proc->fd_table[i].path[MAX_FS_PATH_LEN - 1] = '\0';
         proc->fd_table[i].can_write = 0;
         proc->fd_table[i].offset = 0;
@@ -165,11 +159,9 @@ int process_open_file_write(const char* path) {
             }
         }
         if (j == MAX_FS_PATH_LEN - 1 && path[j] != '\0') {
-            proc->fd_table[i].used = 0;
-            proc->fd_table[i].path[0] = '\0';
-            proc->fd_table[i].can_write = 0;
-            return -5;
-        }
+        process_fd_reset_slot(proc, i);
+        return -5;
+    }
         proc->fd_table[i].path[MAX_FS_PATH_LEN - 1] = '\0';
         proc->fd_table[i].can_write = 1;
         proc->fd_table[i].offset = 0;
@@ -183,7 +175,6 @@ int process_open_file_write(const char* path) {
 int process_read_file(int fd, char* user_buf, int size) {
     struct process* proc = current_process;
     struct process_fd_entry* entry;
-    int slot;
     int read_result;
 
     if (proc == (struct process*)0 || user_buf == (char*)0) {
@@ -201,6 +192,8 @@ int process_read_file(int fd, char* user_buf, int size) {
     // 教学版 stdin 重定向：优先支持“从 pipe read fd 读取”，其次才是“从文件读取”。
     // pipe 读取遵循最小 EOF 语义：没有有效数据、尚未启用 pipe，或 read_offset 到达 size 时统一返回 0。
     if (fd == 0) {
+        // 兼容入口保留：fd=0 仍然不是完全由 fd_table 统一管理，
+        // 但 pipe stdin 会先映射到当前进程绑定的 pipe read fd，再复用统一 pipe 读逻辑。
         if (proc->stdin_pipe_fd >= PROCESS_FD_BASE) {
             return process_read_pipe_fd(proc, proc->stdin_pipe_fd, user_buf, size);
         }
@@ -226,12 +219,11 @@ int process_read_file(int fd, char* user_buf, int size) {
         return read_result;
     }
 
-    slot = fd - PROCESS_FD_BASE;
-    if (slot < 0 || slot >= PROCESS_MAX_OPEN_FILES) {
+    entry = process_fd_get_entry(proc, fd);
+    if (entry == (struct process_fd_entry*)0) {
         return -3;
     }
 
-    entry = &proc->fd_table[slot];
     if (entry->used == 0) {
         return -4;
     }
@@ -260,7 +252,6 @@ int process_read_file(int fd, char* user_buf, int size) {
 int process_write_file(int fd, const char* user_buf, int size) {
     struct process* proc = current_process;
     struct process_fd_entry* entry;
-    int slot;
     int write_result;
 
     if (proc == (struct process*)0 || user_buf == (const char*)0) {
@@ -275,12 +266,11 @@ int process_write_file(int fd, const char* user_buf, int size) {
         return 0;
     }
 
-    slot = fd - PROCESS_FD_BASE;
-    if (slot < 0 || slot >= PROCESS_MAX_OPEN_FILES) {
+    entry = process_fd_get_entry(proc, fd);
+    if (entry == (struct process_fd_entry*)0) {
         return -3;
     }
 
-    entry = &proc->fd_table[slot];
     if (entry->used == 0) {
         return -4;
     }
@@ -318,8 +308,8 @@ int process_close_file(int fd) {
         return -1;
     }
 
-    slot = fd - PROCESS_FD_BASE;
-    if (slot < 0 || slot >= PROCESS_MAX_OPEN_FILES) {
+    slot = process_fd_slot_from_number(fd);
+    if (slot < 0) {
         return -2;
     }
 
@@ -335,11 +325,7 @@ int process_close_file(int fd) {
         proc->stdout_pipe_fd = -1;
         proc->stdout_redirect_to_pipe = 0;
     }
-    proc->fd_table[slot].used = 0;
-    proc->fd_table[slot].type = PROCESS_FD_TYPE_NONE;
-    proc->fd_table[slot].path[0] = '\0';
-    proc->fd_table[slot].can_write = 0;
-    proc->fd_table[slot].offset = 0;
+    process_fd_reset_slot(proc, slot);
     return 0;
 }
 

@@ -196,6 +196,8 @@ int process_current_has_stdout_redirect(void) {
 
 // 判断当前进程是否启用了 stdout -> pipe：供 SYS_WRITE 把文本优先写入教学版 pipe buffer。
 int process_current_has_stdout_pipe(void) {
+    struct process_fd_entry* entry;
+
     if (current_process == (struct process*)0 || current_process->state != PROCESS_RUNNING) {
         return 0;
     }
@@ -204,7 +206,13 @@ int process_current_has_stdout_pipe(void) {
         return 0;
     }
 
-    return current_process->stdout_redirect_to_pipe;
+    entry = process_fd_get_entry(current_process, current_process->stdout_pipe_fd);
+    if (entry == (struct process_fd_entry*)0 || entry->used == 0 || entry->type != PROCESS_FD_TYPE_PIPE_WRITE) {
+        return 0;
+    }
+
+    // 兼容字段 stdout_redirect_to_pipe 暂时保留，供 shell / 旧文档继续表达“stdout 已被 pipe 接管”。
+    return 1;
 }
 
 // 把当前进程的一次 SYS_WRITE 文本输出写到 RAMFS 重定向目标：
@@ -260,7 +268,7 @@ int process_write_stdout_pipe(const char* text) {
     struct process* proc = current_process;
     int text_len;
 
-    if (proc == (struct process*)0 || proc->stdout_redirect_to_pipe == 0) {
+    if (proc == (struct process*)0) {
         return -1;
     }
 

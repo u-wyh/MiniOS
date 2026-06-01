@@ -40,8 +40,11 @@ static int process_copy_user_args(struct process* proc, int argc, const char* co
 static int process_name_equals(const char* a, const char* b);
 static int process_copy_path(char* dst, const char* src, unsigned int max_len);
 static int process_text_length(const char* text);
+static int process_fd_slot_from_number(int fd);
+static struct process_fd_entry* process_fd_get_entry(struct process* proc, int fd);
 static int process_alloc_fd_slot(struct process* proc);
 static int process_alloc_pipe_fd(struct process* proc, int fd_type);
+static void process_fd_reset_slot(struct process* proc, int slot);
 static int process_read_pipe_fd(struct process* proc, int fd, char* user_buf, int size);
 static int process_write_pipe_fd(struct process* proc, int fd, const char* user_buf, int size);
 static void process_restore_current_user_mapping(void);

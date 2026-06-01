@@ -459,3 +459,35 @@
   - 并发 pipe
   - 多级管道
   - 多个 pipe object
+
+## Task80：fd 抽象整理 / 统一 file fd 与 pipe fd 分发路径
+
+- 当前任务不是新增功能，而是整理 fd 抽象和 read/write 分发路径。
+- 当前 Phase2 数据流链路可以概括为：
+  - 文件系统
+  - `-> fd 抽象`
+  - `-> stdin/stdout`
+  - `-> redirect`
+  - `-> pipe fd`
+  - `-> 用户态文本工具`
+- 本轮之后，普通文件 fd 与 pipe fd 的查找、分配、清理路径更统一了。
+- 当前最小 fd 类型仍然包括：
+  - `FD_FILE`
+  - `FD_PIPE_READ`
+  - `FD_PIPE_WRITE`
+- 当前分发关系更清楚了：
+  - `SYS_READ(fd, ...)`
+    - `fd=0` 先走教学版 stdin 兼容入口
+    - `FD_FILE` 读文件
+    - `FD_PIPE_READ` 读 pipe
+    - `FD_PIPE_WRITE` 返回错误
+  - `SYS_FD_WRITE(fd, ...)`
+    - `FD_FILE` 写文件
+    - `FD_PIPE_WRITE` 写 pipe
+    - `FD_PIPE_READ` 返回错误
+- 当前仍然保留少量兼容字段与特殊入口：
+  - `fd=0`
+  - `SYS_WRITE(text)`
+  - `stdin_redirect_from_pipe`
+  - `stdout_redirect_to_pipe`
+- 这些兼容路径暂时保留，是为了不破坏现有 redirect / pipe / RAMFS / 用户态工具链。

@@ -24,7 +24,7 @@
 #define PROCESS_MAX_OPEN_FILES 8
 // 教学版文件描述符起始编号。
 #define PROCESS_FD_BASE 3
-// 教学版 fd 类型：当前最小区分普通文件、pipe read end 和 pipe write end。
+// 教学版 fd 类型：当前最小区分空槽位、普通文件、pipe 读端和 pipe 写端。
 #define PROCESS_FD_TYPE_NONE 0
 #define PROCESS_FD_TYPE_FILE 1
 #define PROCESS_FD_TYPE_PIPE_READ 2
@@ -128,9 +128,9 @@ struct process {
     // stdin_pipe_fd / stdout_pipe_fd 表示当前进程绑定到教学版 pipe 的 fd 端点；-1 表示未绑定。
     int stdin_pipe_fd;
     int stdout_pipe_fd;
-    // stdout_redirect_to_pipe 为 1 时，当前进程的 SYS_WRITE 会写入教学版 pipe buffer，而不是屏幕或 RAMFS 文件。
+    // stdout_redirect_to_pipe / stdin_redirect_from_pipe 目前保留为兼容字段：
+    // 真正的 pipe 读写分发已经开始以 stdin_pipe_fd / stdout_pipe_fd 为主。
     int stdout_redirect_to_pipe;
-    // stdin_redirect_from_pipe 为 1 时，当前进程的 SYS_READ(fd=0) 会从教学版 pipe buffer 读取。
     int stdin_redirect_from_pipe;
     // launch_ready 为 0 时，shell 仍在给 fork 子进程补齐重定向/pipe 配置；就绪前不应开始执行子分支。
     int launch_ready;

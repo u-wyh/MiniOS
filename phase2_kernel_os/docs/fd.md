@@ -138,7 +138,28 @@ PROCESS_FD_TYPE_PIPE_WRITE
    - 若启用了 stdout 文件重定向，则写 RAMFS
    - 否则输出到前台屏幕
 
-## 8. 当前限制
+## 8. fd 查询 / 分配 / 清理流程
+
+Task80 之后，当前 fd 路径比 Task79 更清楚了一些。
+
+现在的最小内部流程大致是：
+
+1. `fd_alloc`
+   - 在当前进程的 `fd_table[]` 中寻找空闲槽位
+   - 普通文件 fd 和 pipe fd 共用这一层分配入口
+
+2. `fd_get`
+   - 先把 `fd number` 映射成 `fd_table` 槽位
+   - 再返回表项指针
+   - `read/write/close` 复用同一套查找入口
+
+3. `fd_reset`
+   - 统一清空 `used / type / path / can_write / offset`
+   - `close` 和进程初始化都复用这条重置路径
+
+也就是说，本轮没有做独立 `fd.c`，但已经把“查找 / 分配 / 清理”的最小辅助逻辑从散落判断里收了一层。
+
+## 9. 当前限制
 
 Task79 之后，fd 抽象比之前更统一了一步，但还远不是完整 Unix/Linux 设计。
 
@@ -162,3 +183,16 @@ Task79 之后，fd 抽象比之前更统一了一步，但还远不是完整 Uni
 ```
 
 而不是完整 VFS + file object + inode + pipe inode 的 Unix 体系。
+
+## 10. 当前保留的兼容路径
+
+为了不破坏现有 Phase2 shell / redirect / pipe 行为，当前仍保留少量过渡性特殊入口：
+
+1. `fd=0`
+   仍然是教学版 `stdin` 入口，不是完全从 `fd_table[]` 里直接查出来的标准 fd。
+2. `SYS_WRITE(text)`
+   仍然是教学版 stdout 快捷路径，不是完整 `write(1, ...)` 模型。
+3. `stdout_redirect_to_pipe`
+4. `stdin_redirect_from_pipe`
+
+这两个字段现在更多是兼容状态位；真正的 pipe 读写分发已经开始优先看绑定的 `stdin_pipe_fd / stdout_pipe_fd`。

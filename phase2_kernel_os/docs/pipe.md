@@ -138,6 +138,13 @@ EOF 语义：
 2. 避免右侧读到上一次命令残留
 3. 让每条 pipe 命令拥有独立的最小生命周期
 
+Task80 之后，pipe 的 fd 生命周期也更清楚了一些：
+
+1. 左侧子进程会绑定一个 `pipe write fd`
+2. 右侧子进程会绑定一个 `pipe read fd`
+3. `close`、进程清空和 pipe reset 现在会复用更统一的 fd 槽位重置逻辑
+4. 兼容字段仍保留，但 pipe 读写分发已经优先走 fd 类型
+
 ## 8. 与 redirect 的组合
 
 当前支持的典型组合包括：
@@ -153,6 +160,13 @@ EOF 语义：
 2. 右侧 `stdin` 若来自 pipe，则从 pipe buffer 读
 3. 右侧 `stdout` 若继续重定向，则写 RAMFS 文件
 4. 左侧若还有 `stdin redirect`，会先从输入文件读取，再写入 pipe
+
+从 Task80 开始，可以更清楚地把它理解成：
+
+1. 左侧 `stdout` 通过绑定的 `pipe write fd` 写入 pipe
+2. 右侧 `stdin` 通过绑定的 `pipe read fd` 读取 pipe
+3. `stdin/stdout` 文件重定向仍然保留原有兼容路径
+4. 也就是说，当前是“fd 分发开始统一，但 shell 入口仍保留教学版特殊配置”的过渡阶段
 
 ## 9. 当前不支持的真实 UNIX pipe 能力
 

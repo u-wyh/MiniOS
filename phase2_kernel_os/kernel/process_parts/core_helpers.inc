@@ -219,12 +219,35 @@ static void process_clear_fd_table(struct process* proc) {
     }
 
     for (i = 0; i < PROCESS_MAX_OPEN_FILES; i++) {
-        proc->fd_table[i].used = 0;
-        proc->fd_table[i].type = PROCESS_FD_TYPE_NONE;
-        proc->fd_table[i].path[0] = '\0';
-        proc->fd_table[i].can_write = 0;
-        proc->fd_table[i].offset = 0;
+        process_fd_reset_slot(proc, (int)i);
     }
+}
+
+// 把教学版 fd 编号转换成 fd_table 槽位下标；非法 fd 返回 -1。
+static int process_fd_slot_from_number(int fd) {
+    int slot = fd - PROCESS_FD_BASE;
+
+    if (slot < 0 || slot >= PROCESS_MAX_OPEN_FILES) {
+        return -1;
+    }
+
+    return slot;
+}
+
+// 根据 fd 编号查找当前进程的 fd 表项；非法 fd 或空进程返回空指针。
+static struct process_fd_entry* process_fd_get_entry(struct process* proc, int fd) {
+    int slot;
+
+    if (proc == (struct process*)0) {
+        return (struct process_fd_entry*)0;
+    }
+
+    slot = process_fd_slot_from_number(fd);
+    if (slot < 0) {
+        return (struct process_fd_entry*)0;
+    }
+
+    return &proc->fd_table[slot];
 }
 
 // 在当前 PCB 的 fd 表里寻找一个空闲槽位；找到返回槽位下标，失败返回 -1。
@@ -267,6 +290,23 @@ static int process_alloc_pipe_fd(struct process* proc, int fd_type) {
     proc->fd_table[slot].can_write = (fd_type == PROCESS_FD_TYPE_PIPE_WRITE) ? 1 : 0;
     proc->fd_table[slot].offset = 0;
     return PROCESS_FD_BASE + slot;
+}
+
+// 重置一个 fd 表槽位：统一清空占用位、类型、路径、写标记和偏移，供 close / clear 共用。
+static void process_fd_reset_slot(struct process* proc, int slot) {
+    if (proc == (struct process*)0) {
+        return;
+    }
+
+    if (slot < 0 || slot >= PROCESS_MAX_OPEN_FILES) {
+        return;
+    }
+
+    proc->fd_table[slot].used = 0;
+    proc->fd_table[slot].type = PROCESS_FD_TYPE_NONE;
+    proc->fd_table[slot].path[0] = '\0';
+    proc->fd_table[slot].can_write = 0;
+    proc->fd_table[slot].offset = 0;
 }
 
 // 清空 PCB 中保存的教学版 argv，避免旧程序参数泄漏到新程序上下文

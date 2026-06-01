@@ -2966,3 +2966,53 @@ TODO：
 - 可继续做 `dup2` 雏形
 - 可继续做 pipe syscall 雏形
 - 可继续整理 shell 数据流演示文档
+
+## ✅ Task80：fd 抽象整理 / 统一 file fd 与 pipe fd 分发路径
+
+本轮目标：
+
+- 不新增用户态程序，而是整理 fd 抽象。
+- 统一普通文件 fd 与 pipe fd 的查找、分配、重置和读写分发路径。
+- 让 `sys_read / sys_write` 的结构更清楚，给后续 `dup2` / `pipe()` / fd 继承打基础。
+
+已完成：
+
+- fd 类型定义和注释进一步整理清楚。
+- 当前 fd 类型至少包括：
+  - 普通文件 fd
+  - `pipe read fd`
+  - `pipe write fd`
+- 增加了更明确的教学版 fd 辅助逻辑：
+  - fd 编号转槽位
+  - fd 表项查询
+  - fd 槽位重置
+  - fd 空闲槽位分配
+- `SYS_READ(fd, ...)` 的分发路径更清楚：
+  - `fd=0` 先走教学版 stdin 兼容入口
+  - `FD_FILE` -> 文件读取
+  - `FD_PIPE_READ` -> pipe 读取
+  - `FD_PIPE_WRITE` -> 错误
+- `SYS_FD_WRITE(fd, ...)` 的分发路径更清楚：
+  - `FD_FILE` -> 文件写入
+  - `FD_PIPE_WRITE` -> pipe 写入
+  - `FD_PIPE_READ` -> 错误
+- pipe stdin / stdout 已经优先通过绑定的 `pipe read fd / pipe write fd` 进入统一分发。
+- `stdin_redirect_from_pipe` / `stdout_redirect_to_pipe` 仍然保留为兼容字段，但已经不再是主要分发依据。
+- 普通文件 fd、stdin/stdout redirect、教学版 pipe、RAMFS 文本工具链保持兼容目标不变。
+
+当前限制：
+
+- 不支持 `dup2`
+- 不支持用户态 `pipe()`
+- 不支持 fork 后共享 fd
+- 不支持引用计数
+- 不支持阻塞 pipe
+- 不支持并发 pipe
+- 不支持多个 pipe object
+- 不支持多级管道
+
+TODO：
+
+- Task81 可继续做 `dup2` 雏形
+- 可继续做 pipe syscall 雏形
+- 可继续整理 shell 数据流路径
