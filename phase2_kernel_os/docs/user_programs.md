@@ -44,6 +44,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `PROGRAM_PIPE_TEST = 22`
 - `PROGRAM_DUP2_TEST = 23`
 - `PROGRAM_FORK_FD_TEST = 24`
+- `PROGRAM_PIPE_FORK_DUP2_TEST = 25`
 
 其中：
 
@@ -76,6 +77,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `pipe_test -> PROGRAM_PIPE_TEST`
 - `dup2_test -> PROGRAM_DUP2_TEST`
 - `fork_fd_test -> PROGRAM_FORK_FD_TEST`
+- `pipe_fork_dup2_test -> PROGRAM_PIPE_FORK_DUP2_TEST`
 
 其中 shell 默认直接暴露给用户的程序主要是：
 
@@ -94,6 +96,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `pipe_test`
 - `dup2_test`
 - `fork_fd_test`
+- `pipe_fork_dup2_test`
 - `loop`
 - `loop_exit`
 - `sleep_test`
@@ -1086,3 +1089,30 @@ run fork_fd_test
 1. fork 后子进程已经继承父进程的 pipe fd
 2. 子进程退出不会错误清空父进程还要读取的 pipe 数据
 3. 当前教学版 fd 继承已经足以支撑最小父子 pipe 传递
+
+## 39. 用户态 pipe_fork_dup2_test 程序
+
+Task87 新增了最小用户态 `pipe_fork_dup2_test` 程序，用来验证用户态自己组合 `pipe + fork + dup2`。
+
+当前用法：
+
+```text
+run pipe_fork_dup2_test
+```
+
+当前语义：
+
+1. 父进程先调用 `pipe(fds)`
+2. 父进程再调用 `fork()`
+3. 子进程执行 `dup2(fds[1], 1)`，把 stdout 接到 pipe 写端
+4. 子进程通过 `write(1, ...)` 把消息写入 pipe
+5. 父进程 `waitpid()` 后执行 `dup2(fds[0], 0)`，把 stdin 接到 pipe 读端
+6. 父进程通过 `read(0, ...)` 把消息读回
+7. 成功后输出 `pipe_fork_dup2_test: ok`
+
+它的主要作用是验证：
+
+1. 用户态已经可以自己组合 `pipe + fork + dup2`
+2. 子进程可以通过 dup2 后的 `stdout` 把文本写入 pipe
+3. 父进程可以通过 dup2 后的 `stdin` 把文本读回
+4. 当前这套教学版机制已经能形成最小闭环

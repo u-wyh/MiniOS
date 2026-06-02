@@ -217,6 +217,17 @@ Task86 之后，fork 也会继承当前教学版 pipe fd 视图：
 4. 父进程在 `waitpid()` 后仍可从原 pipe read fd 读出数据
 5. 当前仍然只有一个全局 pipe buffer，这只是教学版继承语义，不是完整 UNIX pipe 生命周期模型
 
+Task87 之后，用户态已经可以把这条链路自己组合出来：
+
+1. `pipe(fds)`
+2. `fork()`
+3. 子进程 `dup2(fds[1], 1)`
+4. 子进程通过 `write(1, ...)` 写 pipe
+5. 父进程 `dup2(fds[0], 0)`
+6. 父进程通过 `read(0, ...)` 读 pipe
+
+这说明当前 MiniOS 已经具备最小“用户态自己搭管道”的实验条件，但仍然不是完整 UNIX pipeline。
+
 ## 9. 当前不支持的真实 UNIX pipe 能力
 
 当前教学版 pipe 还不支持：

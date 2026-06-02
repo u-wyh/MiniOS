@@ -68,3 +68,16 @@ Task86 新增了 `fork_fd_test`，用来验证最小父子 pipe 继承链路：
 
 1. 子进程已经继承 pipe fd
 2. 子进程退出不会自动清空父进程之后还要读取的 pipe 数据
+
+## 6. Task87：fork 继承后的组合验证
+
+Task87 没有继续修改 fork 主体，而是新增用户态 `pipe_fork_dup2_test` 来验证：
+
+1. 父进程 `pipe(fds)`
+2. 父进程 `fork()`
+3. 子进程通过继承下来的 pipe write fd 执行 `dup2(fds[1], 1)`
+4. 子进程往 `stdout` 写入消息
+5. 父进程 `waitpid()` 后执行 `dup2(fds[0], 0)`
+6. 父进程从 `stdin` 读回消息
+
+这说明 Task86 的 fd 继承语义已经能够继续支撑更接近真实 UNIX 管道模型的组合测试。

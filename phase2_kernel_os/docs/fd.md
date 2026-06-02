@@ -298,3 +298,13 @@ Task86 之后，fork 也开始继承当前教学版 fd 视图：
 2. 子进程会复制当前 `stdin/stdout` 兼容字段
 3. 子进程会复制 `stdin_pipe_fd / stdout_pipe_fd`
 4. 当前仍然是浅拷贝 / 视图复制，不是共享同一个底层 file object
+
+Task87 之后，这套 fd 能力已经可以在用户态组合使用：
+
+1. 父进程 `pipe(fds)`
+2. `fork()`
+3. 子进程 `dup2(fds[1], 1)`
+4. 父进程 `dup2(fds[0], 0)`
+5. 双方继续只通过 `read/write` 访问资源
+
+这说明当前教学版 fd 已经足以支撑最小“用户态组合 pipe”实验。

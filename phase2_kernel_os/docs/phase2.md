@@ -601,3 +601,21 @@
   - 子进程可以继承 pipe read fd / pipe write fd
   - `fork_fd_test` 可以验证父子之间最小 pipe 数据传递
 - 当前仍然只是教学版 fd 继承，不支持引用计数或共享 file object。
+
+## Task87：用户态 pipe + fork + dup2 组合测试
+
+- 当前任务是组合验证任务，不新增新的内核主机制。
+- 当前 Phase2 数据流链路可以概括为：
+  - `fd 抽象`
+  - `-> pipe syscall`
+  - `-> dup2 syscall`
+  - `-> fork fd 继承`
+  - `-> 用户态组合 pipe`
+- 本轮之后：
+  - 用户态程序已经可以自己跑出最小闭环：
+    - `pipe()`
+    - `fork()`
+    - `dup2()`
+    - `read/write`
+  - `pipe_fork_dup2_test` 可以直接验证这条链路
+- 当前仍然没有 `exec`，也不是完整并发阻塞 pipe。

@@ -3261,3 +3261,46 @@ TODO：
 - Task87 可继续做用户态 `fork + pipe + dup2` 组合验证
 - Task88 可继续探索并发 pipe / 阻塞读写雏形
 - 后续可继续整理更真实的 file object / 引用计数模型
+
+## ✅ Task87：用户态 pipe + fork + dup2 组合测试
+
+本轮目标：
+
+- 不新增复杂内核机制。
+- 新增用户态 `pipe_fork_dup2_test` 程序。
+- 验证用户态已经可以自己组合：
+  - `pipe()`
+  - `fork()`
+  - `dup2()`
+  - `read/write`
+
+已完成：
+
+- 新增用户态 `pipe_fork_dup2_test`
+- 当前测试链路是：
+  - 父进程 `pipe(fds)`
+  - 父进程 `fork()`
+  - 子进程 `dup2(fds[1], 1)`
+  - 子进程通过 `write(1)` 把文本写入 pipe
+  - 父进程 `waitpid()`
+  - 父进程 `dup2(fds[0], 0)`
+  - 父进程通过 `read(0)` 读回子进程写入的内容
+- 这说明：
+  - `pipe()` 已经可由用户态显式创建
+  - `fork()` 已经能继承 pipe fd
+  - `dup2()` 已经能把 pipe 端点接到 `0/1`
+  - 用户态已能跑出最小“接近真实 UNIX 管道模型”的闭环
+
+当前限制：
+
+- 当前没有 `exec`
+- 当前不是并发阻塞 pipe
+- 当前仍然只有一个全局教学版 pipe buffer
+- 当前不是完整 UNIX pipeline
+- 当前不支持多个并发 pipe object
+
+TODO：
+
+- Task88 可继续做 pipe 读端/写端关闭语义
+- Task89 可继续探索并发 pipe / 阻塞读写雏形
+- 后续可继续做用户态 `fork + exec + pipe + dup2` 组合测试
