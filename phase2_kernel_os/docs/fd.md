@@ -262,4 +262,7 @@ Task82 之后，这里的状态更新为：
 3. `< input > output`
    会分别对 `fd=0` 和 `fd=1` 做两次设置
 4. `pipe`
-   本轮暂不迁移，仍保留当前兼容路径，留到 Task83
+   Task83 之后，shell pipe 连接已经明确统一为：
+   - 左侧 `fd_dup2(pipe_write_fd, 1)`
+   - 右侧 `fd_dup2(pipe_read_fd, 0)`
+   兼容字段仍保留，但主要接线入口已经进入 `fd_dup2`

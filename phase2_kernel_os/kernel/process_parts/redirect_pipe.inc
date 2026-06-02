@@ -141,6 +141,7 @@ int process_set_stdin_redirect_by_pid(int pid, const char* path) {
 }
 
 // 为指定 pid 的进程启用“stdout -> pipe buffer”模式：当前仅供 shell 顺序执行单管道左侧时使用。
+// Task83 之后，这里的核心接线语义是“先分配 pipe write fd，再 fd_dup2(pipe_write_fd, 1)”。
 int process_set_stdout_pipe_by_pid(int pid) {
     struct process* target = process_find_by_pid(pid);
     int pipe_fd;
@@ -165,6 +166,7 @@ int process_set_stdout_pipe_by_pid(int pid) {
 }
 
 // 为指定 pid 的进程启用“stdin <- pipe buffer”模式：当前仅供 shell 顺序执行单管道右侧时使用。
+// Task83 之后，这里的核心接线语义是“先分配 pipe read fd，再 fd_dup2(pipe_read_fd, 0)”。
 int process_set_stdin_pipe_by_pid(int pid) {
     struct process* target = process_find_by_pid(pid);
     int pipe_fd;
@@ -241,6 +243,7 @@ int process_current_has_stdout_pipe(void) {
     }
 
     // 兼容字段 stdout_redirect_to_pipe 暂时保留，供 shell / 旧文档继续表达“stdout 已被 pipe 接管”。
+    // 实际写入目标已经优先由 stdout_pipe_fd 指向的 pipe write fd 决定。
     return 1;
 }
 

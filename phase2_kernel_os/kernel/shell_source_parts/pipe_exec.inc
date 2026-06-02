@@ -1,6 +1,9 @@
 /* ===== shell 管道执行模型 ===== */
 
 // 执行教学版单管道：当前采用“左侧先完整运行并写 pipe buffer，右侧再读取 pipe buffer”的顺序模型。
+// Task83 之后，shell 侧的 pipe 接线语义统一为：
+// 1. 左侧子进程内部优先执行 fd_dup2(pipe_write_fd, 1)
+// 2. 右侧子进程内部优先执行 fd_dup2(pipe_read_fd, 0)
 static void shell_run_single_pipe(int left_argc, char** left_argv, int right_argc, char** right_argv, const char* left_stdin_path, const char* right_stdout_path, int right_stdout_is_append) {
     int left_program_id;
     int right_program_id;
@@ -80,4 +83,3 @@ static void shell_run_single_pipe(int left_argc, char** left_argv, int right_arg
 
     user_pipe_reset();
 }
-

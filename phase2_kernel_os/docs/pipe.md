@@ -160,11 +160,13 @@ Task81 之后，pipe 配置路径进一步统一为：
 2. 再通过内核内部 `fd_dup2` 把它们接到 `fd=0 / fd=1`
 3. 仍然保留兼容字段，避免影响已有 shell 行为
 
-Task82 当前明确不迁移 pipe：
+Task82 与 Task83 串起来后的状态是：
 
 1. `<` 与 `>` 文件重定向已经开始迁移到 `fd_dup2`
-2. `pipe` 本轮保持原有兼容路径
-3. `pipe + redirect` 组合行为保持兼容，后续再在 Task83 里统一
+2. `pipe` 连接也已经统一到：
+   - 左侧 `fd_dup2(pipe_write_fd, 1)`
+   - 右侧 `fd_dup2(pipe_read_fd, 0)`
+3. `pipe + redirect` 组合继续走同一套 shell 启动顺序，但仍保留教学版兼容字段
 
 ## 8. 与 redirect 的组合
 

@@ -3071,7 +3071,7 @@ TODO：
 
 - 不新增用户态程序。
 - 把 Shell 的 `<` / `>` / `< + >` 文件重定向开始迁移到 `fd_dup2` 路径。
-- pipe 暂不迁移，留到 Task83。
+- pipe 连接留到 Task83 继续统一。
 
 已完成：
 
@@ -3087,7 +3087,7 @@ TODO：
   - 已开始分别设置 `fd=0` 和 `fd=1`
 - 当前实现仍然保留 stdout/stderr 兼容字段和教学版写文件逻辑，
   这样可以在不破坏现有行为的前提下，先把 Shell 接线入口迁到 dup2。
-- pipe 本轮明确不迁移，继续保留兼容路径。
+- pipe 本轮不做额外收口，继续由后续 Task83 统一整理。
 
 当前限制：
 
@@ -3103,3 +3103,45 @@ TODO：
 - Task83 可继续迁移 pipe 到 dup2 路径
 - 可继续整理 shell 数据流状态清理
 - 可继续做用户态 `dup2` syscall
+
+## ✅ Task83：pipe 迁移到 dup2 路径
+
+本轮目标：
+
+- 不新增用户态程序。
+- 把 shell 的 `run A | run B` 连接明确统一到 `fd_dup2` 路径。
+- 保持当前仍然是教学版顺序 pipe，而不是并发 UNIX pipe。
+
+已完成：
+
+- shell 左侧 pipe 连接现在明确采用：
+  - 分配 `pipe write fd`
+  - `fd_dup2(pipe_write_fd, 1)`
+- shell 右侧 pipe 连接现在明确采用：
+  - 分配 `pipe read fd`
+  - `fd_dup2(pipe_read_fd, 0)`
+- `run A | run B`、`run A | run B > output`、`run A < input | run B`、`run A < input | run B > output`
+  继续沿用同一套 shell 启动路径：
+  - 左侧先运行并写 pipe
+  - 右侧后运行并读 pipe
+- pipe buffer 容量、EOF、写满单次提示等边界行为继续沿用 Task78。
+- `stdout_redirect_to_pipe` / `stdin_redirect_from_pipe` 仍保留为兼容字段，
+  但 shell pipe 的主要接线入口已经统一到 `fd_dup2`。
+
+当前限制：
+
+- 不支持用户态 `pipe()` syscall
+- 不支持用户态 `dup2()` syscall
+- 不支持 fork 后共享 pipe fd
+- 不支持引用计数
+- 不支持阻塞读写
+- 不支持并发 pipe
+- 不支持多级管道
+- 不支持多个 pipe object
+- 仍然不是完整 UNIX shell pipe
+
+TODO：
+
+- Task84 可继续清理 `fd=0/1` 的教学版特殊入口
+- 可继续减少 `stdout_redirect_to_pipe` / `stdin_redirect_from_pipe` 兼容字段参与度
+- 可继续做用户态 `dup2()` 或 `pipe()` syscall 雏形
