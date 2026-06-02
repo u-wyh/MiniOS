@@ -47,7 +47,7 @@ struct minios_stat {
 // 统一的内置只读文本文件清单：同时供内核文件表和用户态 shell 的 ls/cat 复用。
 #define MINIOS_BUILTIN_TEXT_FILE_LIST(X)                                                                    \
     X("/readme.txt", "MiniOS Phase2 builtin read-only files\nThis is a teaching kernel, not a disk fs.\n") \
-    X("/programs", "hello\necho\nls\ncat\nstat\nwritefile\nappend\nwc\ngrep\nhead\ntail\nsort\npipe_test\ndup2_test\nloop\nloop_exit\nsleep_test\n")    \
+    X("/programs", "hello\necho\nls\ncat\nstat\nwritefile\nappend\nwc\ngrep\nhead\ntail\nsort\npipe_test\ndup2_test\nfork_fd_test\nloop\nloop_exit\nsleep_test\n")    \
     X("/help.txt", "help\nps\njobs\nuptime\nrun\nstart\nwait\nkill\nls\ncat\ntouch\nwritefile\nappend\nrm\n")
 
 // 根据程序镜像文件名查找文件，找到返回文件指针，否则返回空指针

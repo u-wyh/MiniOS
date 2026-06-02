@@ -209,6 +209,14 @@ Task85 之后，pipe fd 还可以继续通过用户态 `dup2` 复制：
 3. 这为后续用户态自己组合 `pipe + dup2 + fork` 奠定了接口基础
 4. 当前仍然没有 fork 后共享 pipe fd，也没有多个独立 pipe object
 
+Task86 之后，fork 也会继承当前教学版 pipe fd 视图：
+
+1. 父进程先创建 `pipe(fds)`
+2. `fork()` 后子进程会复制这对 pipe fd 的表项和绑定字段
+3. 子进程可以直接使用继承下来的 pipe write fd 写入
+4. 父进程在 `waitpid()` 后仍可从原 pipe read fd 读出数据
+5. 当前仍然只有一个全局 pipe buffer，这只是教学版继承语义，不是完整 UNIX pipe 生命周期模型
+
 ## 9. 当前不支持的真实 UNIX pipe 能力
 
 当前教学版 pipe 还不支持：

@@ -223,6 +223,39 @@ static void process_clear_fd_table(struct process* proc) {
     }
 }
 
+// 复制父进程的教学版 fd 视图：当前采用“表项浅拷贝 + 0/1 兼容字段复制”的最小策略。
+// 这不是完整 POSIX 共享 file object 语义，但足以让 fork 子进程继承普通文件 fd、pipe fd 与当前 stdin/stdout 绑定关系。
+static void process_copy_fd_table(struct process* child, const struct process* parent) {
+    unsigned int i;
+
+    if (child == (struct process*)0 || parent == (const struct process*)0) {
+        return;
+    }
+
+    process_clear_fd_table(child);
+    for (i = 0; i < PROCESS_MAX_OPEN_FILES; i++) {
+        if (parent->fd_table[i].used == 0) {
+            continue;
+        }
+
+        child->fd_table[i] = parent->fd_table[i];
+    }
+
+    child->stdout_redirect_enabled = parent->stdout_redirect_enabled;
+    child->stdout_redirect_append = parent->stdout_redirect_append;
+    child->stdout_redirect_started = parent->stdout_redirect_started;
+    process_copy_path(child->stdout_redirect_path, parent->stdout_redirect_path, MAX_FS_PATH_LEN);
+
+    child->stdin_redirect_enabled = parent->stdin_redirect_enabled;
+    child->stdin_redirect_offset = parent->stdin_redirect_offset;
+    process_copy_path(child->stdin_redirect_path, parent->stdin_redirect_path, MAX_FS_PATH_LEN);
+
+    child->stdin_pipe_fd = parent->stdin_pipe_fd;
+    child->stdout_pipe_fd = parent->stdout_pipe_fd;
+    child->stdout_redirect_to_pipe = parent->stdout_redirect_to_pipe;
+    child->stdin_redirect_from_pipe = parent->stdin_redirect_from_pipe;
+}
+
 // 把教学版 fd 编号转换成 fd_table 槽位下标；非法 fd 返回 -1。
 static int process_fd_slot_from_number(int fd) {
     int slot = fd - PROCESS_FD_BASE;

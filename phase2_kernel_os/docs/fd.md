@@ -206,14 +206,12 @@ Task79 之后，fd 抽象比之前更统一了一步，但还远不是完整 Uni
 
 当前仍然不支持：
 
-1. 用户态 `pipe()` syscall
-2. `dup2()`
-3. fork 后共享 pipe fd
-4. 阻塞读写
-5. 并发 pipe
-6. 多级管道
-7. 多个 pipe object
-8. socket / tty / 设备文件统一进入同一对象模型
+1. fork 后共享 pipe fd
+2. 阻塞读写
+3. 并发 pipe
+4. 多级管道
+5. 多个 pipe object
+6. socket / tty / 设备文件统一进入同一对象模型
 
 所以现在的定位是：
 
@@ -293,3 +291,10 @@ Task85 之后，用户态也可以直接调用 `dup2(oldfd, newfd)`：
 2. `newfd >= 3` 时当前仍是表项复制，不共享同一个 offset 对象
 3. 还没有 fork 后共享 fd
 4. 还没有 close-on-exec
+
+Task86 之后，fork 也开始继承当前教学版 fd 视图：
+
+1. 子进程会复制父进程 `fd_table[]`
+2. 子进程会复制当前 `stdin/stdout` 兼容字段
+3. 子进程会复制 `stdin_pipe_fd / stdout_pipe_fd`
+4. 当前仍然是浅拷贝 / 视图复制，不是共享同一个底层 file object

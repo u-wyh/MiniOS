@@ -586,3 +586,18 @@
   - 失败时返回 `-1`
   - `dup2_test` 可以直接验证 pipe fd 的复制、读写和最小错误路径
 - 当前仍然只是教学版 `dup2`，不支持引用计数、close-on-exec 或 fork 后共享 fd。
+
+## Task86：fork 后 fd 继承语义整理
+
+- 当前任务是把 fork 从“只复制用户镜像与返回现场”继续推进到“复制当前教学版 fd 视图”。
+- 当前 Phase2 数据流链路可以概括为：
+  - `fd 抽象`
+  - `-> pipe syscall`
+  - `-> dup2 syscall`
+  - `-> fork fd 继承`
+  - `-> 用户态组合 pipe`
+- 本轮之后：
+  - 子进程可以继承普通文件 fd
+  - 子进程可以继承 pipe read fd / pipe write fd
+  - `fork_fd_test` 可以验证父子之间最小 pipe 数据传递
+- 当前仍然只是教学版 fd 继承，不支持引用计数或共享 file object。

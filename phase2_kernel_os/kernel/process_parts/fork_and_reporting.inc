@@ -15,18 +15,7 @@ int process_fork(struct interrupt_frame* frame) {
 
     child->parent_pid = parent->pid;
     child->name = parent->name;
-    child->is_background = 0;
-    child->stdout_redirect_enabled = 0;
-    child->stdout_redirect_append = 0;
-    child->stdout_redirect_started = 0;
-    child->stdout_redirect_path[0] = '\0';
-    child->stdin_redirect_enabled = 0;
-    child->stdin_redirect_path[0] = '\0';
-    child->stdin_redirect_offset = 0;
-    child->stdin_pipe_fd = -1;
-    child->stdout_pipe_fd = -1;
-    child->stdout_redirect_to_pipe = 0;
-    child->stdin_redirect_from_pipe = 0;
+    child->is_background = parent->is_background;
     child->launch_ready = 0;
     child->exit_status = 0;
     child->requested_exit = 0;
@@ -34,8 +23,9 @@ int process_fork(struct interrupt_frame* frame) {
     child->create_tick = pit_get_ticks();
     child->user_argc = parent->user_argc;
     process_copy_bytes((unsigned char*)child->user_argv, (const unsigned char*)parent->user_argv, sizeof(child->user_argv));
-    // 当前教学版 fd 层先不实现 fork 继承，避免把半成品共享/引用计数语义带进来。
-    process_clear_fd_table(child);
+    // Task86：fork 之后，子进程需要继承父进程当前看到的教学版 fd 视图。
+    // 当前仍然只是浅拷贝语义，不实现共享 file object 或引用计数。
+    process_copy_fd_table(child, parent);
 
     copy_result = process_copy_user_image(child, parent);
     if (copy_result != 0) {

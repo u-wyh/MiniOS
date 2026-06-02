@@ -3221,3 +3221,43 @@ TODO：
 - Task86 可继续推进 fork 后 fd 继承语义
 - Task87 可继续做用户态 `fork + pipe + dup2` 组合实验
 - Task88 可继续探索并发 pipe / 阻塞读写雏形
+
+## ✅ Task86：fork 后 fd 继承语义整理
+
+本轮目标：
+
+- 整理 fork 时子进程如何继承父进程 fd table。
+- 让子进程继承普通文件 fd、pipe fd，以及当前 0/1 对应的教学版 stdin/stdout 绑定关系。
+- 新增用户态 `fork_fd_test`，验证“父进程建 pipe -> fork -> 子进程写 -> 父进程 wait 后读”链路。
+
+已完成：
+
+- fork 路径新增 `process_copy_fd_table(child, parent)`
+- 子进程现在会继承：
+  - 普通文件 fd
+  - pipe read fd
+  - pipe write fd
+  - `stdin_redirect_*`
+  - `stdout_redirect_*`
+  - `stdin_pipe_fd / stdout_pipe_fd`
+- 新增用户态 `fork_fd_test` 程序，用来验证：
+  - 父进程先创建 pipe
+  - `fork()` 后子进程继承写端
+  - 子进程写入 `child says hello\n`
+  - 父进程 `waitpid` 后从读端读回数据
+- 子进程退出不会主动清空全局 pipe buffer，因此父进程仍可在 wait 之后读取数据
+
+当前限制：
+
+- 仍然不是完整 POSIX fork fd 继承
+- 不支持引用计数
+- 子进程继承当前采用教学版浅拷贝 / 视图复制
+- 文件 fd 仍不是共享同一个底层 file object
+- pipe 仍然只有一个全局教学版缓冲区
+- 不支持并发 pipe / 阻塞 pipe / 多个 pipe object
+
+TODO：
+
+- Task87 可继续做用户态 `fork + pipe + dup2` 组合验证
+- Task88 可继续探索并发 pipe / 阻塞读写雏形
+- 后续可继续整理更真实的 file object / 引用计数模型

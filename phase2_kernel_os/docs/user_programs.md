@@ -43,6 +43,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `PROGRAM_SORT = 21`
 - `PROGRAM_PIPE_TEST = 22`
 - `PROGRAM_DUP2_TEST = 23`
+- `PROGRAM_FORK_FD_TEST = 24`
 
 其中：
 
@@ -74,6 +75,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `sort -> PROGRAM_SORT`
 - `pipe_test -> PROGRAM_PIPE_TEST`
 - `dup2_test -> PROGRAM_DUP2_TEST`
+- `fork_fd_test -> PROGRAM_FORK_FD_TEST`
 
 其中 shell 默认直接暴露给用户的程序主要是：
 
@@ -91,6 +93,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `sort`
 - `pipe_test`
 - `dup2_test`
+- `fork_fd_test`
 - `loop`
 - `loop_exit`
 - `sleep_test`
@@ -1059,3 +1062,27 @@ run dup2_test
 2. `dup2` 当前可以复制 pipe write fd
 3. `dup2` 当前可以复制 pipe read fd
 4. `dup2` 当前最小错误路径不会导致 panic
+
+## 38. 用户态 fork_fd_test 程序
+
+Task86 新增了最小用户态 `fork_fd_test` 程序，用来验证 fork 后 pipe fd 继承。
+
+当前用法：
+
+```text
+run fork_fd_test
+```
+
+当前语义：
+
+1. `fork_fd_test` 会先调用 `pipe(fds)`
+2. 然后执行 `fork()`
+3. 子进程使用继承下来的 `fds[1]` 写入 `child says hello\n`
+4. 父进程 `waitpid(child_pid)` 后，再从 `fds[0]` 读取数据
+5. 读到预期文本后输出 `fork_fd_test: ok`
+
+它的主要作用是验证：
+
+1. fork 后子进程已经继承父进程的 pipe fd
+2. 子进程退出不会错误清空父进程还要读取的 pipe 数据
+3. 当前教学版 fd 继承已经足以支撑最小父子 pipe 传递
