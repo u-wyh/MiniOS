@@ -45,6 +45,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `PROGRAM_DUP2_TEST = 23`
 - `PROGRAM_FORK_FD_TEST = 24`
 - `PROGRAM_PIPE_FORK_DUP2_TEST = 25`
+- `PROGRAM_PIPE_CLOSE_TEST = 26`
 
 其中：
 
@@ -78,6 +79,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `dup2_test -> PROGRAM_DUP2_TEST`
 - `fork_fd_test -> PROGRAM_FORK_FD_TEST`
 - `pipe_fork_dup2_test -> PROGRAM_PIPE_FORK_DUP2_TEST`
+- `pipe_close_test -> PROGRAM_PIPE_CLOSE_TEST`
 
 其中 shell 默认直接暴露给用户的程序主要是：
 
@@ -97,6 +99,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `dup2_test`
 - `fork_fd_test`
 - `pipe_fork_dup2_test`
+- `pipe_close_test`
 - `loop`
 - `loop_exit`
 - `sleep_test`
@@ -1116,3 +1119,26 @@ run pipe_fork_dup2_test
 2. 子进程可以通过 dup2 后的 `stdout` 把文本写入 pipe
 3. 父进程可以通过 dup2 后的 `stdin` 把文本读回
 4. 当前这套教学版机制已经能形成最小闭环
+
+## 40. 用户态 pipe_close_test 程序
+
+Task88 新增了最小用户态 `pipe_close_test`，用来验证教学版 pipe 的 close 语义。
+
+当前用法：
+
+```text
+run pipe_close_test
+```
+
+当前会验证：
+
+1. 写端关闭后，读端先读完已有数据，再读到 EOF
+2. 读端关闭后，写端继续写入返回错误或 0，但不 panic
+3. 重复 close 同一个 fd 不 panic
+
+预期输出会包含：
+
+1. `pipe_close_test: write close eof ok`
+2. `pipe_close_test: read close write handled`
+3. `pipe_close_test: double close handled`
+4. `pipe_close_test: ok`

@@ -70,6 +70,10 @@ struct process_pipe_buffer {
     int active;
     int used;
     int overflowed;
+    // read_open / write_open 表示当前教学版 pipe 的读端/写端是否仍被视为打开。
+    // 当前没有引用计数：任意一个对应端被 close，都直接把这一侧标记为关闭。
+    int read_open;
+    int write_open;
     char data[PROCESS_PIPE_BUFFER_SIZE];
     uint32_t size;
     uint32_t read_offset;

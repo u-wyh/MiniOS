@@ -26,6 +26,9 @@ void process_exit(int status) {
     }
 
     exiting_pid = current_process->pid;
+    // 进程退出前先按当前教学版 close 语义清理自己的 fd 视图。
+    // 这里只关闭当前进程持有的端点，不主动丢弃全局 pipe buffer 里已经写入的数据。
+    process_close_all_fds_for_proc(current_process);
     // 当前进程退出前先处理孤儿进程：把它的子进程交给 init，避免子进程失去可回收父进程。
     process_reparent_children(exiting_pid);
 

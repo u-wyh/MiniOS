@@ -3304,3 +3304,38 @@ TODO：
 - Task88 可继续做 pipe 读端/写端关闭语义
 - Task89 可继续探索并发 pipe / 阻塞读写雏形
 - 后续可继续做用户态 `fork + exec + pipe + dup2` 组合测试
+
+## ✅ Task88：pipe read/write 端关闭语义整理
+
+本轮目标：
+
+- 不实现完整 POSIX pipe close 语义。
+- 整理教学版 pipe fd 的关闭路径。
+- 新增用户态 `pipe_close_test` 程序。
+
+已完成：
+
+- `close(pipe read fd)` 现在会标记教学版 pipe 读端关闭。
+- `close(pipe write fd)` 现在会标记教学版 pipe 写端关闭。
+- 写端关闭后，读端仍可把已有缓冲数据读完；读完后继续 `read` 返回 EOF。
+- 读端关闭后，写端继续 `write` 会返回错误，不会 panic。
+- 进程 `exit` 前会先清理自己 still-open 的教学版 fd 视图。
+- 新增 `pipe_close_test`，用来验证：
+  - 写端关闭后的 EOF 行为
+  - 读端关闭后的写入处理
+  - 重复 close 不 panic
+
+当前限制：
+
+- 当前仍然只有一个全局教学版 pipe buffer
+- 当前没有 fd 引用计数
+- 当前不支持完整 POSIX 多引用 close 语义
+- 当前不支持 SIGPIPE / EPIPE
+- 当前不支持阻塞 read/write
+- 当前不支持真正并发 pipe
+
+TODO：
+
+- Task89 可继续整理 exec 与 fd 保留语义
+- Task90 可继续做用户态 pipeline demo
+- Task91 可继续探索并发 pipe / 阻塞读写雏形

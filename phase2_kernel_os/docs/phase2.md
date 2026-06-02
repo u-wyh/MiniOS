@@ -619,3 +619,19 @@
     - `read/write`
   - `pipe_fork_dup2_test` 可以直接验证这条链路
 - 当前仍然没有 `exec`，也不是完整并发阻塞 pipe。
+
+## Task88：pipe read/write 端关闭语义整理
+
+- 当前任务是教学版 pipe 生命周期整理任务，不实现完整 POSIX close 语义。
+- 本轮之后：
+  - `close(pipe read fd)` 会标记读端关闭
+  - `close(pipe write fd)` 会标记写端关闭
+  - 写端关闭后，读端读完已有数据返回 EOF
+  - 读端关闭后，写端继续写入返回错误或 0，不 panic
+- 当前 Phase2 数据流链路可以概括为：
+  - `文件系统`
+  - `-> fd 抽象`
+  - `-> pipe / dup2 / fork`
+  - `-> close 语义整理`
+  - `-> 用户态组合测试`
+- 当前仍然只有一个全局教学版 pipe buffer，也没有引用计数。

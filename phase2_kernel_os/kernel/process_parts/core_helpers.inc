@@ -192,6 +192,8 @@ static void process_pipe_buffer_clear(void) {
     process_pipe_buffer.active = 0;
     process_pipe_buffer.used = 0;
     process_pipe_buffer.overflowed = 0;
+    process_pipe_buffer.read_open = 0;
+    process_pipe_buffer.write_open = 0;
     process_pipe_buffer.size = 0;
     process_pipe_buffer.read_offset = 0;
 }

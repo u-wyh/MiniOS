@@ -157,6 +157,7 @@ int process_set_stdout_pipe_by_pid(int pid) {
     }
 
     process_pipe_buffer.active = 1;
+    process_pipe_buffer.write_open = 1;
     dup_result = process_fd_dup2(target, pipe_fd, 1);
     if (dup_result < 0) {
         process_fd_reset_slot(target, process_fd_slot_from_number(pipe_fd));
@@ -182,6 +183,7 @@ int process_set_stdin_pipe_by_pid(int pid) {
     }
 
     process_pipe_buffer.active = 1;
+    process_pipe_buffer.read_open = 1;
     process_pipe_buffer.read_offset = 0;
     dup_result = process_fd_dup2(target, pipe_fd, 0);
     if (dup_result < 0) {
@@ -342,6 +344,8 @@ int process_pipe_create_fds(int* user_fds) {
 
     process_pipe_reset();
     process_pipe_buffer.active = 1;
+    process_pipe_buffer.read_open = 1;
+    process_pipe_buffer.write_open = 1;
 
     read_fd = process_alloc_pipe_fd(proc, PROCESS_FD_TYPE_PIPE_READ);
     if (read_fd < 0) {

@@ -228,6 +228,29 @@ Task87 之后，用户态已经可以把这条链路自己组合出来：
 
 这说明当前 MiniOS 已经具备最小“用户态自己搭管道”的实验条件，但仍然不是完整 UNIX pipeline。
 
+Task88 之后，教学版 pipe close 语义也更清楚了：
+
+1. `close(pipe read fd)`：
+   - 标记读端关闭
+   - 不主动丢弃 buffer 中已有数据
+2. `close(pipe write fd)`：
+   - 标记写端关闭
+   - 已写入的数据仍可继续被读端消费
+3. 写端关闭后的 read：
+   - 若 buffer 里还有数据，继续正常读取
+   - 读完后返回 EOF
+4. 读端关闭后的 write：
+   - 返回错误或 0
+   - 不 panic
+5. 当前仍不支持：
+   - 阻塞 read/write
+   - SIGPIPE
+   - EPIPE errno
+   - 引用计数
+   - 多个并发 pipe object
+
+因此这仍然只是教学版 close 语义整理，不是完整 UNIX pipe 生命周期。
+
 ## 9. 当前不支持的真实 UNIX pipe 能力
 
 当前教学版 pipe 还不支持：

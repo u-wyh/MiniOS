@@ -18,7 +18,13 @@ static int process_read_pipe_fd(struct process* proc, int fd, char* user_buf, in
         return -3;
     }
 
-    if (process_pipe_buffer.active == 0 || process_pipe_buffer.used == 0 || process_pipe_buffer.read_offset >= process_pipe_buffer.size) {
+    // 教学版 close 语义：只要读端已经被 close，就不再继续提供新数据。
+    // 若缓冲区里还有尚未读出的旧数据，仍允许把这部分数据读完。
+    if (process_pipe_buffer.active == 0 || process_pipe_buffer.used == 0) {
+        return 0;
+    }
+
+    if (process_pipe_buffer.read_offset >= process_pipe_buffer.size) {
         return 0;
     }
 
@@ -58,6 +64,16 @@ static int process_write_pipe_fd(struct process* proc, int fd, const char* user_
 
     if (size <= 0) {
         return size;
+    }
+
+    // 教学版 close 语义：读端关闭后继续写不 panic，而是直接返回错误。
+    if (process_pipe_buffer.read_open == 0) {
+        return -4;
+    }
+
+    // 写端自身已经被关闭后，不再允许继续向全局 pipe buffer 写入。
+    if (process_pipe_buffer.write_open == 0) {
+        return -5;
     }
 
     process_pipe_buffer.active = 1;
@@ -305,9 +321,10 @@ int process_write_file(int fd, const char* user_buf, int size) {
     return write_result;
 }
 
-// 关闭当前进程的一个教学版 fd：当前既支持普通文件 fd，也支持最小 pipe read/write fd。
-int process_close_file(int fd) {
-    struct process* proc = current_process;
+// 关闭指定进程里的一个教学版 fd：普通文件 fd 仅清表项，pipe fd 还会更新全局教学版 pipe 端状态。
+// 当前没有引用计数：任意 read end / write end 被 close，都会直接把对应全局端标记为关闭。
+static int process_close_fd_for_proc(struct process* proc, int fd) {
+    struct process_fd_entry* entry;
     int slot;
 
     if (proc == (struct process*)0) {
@@ -319,8 +336,17 @@ int process_close_file(int fd) {
         return -2;
     }
 
-    if (proc->fd_table[slot].used == 0) {
+    entry = &proc->fd_table[slot];
+    if (entry->used == 0) {
         return -3;
+    }
+
+    if (entry->type == PROCESS_FD_TYPE_PIPE_READ) {
+        process_pipe_buffer.read_open = 0;
+    }
+
+    if (entry->type == PROCESS_FD_TYPE_PIPE_WRITE) {
+        process_pipe_buffer.write_open = 0;
     }
 
     if (proc->stdin_pipe_fd == fd) {
@@ -333,6 +359,31 @@ int process_close_file(int fd) {
     }
     process_fd_reset_slot(proc, slot);
     return 0;
+}
+
+// 进程退出前统一关闭自己 still-open 的教学版 fd；这里只清理当前进程视图，不主动丢弃 pipe buffer 里的旧数据。
+static void process_close_all_fds_for_proc(struct process* proc) {
+    int i;
+
+    if (proc == (struct process*)0) {
+        return;
+    }
+
+    for (i = 0; i < PROCESS_MAX_OPEN_FILES; i++) {
+        int fd;
+
+        if (proc->fd_table[i].used == 0) {
+            continue;
+        }
+
+        fd = PROCESS_FD_BASE + i;
+        process_close_fd_for_proc(proc, fd);
+    }
+}
+
+// 关闭当前进程的一个教学版 fd：当前既支持普通文件 fd，也支持最小 pipe read/write fd。
+int process_close_file(int fd) {
+    return process_close_fd_for_proc(current_process, fd);
 }
 
 // 用户态 read_char 在没有输入时阻塞当前进程：保存返回现场后切换到其他 READY 进程。
