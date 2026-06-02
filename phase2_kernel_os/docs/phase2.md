@@ -512,3 +512,22 @@
     - 已开始通过 `fd_dup2(pipe_write_fd, 1)` / `fd_dup2(pipe_read_fd, 0)` 接到标准入口
   - 文件型 stdin/stdout redirect
     - 当前仍保留兼容路径
+
+## Task82：Shell 重定向迁移到 dup2 路径
+
+- 当前任务是 Shell 文件重定向迁移任务，不新增用户态程序。
+- 当前 Phase2 数据流链路可以概括为：
+  - 文件系统
+  - `-> fd 抽象`
+  - `-> dup2 雏形`
+  - `-> Shell 输入/输出重定向`
+  - `-> pipe fd`
+  - `-> 用户态文本工具`
+- 本轮之后：
+  - `run A < input`
+    - 已开始优先走 `fd_dup2(input_fd, 0)`
+  - `run A > output`
+    - 已开始优先走 `fd_dup2(output_fd, 1)`
+  - `run A < input > output`
+    - 已开始对 `fd=0 / fd=1` 同时做设置
+- 当前 pipe 暂不迁移，继续保留兼容路径，计划留到 Task83。

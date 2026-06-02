@@ -246,3 +246,20 @@ Task81 之后的迁移状态是：
    目前仍保留兼容路径，后续可继续迁移
 3. `stdout` 文件重定向
    目前仍保留兼容路径，后续可继续迁移
+
+Task82 之后，这里的状态更新为：
+
+1. `stdin` 文件重定向
+   已开始通过：
+   - `open(input)`
+   - `fd_dup2(input_fd, 0)`
+   接入 `fd=0`
+2. `stdout` 文件重定向
+   已开始通过：
+   - `open/create(output)`
+   - `fd_dup2(output_fd, 1)`
+   接入 `fd=1`
+3. `< input > output`
+   会分别对 `fd=0` 和 `fd=1` 做两次设置
+4. `pipe`
+   本轮暂不迁移，仍保留当前兼容路径，留到 Task83

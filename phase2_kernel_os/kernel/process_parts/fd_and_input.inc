@@ -89,9 +89,8 @@ static int process_write_pipe_fd(struct process* proc, int fd, const char* user_
     return (int)to_copy;
 }
 
-// 打开一个当前可见文本文件：path -> 当前进程 fd 表项；当前既支持只读内置文件，也支持 RAMFS 文件。
-int process_open_file(const char* path) {
-    struct process* proc = current_process;
+// 为指定进程打开一个当前可见文本文件：返回绑定在该进程 fd_table 里的教学版文件 fd。
+static int process_open_file_for_proc(struct process* proc, const char* path) {
     struct minios_stat st;
     int i;
     int j;
@@ -106,7 +105,6 @@ int process_open_file(const char* path) {
 
     i = process_alloc_fd_slot(proc);
     if (i >= 0) {
-
         proc->fd_table[i].used = 1;
         proc->fd_table[i].type = PROCESS_FD_TYPE_FILE;
         for (j = 0; j < MAX_FS_PATH_LEN - 1; j++) {
@@ -116,9 +114,9 @@ int process_open_file(const char* path) {
             }
         }
         if (j == MAX_FS_PATH_LEN - 1 && path[j] != '\0') {
-        process_fd_reset_slot(proc, i);
-        return -4;
-    }
+            process_fd_reset_slot(proc, i);
+            return -4;
+        }
         proc->fd_table[i].path[MAX_FS_PATH_LEN - 1] = '\0';
         proc->fd_table[i].can_write = 0;
         proc->fd_table[i].offset = 0;
@@ -128,9 +126,13 @@ int process_open_file(const char* path) {
     return -3;
 }
 
-// 以写模式打开一个 RAMFS 文本文件：当前只给运行时内存文件分配可写 fd，内置只读文件一律拒绝。
-int process_open_file_write(const char* path) {
-    struct process* proc = current_process;
+// 打开一个当前可见文本文件：path -> 当前进程 fd 表项；当前既支持只读内置文件，也支持 RAMFS 文件。
+int process_open_file(const char* path) {
+    return process_open_file_for_proc(current_process, path);
+}
+
+// 为指定进程以写模式打开一个 RAMFS 文本文件：当前只给运行时内存文件分配可写 fd，内置只读文件一律拒绝。
+static int process_open_file_write_for_proc(struct process* proc, const char* path) {
     struct minios_stat st;
     int i;
     int j;
@@ -149,7 +151,6 @@ int process_open_file_write(const char* path) {
 
     i = process_alloc_fd_slot(proc);
     if (i >= 0) {
-
         proc->fd_table[i].used = 1;
         proc->fd_table[i].type = PROCESS_FD_TYPE_FILE;
         for (j = 0; j < MAX_FS_PATH_LEN - 1; j++) {
@@ -159,9 +160,9 @@ int process_open_file_write(const char* path) {
             }
         }
         if (j == MAX_FS_PATH_LEN - 1 && path[j] != '\0') {
-        process_fd_reset_slot(proc, i);
-        return -5;
-    }
+            process_fd_reset_slot(proc, i);
+            return -5;
+        }
         proc->fd_table[i].path[MAX_FS_PATH_LEN - 1] = '\0';
         proc->fd_table[i].can_write = 1;
         proc->fd_table[i].offset = 0;
@@ -169,6 +170,11 @@ int process_open_file_write(const char* path) {
     }
 
     return -4;
+}
+
+// 以写模式打开一个 RAMFS 文本文件：当前只给运行时内存文件分配可写 fd，内置只读文件一律拒绝。
+int process_open_file_write(const char* path) {
+    return process_open_file_write_for_proc(current_process, path);
 }
 
 // 从当前进程已打开 fd 读取数据：每次按路径重新解析文件，便于统一支持只读文件和 RAMFS 文件。

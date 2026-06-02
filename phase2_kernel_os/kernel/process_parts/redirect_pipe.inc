@@ -32,6 +32,9 @@ int process_current_is_background(void) {
 static int process_set_stdout_redirect(struct process* proc, const char* path, int is_append) {
     struct minios_stat st;
     int stat_result;
+    int output_fd;
+    int dup_result;
+    int output_slot;
 
     if (proc == (struct process*)0 || path == (const char*)0 || path[0] == '\0') {
         return -1;
@@ -57,36 +60,61 @@ static int process_set_stdout_redirect(struct process* proc, const char* path, i
         return -4;
     }
 
-    proc->stdout_redirect_enabled = 1;
+    // Task82：shell 文件重定向开始优先走“打开文件 fd -> fd_dup2(..., 1)”路径。
+    // 当前仍保留 stdout_redirect_* 兼容字段，供 SYS_WRITE(text) 维持原有教学版写文件语义。
+    if (stat_result < 0 && is_append == 0) {
+        if (fs_create_ramfs_file(proc->stdout_redirect_path) < 0) {
+            proc->stdout_redirect_path[0] = '\0';
+            return -5;
+        }
+    }
+
+    output_fd = process_open_file_write_for_proc(proc, proc->stdout_redirect_path);
+    if (output_fd < 0) {
+        proc->stdout_redirect_path[0] = '\0';
+        return -6;
+    }
+
+    dup_result = process_fd_dup2(proc, output_fd, 1);
+    if (dup_result < 0) {
+        output_slot = process_fd_slot_from_number(output_fd);
+        process_fd_reset_slot(proc, output_slot);
+        proc->stdout_redirect_path[0] = '\0';
+        return -7;
+    }
+
     proc->stdout_redirect_append = (is_append != 0) ? 1 : 0;
     proc->stdout_redirect_started = 0;
-    proc->stdout_pipe_fd = -1;
-    proc->stdout_redirect_to_pipe = 0;
+    output_slot = process_fd_slot_from_number(output_fd);
+    process_fd_reset_slot(proc, output_slot);
     return 0;
 }
 
 // 为指定 PCB 配置教学版 stdin 重定向：当前只要求目标文件存在，并记录从 offset=0 开始读取。
 static int process_set_stdin_redirect(struct process* proc, const char* path) {
-    struct minios_stat st;
+    int input_fd;
+    int dup_result;
+    int input_slot;
 
     if (proc == (struct process*)0 || path == (const char*)0 || path[0] == '\0') {
         return -1;
     }
 
-    if (process_copy_path(proc->stdin_redirect_path, path, MAX_FS_PATH_LEN) < 0) {
-        proc->stdin_redirect_path[0] = '\0';
+    // Task82：shell 输入重定向开始优先走“打开文件 fd -> fd_dup2(..., 0)”路径。
+    input_fd = process_open_file_for_proc(proc, path);
+    if (input_fd < 0) {
         return -2;
     }
 
-    if (fs_builtin_file_stat(proc->stdin_redirect_path, &st) < 0) {
-        proc->stdin_redirect_path[0] = '\0';
+    dup_result = process_fd_dup2(proc, input_fd, 0);
+    if (dup_result < 0) {
+        input_slot = process_fd_slot_from_number(input_fd);
+        process_fd_reset_slot(proc, input_slot);
         return -3;
     }
 
-    proc->stdin_redirect_enabled = 1;
-    proc->stdin_redirect_offset = 0;
-    proc->stdin_pipe_fd = -1;
-    proc->stdin_redirect_from_pipe = 0;
+    input_slot = process_fd_slot_from_number(input_fd);
+    process_fd_reset_slot(proc, input_slot);
     return 0;
 }
 

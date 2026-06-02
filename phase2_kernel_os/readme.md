@@ -3064,3 +3064,42 @@ TODO：
 - 可继续做用户态 `dup2` syscall
 - 可继续做 `pipe()` syscall 雏形
 - 可继续整理 fork 后 fd 继承语义
+
+## ✅ Task82：Shell 重定向迁移到 dup2 路径
+
+本轮目标：
+
+- 不新增用户态程序。
+- 把 Shell 的 `<` / `>` / `< + >` 文件重定向开始迁移到 `fd_dup2` 路径。
+- pipe 暂不迁移，留到 Task83。
+
+已完成：
+
+- `run A < input`
+  - 已开始优先走：
+    - 打开输入文件 fd
+    - `fd_dup2(input_fd, 0)`
+- `run A > output`
+  - 已开始优先走：
+    - 创建或打开输出文件 fd
+    - `fd_dup2(output_fd, 1)`
+- `run A < input > output`
+  - 已开始分别设置 `fd=0` 和 `fd=1`
+- 当前实现仍然保留 stdout/stderr 兼容字段和教学版写文件逻辑，
+  这样可以在不破坏现有行为的前提下，先把 Shell 接线入口迁到 dup2。
+- pipe 本轮明确不迁移，继续保留兼容路径。
+
+当前限制：
+
+- 不支持用户态 `dup2` syscall
+- 不支持完整 POSIX open flags
+- 不支持引用计数
+- 不支持 fork 后共享 fd
+- pipe 暂时仍走兼容路径
+- 不是完整 UNIX shell 重定向实现
+
+TODO：
+
+- Task83 可继续迁移 pipe 到 dup2 路径
+- 可继续整理 shell 数据流状态清理
+- 可继续做用户态 `dup2` syscall
