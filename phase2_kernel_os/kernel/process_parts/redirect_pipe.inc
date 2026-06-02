@@ -116,6 +116,7 @@ int process_set_stdin_redirect_by_pid(int pid, const char* path) {
 int process_set_stdout_pipe_by_pid(int pid) {
     struct process* target = process_find_by_pid(pid);
     int pipe_fd;
+    int dup_result;
 
     if (target == (struct process*)0 || target->state == PROCESS_UNUSED) {
         return -1;
@@ -126,13 +127,12 @@ int process_set_stdout_pipe_by_pid(int pid) {
         return -2;
     }
 
-    target->stdout_pipe_fd = pipe_fd;
-    target->stdout_redirect_to_pipe = 1;
     process_pipe_buffer.active = 1;
-    target->stdout_redirect_enabled = 0;
-    target->stdout_redirect_append = 0;
-    target->stdout_redirect_started = 0;
-    target->stdout_redirect_path[0] = '\0';
+    dup_result = process_fd_dup2(target, pipe_fd, 1);
+    if (dup_result < 0) {
+        process_fd_reset_slot(target, process_fd_slot_from_number(pipe_fd));
+        return -3;
+    }
     return 0;
 }
 
@@ -140,6 +140,7 @@ int process_set_stdout_pipe_by_pid(int pid) {
 int process_set_stdin_pipe_by_pid(int pid) {
     struct process* target = process_find_by_pid(pid);
     int pipe_fd;
+    int dup_result;
 
     if (target == (struct process*)0 || target->state == PROCESS_UNUSED) {
         return -1;
@@ -150,13 +151,13 @@ int process_set_stdin_pipe_by_pid(int pid) {
         return -2;
     }
 
-    target->stdin_pipe_fd = pipe_fd;
-    target->stdin_redirect_from_pipe = 1;
     process_pipe_buffer.active = 1;
-    target->stdin_redirect_enabled = 0;
-    target->stdin_redirect_path[0] = '\0';
-    target->stdin_redirect_offset = 0;
     process_pipe_buffer.read_offset = 0;
+    dup_result = process_fd_dup2(target, pipe_fd, 0);
+    if (dup_result < 0) {
+        process_fd_reset_slot(target, process_fd_slot_from_number(pipe_fd));
+        return -3;
+    }
     return 0;
 }
 

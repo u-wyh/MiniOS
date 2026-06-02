@@ -3016,3 +3016,51 @@ TODO：
 - Task81 可继续做 `dup2` 雏形
 - 可继续做 pipe syscall 雏形
 - 可继续整理 shell 数据流路径
+
+## ✅ Task81：dup2 雏形 / fd 重定向统一入口
+
+本轮目标：
+
+- 不新增用户态程序。
+- 新增内核内部 `fd_dup2(oldfd, newfd)` 雏形。
+- 为 stdin/stdout redirect 和 pipe 提供更统一的“把 oldfd 接到 0/1”的入口。
+
+已完成：
+
+- 新增教学版内核内部 `fd_dup2(oldfd, newfd)`。
+- 当前 `fd_dup2` 可以检查：
+  - `oldfd` 是否有效
+  - `newfd` 是否有效
+  - `oldfd == newfd`
+  - `newfd` 先清空再覆盖
+- 当前 `fd_dup2` 支持复制：
+  - 普通文件 fd
+  - `pipe read fd`
+  - `pipe write fd`
+- 当前 `pipe` 配置路径已经开始迁移：
+  - 左侧通过 `fd_dup2(pipe_write_fd, 1)` 接到 stdout
+  - 右侧通过 `fd_dup2(pipe_read_fd, 0)` 接到 stdin
+- 文件型 stdin/stdout redirect 当前仍保留兼容路径，没有强行一次性迁移。
+- 当前 `fd_dup2` 仍不是完整 POSIX 语义：
+  - 没有引用计数
+  - 没有 fork 后共享 fd
+  - 没有 close-on-exec
+  - `newfd=1` 绑定文件时仍沿用教学版 stdout 重定向语义
+
+当前限制：
+
+- 不支持用户态 `dup2` syscall
+- 不支持引用计数
+- 不支持 fork 后共享 fd
+- 不支持 close-on-exec
+- 不支持完整 POSIX `dup2` 错误语义
+- 不支持并发安全
+- 不支持多个 pipe object
+- pipe 仍然是教学版顺序 pipe
+
+TODO：
+
+- Task82 可继续迁移 shell 文件重定向到 dup2 路径
+- 可继续做用户态 `dup2` syscall
+- 可继续做 `pipe()` syscall 雏形
+- 可继续整理 fork 后 fd 继承语义

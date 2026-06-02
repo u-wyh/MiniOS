@@ -35,6 +35,15 @@ Task79 之后，当前教学版 pipe 已经开始进入 fd 体系。
 
 也就是说，这一轮还不是完整 UNIX pipe，只是把“左右端”先抽象进 fd 类型。
 
+Task81 之后，左右端与标准入口的关系又前进了一步：
+
+1. 左侧 `stdout`
+   可以通过内核内部 `fd_dup2(pipe_write_fd, 1)` 绑定到 `fd=1`
+2. 右侧 `stdin`
+   可以通过内核内部 `fd_dup2(pipe_read_fd, 0)` 绑定到 `fd=0`
+
+当前仍然没有用户态 `dup2()` syscall，这只是内核内部统一入口雏形。
+
 ## 3. pipe buffer 结构
 
 当前 pipe buffer 位于进程子系统里，核心状态包括：
@@ -144,6 +153,12 @@ Task80 之后，pipe 的 fd 生命周期也更清楚了一些：
 2. 右侧子进程会绑定一个 `pipe read fd`
 3. `close`、进程清空和 pipe reset 现在会复用更统一的 fd 槽位重置逻辑
 4. 兼容字段仍保留，但 pipe 读写分发已经优先走 fd 类型
+
+Task81 之后，pipe 配置路径进一步统一为：
+
+1. 先分配 `pipe read/write fd`
+2. 再通过内核内部 `fd_dup2` 把它们接到 `fd=0 / fd=1`
+3. 仍然保留兼容字段，避免影响已有 shell 行为
 
 ## 8. 与 redirect 的组合
 

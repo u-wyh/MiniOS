@@ -159,7 +159,48 @@ Task80 之后，当前 fd 路径比 Task79 更清楚了一些。
 
 也就是说，本轮没有做独立 `fd.c`，但已经把“查找 / 分配 / 清理”的最小辅助逻辑从散落判断里收了一层。
 
-## 9. 当前限制
+## 9. fd_dup2 雏形
+
+Task81 之后，内核内部新增了教学版 `fd_dup2(oldfd, newfd)` 雏形。
+
+它的定位是：
+
+1. 只供内核内部使用
+2. 当前没有用户态 `dup2` syscall
+3. 用于给 redirect / pipe 提供更统一的“把 oldfd 接到 0/1”入口
+
+当前最小语义是：
+
+1. `oldfd` 必须是一个已经打开的教学版 fd 表项
+2. `newfd` 当前支持：
+   - `0`
+   - `1`
+   - `>= 3` 的普通 fd 槽位
+3. `oldfd == newfd` 时直接成功
+4. `newfd` 已占用时，先清空再覆盖
+5. `FD_FILE`
+   - 复制路径、写标记和 offset 等当前最小字段
+6. `FD_PIPE_READ`
+   - 可复制到 `fd=0`
+   - 也可复制到新的普通 fd 槽位
+7. `FD_PIPE_WRITE`
+   - 可复制到 `fd=1`
+   - 也可复制到新的普通 fd 槽位
+
+错误语义：
+
+1. `oldfd` 无效时返回错误
+2. `newfd` 超范围时返回错误
+3. 对 `pipe write fd -> fd=0` 返回错误
+4. 对 `pipe read fd -> fd=1` 返回错误
+
+关于 offset：
+
+1. `newfd >= 3` 时，当前是“按字段复制”，不是共享 file object
+2. 所以 file fd 的 offset 也是“复制值”，不是共享同一个 offset
+3. `newfd = 1` 且 `oldfd` 是文件 fd 时，当前仍回落到教学版 stdout 文件重定向语义，不是完整 POSIX 共享写位置
+
+## 10. 当前限制
 
 Task79 之后，fd 抽象比之前更统一了一步，但还远不是完整 Unix/Linux 设计。
 
@@ -184,7 +225,7 @@ Task79 之后，fd 抽象比之前更统一了一步，但还远不是完整 Uni
 
 而不是完整 VFS + file object + inode + pipe inode 的 Unix 体系。
 
-## 10. 当前保留的兼容路径
+## 11. 当前保留的兼容路径
 
 为了不破坏现有 Phase2 shell / redirect / pipe 行为，当前仍保留少量过渡性特殊入口：
 
@@ -196,3 +237,12 @@ Task79 之后，fd 抽象比之前更统一了一步，但还远不是完整 Uni
 4. `stdin_redirect_from_pipe`
 
 这两个字段现在更多是兼容状态位；真正的 pipe 读写分发已经开始优先看绑定的 `stdin_pipe_fd / stdout_pipe_fd`。
+
+Task81 之后的迁移状态是：
+
+1. `pipe`
+   已开始通过内核内部 `fd_dup2(oldfd, 0/1)` 接入标准入口
+2. `stdin` 文件重定向
+   目前仍保留兼容路径，后续可继续迁移
+3. `stdout` 文件重定向
+   目前仍保留兼容路径，后续可继续迁移

@@ -491,3 +491,24 @@
   - `stdin_redirect_from_pipe`
   - `stdout_redirect_to_pipe`
 - 这些兼容路径暂时保留，是为了不破坏现有 redirect / pipe / RAMFS / 用户态工具链。
+
+## Task81：dup2 雏形 / fd 重定向统一入口
+
+- 当前任务是在 fd 抽象之上继续引入内核内部 `dup2` 雏形。
+- 当前 Phase2 数据流链路可以概括为：
+  - 文件系统
+  - `-> fd 抽象`
+  - `-> dup2 雏形`
+  - `-> stdin/stdout redirect`
+  - `-> pipe fd`
+  - `-> 用户态文本工具`
+- 本轮不新增用户态 syscall，而是在内核内部提供最小 `fd_dup2(oldfd, newfd)`。
+- 当前 `fd_dup2` 的定位是：
+  - 统一 shell redirect / pipe 的接线入口
+  - 不实现完整 POSIX `dup2`
+  - 不实现引用计数或 fork 后共享 fd
+- 本轮迁移状态：
+  - `pipe`
+    - 已开始通过 `fd_dup2(pipe_write_fd, 1)` / `fd_dup2(pipe_read_fd, 0)` 接到标准入口
+  - 文件型 stdin/stdout redirect
+    - 当前仍保留兼容路径

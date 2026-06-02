@@ -309,6 +309,91 @@ static void process_fd_reset_slot(struct process* proc, int slot) {
     proc->fd_table[slot].offset = 0;
 }
 
+// 教学版内核内部 dup2 雏形：把 oldfd 对应对象复制或绑定到 newfd。
+// 当前支持 newfd=0/1 的标准入口重定向，以及 newfd>=3 的 fd 表项复制；不实现引用计数或完整 POSIX 语义。
+static int process_fd_dup2(struct process* proc, int oldfd, int newfd) {
+    struct process_fd_entry* old_entry;
+    int new_slot;
+
+    if (proc == (struct process*)0) {
+        return -1;
+    }
+
+    old_entry = process_fd_get_entry(proc, oldfd);
+    if (old_entry == (struct process_fd_entry*)0 || old_entry->used == 0 || old_entry->type == PROCESS_FD_TYPE_NONE) {
+        return -2;
+    }
+
+    if (newfd == oldfd) {
+        return 0;
+    }
+
+    if (newfd == 0) {
+        if (old_entry->type == PROCESS_FD_TYPE_PIPE_WRITE) {
+            return -3;
+        }
+
+        proc->stdin_pipe_fd = -1;
+        proc->stdin_redirect_from_pipe = 0;
+        proc->stdin_redirect_enabled = 0;
+        proc->stdin_redirect_path[0] = '\0';
+        proc->stdin_redirect_offset = 0;
+
+        if (old_entry->type == PROCESS_FD_TYPE_PIPE_READ) {
+            proc->stdin_pipe_fd = oldfd;
+            proc->stdin_redirect_from_pipe = 1;
+            return 0;
+        }
+
+        if (process_copy_path(proc->stdin_redirect_path, old_entry->path, MAX_FS_PATH_LEN) < 0) {
+            proc->stdin_redirect_path[0] = '\0';
+            return -4;
+        }
+        proc->stdin_redirect_enabled = 1;
+        proc->stdin_redirect_offset = old_entry->offset;
+        return 0;
+    }
+
+    if (newfd == 1) {
+        if (old_entry->type == PROCESS_FD_TYPE_PIPE_READ) {
+            return -5;
+        }
+
+        proc->stdout_pipe_fd = -1;
+        proc->stdout_redirect_to_pipe = 0;
+        proc->stdout_redirect_enabled = 0;
+        proc->stdout_redirect_append = 0;
+        proc->stdout_redirect_started = 0;
+        proc->stdout_redirect_path[0] = '\0';
+
+        if (old_entry->type == PROCESS_FD_TYPE_PIPE_WRITE) {
+            proc->stdout_pipe_fd = oldfd;
+            proc->stdout_redirect_to_pipe = 1;
+            return 0;
+        }
+
+        if (process_copy_path(proc->stdout_redirect_path, old_entry->path, MAX_FS_PATH_LEN) < 0) {
+            proc->stdout_redirect_path[0] = '\0';
+            return -6;
+        }
+        // 教学版 stdout 绑定文件时，当前仍沿用“第一次覆盖，其后追加”的重定向语义，
+        // 不共享 oldfd 的实时 offset；这不是完整 POSIX dup2，只是统一入口所需的最小模型。
+        proc->stdout_redirect_enabled = 1;
+        proc->stdout_redirect_append = 0;
+        proc->stdout_redirect_started = 0;
+        return 0;
+    }
+
+    new_slot = process_fd_slot_from_number(newfd);
+    if (new_slot < 0) {
+        return -7;
+    }
+
+    process_fd_reset_slot(proc, new_slot);
+    proc->fd_table[new_slot] = *old_entry;
+    return 0;
+}
+
 // 清空 PCB 中保存的教学版 argv，避免旧程序参数泄漏到新程序上下文
 static void process_clear_user_args(struct process* proc) {
     unsigned int i;

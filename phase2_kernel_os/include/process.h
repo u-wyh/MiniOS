@@ -129,7 +129,8 @@ struct process {
     int stdin_pipe_fd;
     int stdout_pipe_fd;
     // stdout_redirect_to_pipe / stdin_redirect_from_pipe 目前保留为兼容字段：
-    // 真正的 pipe 读写分发已经开始以 stdin_pipe_fd / stdout_pipe_fd 为主。
+    // Task81 之后，pipe 已可通过内核内部 fd_dup2(oldfd, 0/1) 绑定到标准入口；
+    // 这些标记更多用于兼容旧路径与文档表达。
     int stdout_redirect_to_pipe;
     int stdin_redirect_from_pipe;
     // launch_ready 为 0 时，shell 仍在给 fork 子进程补齐重定向/pipe 配置；就绪前不应开始执行子分支。

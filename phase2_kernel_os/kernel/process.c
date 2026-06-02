@@ -45,6 +45,7 @@ static struct process_fd_entry* process_fd_get_entry(struct process* proc, int f
 static int process_alloc_fd_slot(struct process* proc);
 static int process_alloc_pipe_fd(struct process* proc, int fd_type);
 static void process_fd_reset_slot(struct process* proc, int slot);
+static int process_fd_dup2(struct process* proc, int oldfd, int newfd);
 static int process_read_pipe_fd(struct process* proc, int fd, char* user_buf, int size);
 static int process_write_pipe_fd(struct process* proc, int fd, const char* user_buf, int size);
 static void process_restore_current_user_mapping(void);
