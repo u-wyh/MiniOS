@@ -68,6 +68,8 @@
 #define SYS_SET_LAUNCH_READY 38
 // shell 子分支在 exec 前轮询父进程是否已经完成重定向/pipe 配置。
 #define SYS_GET_LAUNCH_READY 39
+// 教学版 pipe() syscall 雏形：为当前进程分配一对 pipe fd，并把结果写回用户态 int fds[2]。
+#define SYS_PIPE 40
 
 // int 0x80 进入内核后，栈上会按 pusha + CPU 自动压栈的顺序保存现场
 struct interrupt_frame {

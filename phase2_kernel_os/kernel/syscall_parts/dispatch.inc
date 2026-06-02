@@ -370,6 +370,12 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    // SYS_PIPE(fds)：为当前进程创建一对教学版 pipe fd，并把 read/write 两端写回用户态 int fds[2]。
+    if (frame->eax == SYS_PIPE) {
+        frame->eax = (unsigned int)process_pipe_create_fds((int*)frame->ebx);
+        return;
+    }
+
     // 未知 syscall：当前统一返回 -1，并在控制台打印一条最小调试信息。
     print_string("unknown syscall\n");
     frame->eax = (unsigned int)-1;

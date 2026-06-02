@@ -41,6 +41,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `PROGRAM_HEAD = 19`
 - `PROGRAM_TAIL = 20`
 - `PROGRAM_SORT = 21`
+- `PROGRAM_PIPE_TEST = 22`
 
 其中：
 
@@ -70,6 +71,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `head -> PROGRAM_HEAD`
 - `tail -> PROGRAM_TAIL`
 - `sort -> PROGRAM_SORT`
+- `pipe_test -> PROGRAM_PIPE_TEST`
 
 其中 shell 默认直接暴露给用户的程序主要是：
 
@@ -85,6 +87,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `head`
 - `tail`
 - `sort`
+- `pipe_test`
 - `loop`
 - `loop_exit`
 - `sleep_test`
@@ -1000,3 +1003,28 @@ run cat < /readme.txt | run sort > /sorted2.txt
 2. `grep` 只做按行过滤，不改变保留下来的行顺序
 3. `head` / `tail` 只做截断
 4. `sort` 需要先缓存全部输入，再切行、比较并交换行顺序
+
+## 36. 用户态 pipe_test 程序
+
+Task84 新增了最小用户态 `pipe_test` 程序，用来验证教学版 `pipe()` syscall。
+
+当前用法：
+
+```text
+run pipe_test
+```
+
+当前语义：
+
+1. `pipe_test` 会先调用 `pipe(fds)`
+2. 成功时会输出读端 fd 和写端 fd
+3. 然后向 `fds[1]` 写入 `hello pipe\n`
+4. 再从 `fds[0]` 读取并输出读回的数据
+5. 最后再读一次，验证 EOF 返回值
+
+它的主要作用是验证：
+
+1. pipe syscall 能返回一对 fd
+2. `FD_PIPE_WRITE` 可以被 `write`
+3. `FD_PIPE_READ` 可以被 `read`
+4. 当前教学版 pipe 的 EOF 语义仍然成立

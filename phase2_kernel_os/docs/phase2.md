@@ -552,3 +552,21 @@
   - `run A < input | run B`
     - 左侧仍可继续通过 `fd_dup2(input_fd, 0)` 接到输入文件
 - 当前仍然是教学版顺序 pipe，不做并发、不做阻塞、不做多级管道。
+
+## Task84：pipe() syscall 雏形
+
+- 当前任务是把教学版 pipe 从“shell 内部连接”再往前推进一步，新增最小用户态 `pipe()` syscall。
+- 当前 Phase2 数据流链路可以概括为：
+  - 文件系统
+  - `-> fd`
+  - `-> dup2 雏形`
+  - `-> shell redirect`
+  - `-> shell pipe`
+  - `-> 用户态 pipe()`
+  - `-> 用户态文本工具`
+- 本轮之后：
+  - 用户程序可以调用 `pipe(fds)`
+  - `fds[0]` 返回 `pipe read fd`
+  - `fds[1]` 返回 `pipe write fd`
+  - `pipe_test` 可以直接验证 pipe fd 的最小读写与 EOF 语义
+- 当前仍然只支持一个全局教学版 pipe buffer，不支持多个独立 pipe object。

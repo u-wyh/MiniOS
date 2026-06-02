@@ -394,6 +394,44 @@ static int process_fd_dup2(struct process* proc, int oldfd, int newfd) {
     return 0;
 }
 
+// 判断一个用户态地址范围是否落在当前进程已经建立的用户页或用户栈里。
+// 这里只做教学版最小检查，用来避免 pipe(fds) 这类 syscall 直接对空指针或明显越界地址写回。
+static int process_user_range_is_accessible(struct process* proc, uint32_t address, uint32_t size) {
+    uint32_t range_end;
+    uint32_t page_end;
+    uint32_t stack_end;
+    uint32_t i;
+
+    if (proc == (struct process*)0 || size == 0) {
+        return 0;
+    }
+
+    if (address < 0x00400000U) {
+        return 0;
+    }
+
+    range_end = address + size;
+    if (range_end < address) {
+        return 0;
+    }
+
+    for (i = 0; i < proc->user_page_count; i++) {
+        page_end = proc->user_page_vaddr[i] + 4096U;
+        if (address >= proc->user_page_vaddr[i] && range_end <= page_end) {
+            return 1;
+        }
+    }
+
+    if (proc->user_stack_pages != 0) {
+        stack_end = proc->user_stack_va + 4096U;
+        if (address >= proc->user_stack_va && range_end <= stack_end) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 // 清空 PCB 中保存的教学版 argv，避免旧程序参数泄漏到新程序上下文
 static void process_clear_user_args(struct process* proc) {
     unsigned int i;

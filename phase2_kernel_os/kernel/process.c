@@ -50,6 +50,7 @@ static int process_open_file_for_proc(struct process* proc, const char* path);
 static int process_open_file_write_for_proc(struct process* proc, const char* path);
 static int process_read_pipe_fd(struct process* proc, int fd, char* user_buf, int size);
 static int process_write_pipe_fd(struct process* proc, int fd, const char* user_buf, int size);
+static int process_user_range_is_accessible(struct process* proc, uint32_t address, uint32_t size);
 static void process_restore_current_user_mapping(void);
 static void process_reparent_children(int old_parent_pid);
 static int process_has_blocked_waiter(struct process* child);

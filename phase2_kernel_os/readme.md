@@ -3145,3 +3145,40 @@ TODO：
 - Task84 可继续清理 `fd=0/1` 的教学版特殊入口
 - 可继续减少 `stdout_redirect_to_pipe` / `stdin_redirect_from_pipe` 兼容字段参与度
 - 可继续做用户态 `dup2()` 或 `pipe()` syscall 雏形
+
+## ✅ Task84：pipe() syscall 雏形 / 用户态创建 pipe fd
+
+本轮目标：
+
+- 不改变现有 shell `run A | run B` 行为。
+- 新增最小用户态 `pipe()` syscall。
+- 让用户程序可以显式拿到一对 pipe fd 做最小读写验证。
+
+已完成：
+
+- 新增 `SYS_PIPE`
+- 新增内核 `process_pipe_create_fds(int* user_fds)`
+- 成功时返回：
+  - `fds[0] = pipe read fd`
+  - `fds[1] = pipe write fd`
+- 继续沿用当前唯一的全局教学版 pipe buffer
+- 新增用户态 `pipe_test` 程序，用来验证：
+  - `pipe(fds)` 创建成功
+  - `write(fds[1], ...)` 能写 pipe
+  - `read(fds[0], ...)` 能读 pipe
+  - 再次读取会返回最小 EOF
+
+当前限制：
+
+- 不支持用户态 `dup2()` syscall
+- 不支持多个独立 pipe object
+- 不支持阻塞读写
+- 不支持并发 pipe
+- 不支持多级管道
+- 不支持 fork 后共享 pipe fd
+
+TODO：
+
+- Task85 可继续清理 pipe fd 生命周期
+- 可继续做用户态 `dup2()` syscall 雏形
+- 可继续推进更真实的 pipe object 模型

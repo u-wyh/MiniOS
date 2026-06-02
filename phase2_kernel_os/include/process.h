@@ -212,6 +212,8 @@ int process_write_stdout_redirect(const char* text);
 int process_write_stdout_pipe(const char* text);
 // 清空教学版单管道缓冲区，供 shell 在执行 run A | run B 前重置状态。
 void process_pipe_reset(void);
+// 为当前进程创建一对教学版 pipe fd，并把 read/write 两端回填到用户态 int fds[2]。
+int process_pipe_create_fds(int* user_fds);
 // 返回是否存在正在等待键盘输入的用户进程，供键盘 IRQ 区分用户 shell 与内核 shell
 int process_has_read_char_waiter(void);
 // 返回进程表中是否仍有用户进程存在；键盘 IRQ 用它避免用户态运行期间误回内核 shell

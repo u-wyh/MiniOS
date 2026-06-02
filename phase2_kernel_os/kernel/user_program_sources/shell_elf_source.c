@@ -35,6 +35,7 @@
 #define SYS_SET_STDIN_PIPE 37
 #define SYS_SET_LAUNCH_READY 38
 #define SYS_GET_LAUNCH_READY 39
+#define SYS_PIPE 40
 // 当前内核默认把 PIT 配置为 20Hz，因此 1 tick 约等于 50ms。
 #define SHELL_UPTIME_TICKS_PER_SECOND 20
 

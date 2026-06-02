@@ -48,6 +48,7 @@
 | 30 | `SYS_OPEN_WRITE` | `user_open_write` | `ebx=path` | `fd` / 负值 | 以可写方式打开一个已存在的 RAMFS 文件 |
 | 31 | `SYS_FD_WRITE` | `user_fd_write` | `ebx=fd` `ecx=buf` `edx=size` | 字节数 / 负值 | 通过 fd 向 RAMFS 文件写入文本内容 |
 | 32 | `SYS_APPEND_FILE` | `user_append_file` | `ebx=path` `ecx=text` | 追加字节数 / 负值 | 向 RAMFS 文件末尾追加文本内容 |
+| 40 | `SYS_PIPE` | `user_pipe` / `pipe_test` 内部包装 | `ebx=int fds[2]` | `0` / 负值 | 为当前进程创建一对教学版 pipe fd |
 
 说明：
 
@@ -232,7 +233,40 @@ Task64 继续给 RAMFS 补充教学版 append 接口。
 
 当前它不是完整 POSIX `O_APPEND`，也不保证并发原子追加，只是教学版最小 append syscall。
 
-## 13. Task65 与 syscall 的关系
+## 13. SYS_PIPE 当前语义
+
+Task84 新增了教学版最小 `pipe()` syscall：
+
+1. 用户态传入 `int fds[2]`
+2. 内核为当前进程分配：
+   - `fds[0] = pipe read fd`
+   - `fds[1] = pipe write fd`
+3. 成功返回 `0`
+4. 失败返回负值
+
+当前限制：
+
+1. 仍然只复用一个全局教学版 pipe buffer
+2. 不支持多个独立 pipe object
+3. 不支持阻塞读写
+4. 不支持并发 pipe
+5. 不支持用户态 `dup2()`
+
+最小错误保护：
+
+1. `fds == NULL` 时返回失败
+2. `fds` 明显不在当前进程用户页/用户栈映射范围内时返回失败
+3. fd 分配失败时返回失败
+
+当前最小使用方式：
+
+```text
+pipe(fds)
+write(fds[1], ...)
+read(fds[0], ...)
+```
+
+## 14. Task65 与 syscall 的关系
 
 Task65 新增的是 shell 语法层的 `>` / `>>`，本轮没有再新增新的 syscall 编号。
 

@@ -170,6 +170,11 @@ static int user_set_stdin_pipe(int pid) {
     return user_syscall1(SYS_SET_STDIN_PIPE, pid);
 }
 
+// 为当前进程创建一对教学版 pipe fd：成功时写回 fds[0]/fds[1]。
+static int user_pipe(int* fds) {
+    return user_syscall1(SYS_PIPE, (int)fds);
+}
+
 // 通知内核：该 shell 子进程的重定向/pipe 配置已经完成，可以开始真正执行用户态子分支。
 static int user_set_launch_ready(int pid) {
     return user_syscall1(SYS_SET_LAUNCH_READY, pid);
@@ -189,4 +194,3 @@ static int user_stat(const char* path, struct minios_stat* out_stat) {
 static int user_yield(void) {
     return user_syscall0(SYS_YIELD);
 }
-

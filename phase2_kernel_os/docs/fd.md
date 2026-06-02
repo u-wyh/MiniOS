@@ -266,3 +266,12 @@ Task82 之后，这里的状态更新为：
    - 左侧 `fd_dup2(pipe_write_fd, 1)`
    - 右侧 `fd_dup2(pipe_read_fd, 0)`
    兼容字段仍保留，但主要接线入口已经进入 `fd_dup2`
+
+Task84 之后，用户态 `pipe()` syscall 也开始直接返回一对 pipe fd：
+
+1. `fds[0]`
+   - `FD_PIPE_READ`
+2. `fds[1]`
+   - `FD_PIPE_WRITE`
+
+这说明 pipe 不再只由 shell 内部隐式创建，也可以作为当前进程显式拿到的一对 fd 来测试读写。

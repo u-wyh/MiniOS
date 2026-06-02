@@ -191,6 +191,15 @@ Task82 与 Task83 串起来后的状态是：
 3. `stdin/stdout` 文件重定向仍然保留原有兼容路径
 4. 也就是说，当前是“fd 分发开始统一，但 shell 入口仍保留教学版特殊配置”的过渡阶段
 
+Task84 之后，MiniOS 额外新增了教学版 `pipe()` syscall 雏形：
+
+1. 当前进程可以显式创建一对 pipe fd
+2. `fds[0]` 是读端
+3. `fds[1]` 是写端
+4. 这对 fd 仍然只绑定到同一个全局教学版 pipe buffer
+
+因此它还不是完整 UNIX pipe object，只是把“shell 内部 pipe”进一步向“用户可见 fd 资源”推进了一步。
+
 ## 9. 当前不支持的真实 UNIX pipe 能力
 
 当前教学版 pipe 还不支持：

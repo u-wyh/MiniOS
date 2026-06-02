@@ -325,6 +325,42 @@ void process_pipe_reset(void) {
     process_pipe_buffer_clear();
 }
 
+// 为当前进程创建一对教学版 pipe fd：fds[0] 返回读端，fds[1] 返回写端。
+// 当前仍然只复用一个全局 pipe buffer，因此创建新 pipe 时会先 reset 全局状态。
+int process_pipe_create_fds(int* user_fds) {
+    struct process* proc = current_process;
+    int read_fd;
+    int write_fd;
+
+    if (proc == (struct process*)0 || user_fds == (int*)0) {
+        return -1;
+    }
+
+    if (process_user_range_is_accessible(proc, (uint32_t)user_fds, (uint32_t)(sizeof(int) * 2)) == 0) {
+        return -2;
+    }
+
+    process_pipe_reset();
+    process_pipe_buffer.active = 1;
+
+    read_fd = process_alloc_pipe_fd(proc, PROCESS_FD_TYPE_PIPE_READ);
+    if (read_fd < 0) {
+        process_pipe_reset();
+        return -3;
+    }
+
+    write_fd = process_alloc_pipe_fd(proc, PROCESS_FD_TYPE_PIPE_WRITE);
+    if (write_fd < 0) {
+        process_close_file(read_fd);
+        process_pipe_reset();
+        return -4;
+    }
+
+    user_fds[0] = read_fd;
+    user_fds[1] = write_fd;
+    return 0;
+}
+
 // 当前只把用户态 shell 的显式 exit 命令视为“允许 init 自动重启 shell”的正常退出来源。
 void process_mark_current_requested_exit(void) {
     if (current_process == (struct process*)0) {
