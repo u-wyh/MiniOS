@@ -326,3 +326,13 @@ Task88 之后，`close` 对不同 fd 的影响也更明确了：
 5. 当前 fd 表清理仍然没有引用计数：
    - 任意一个 pipe 端被 close，就会直接影响这条教学版全局 pipe 的对应端状态
    - 这不是完整 POSIX 多引用语义
+
+Task89 之后，当前教学版 `exec` 与 fd table 的关系也更明确了：
+
+1. `exec` 默认保留当前进程 fd table
+2. `fd=0 / fd=1` 在 exec 后不会被重置
+3. 普通文件 fd 在 exec 后仍然可继续读写
+4. `FD_PIPE_READ / FD_PIPE_WRITE` 在 exec 后仍然可继续使用
+5. 当前没有 close-on-exec：
+   - exec 时不会自动关闭某些 fd
+   - 这仍然不是完整 POSIX 语义

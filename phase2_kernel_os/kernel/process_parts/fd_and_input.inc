@@ -215,13 +215,32 @@ int process_read_file(int fd, char* user_buf, int size) {
     // pipe 读取遵循最小 EOF 语义：没有有效数据、尚未启用 pipe，或 read_offset 到达 size 时统一返回 0。
     if (fd == 0) {
         // 兼容入口保留：fd=0 仍然不是完全由 fd_table 统一管理，
-        // 但 pipe stdin 会先映射到当前进程绑定的 pipe read fd，再复用统一 pipe 读逻辑。
-        if (proc->stdin_pipe_fd >= PROCESS_FD_BASE) {
-            return process_read_pipe_fd(proc, proc->stdin_pipe_fd, user_buf, size);
-        }
-
+        // 但 pipe stdin 现在优先按“stdin 已绑定到 pipe”处理，而不是强依赖原始 oldfd 仍然占着 fd 表槽位。
         if (proc->stdin_redirect_from_pipe != 0) {
-            return 0;
+            uint32_t remaining;
+            uint32_t to_copy;
+            uint32_t i;
+
+            if (process_pipe_buffer.active == 0 || process_pipe_buffer.used == 0) {
+                return 0;
+            }
+
+            if (process_pipe_buffer.read_offset >= process_pipe_buffer.size) {
+                return 0;
+            }
+
+            remaining = process_pipe_buffer.size - process_pipe_buffer.read_offset;
+            to_copy = (uint32_t)size;
+            if (to_copy > remaining) {
+                to_copy = remaining;
+            }
+
+            for (i = 0; i < to_copy; i++) {
+                user_buf[i] = process_pipe_buffer.data[process_pipe_buffer.read_offset + i];
+            }
+
+            process_pipe_buffer.read_offset += to_copy;
+            return (int)to_copy;
         }
 
         // 当用户程序读取 fd=0 且 shell 已经配置输入文件时，
@@ -341,23 +360,12 @@ static int process_close_fd_for_proc(struct process* proc, int fd) {
         return -3;
     }
 
-    if (entry->type == PROCESS_FD_TYPE_PIPE_READ) {
-        process_pipe_buffer.read_open = 0;
-    }
-
-    if (entry->type == PROCESS_FD_TYPE_PIPE_WRITE) {
-        process_pipe_buffer.write_open = 0;
-    }
-
-    if (proc->stdin_pipe_fd == fd) {
-        proc->stdin_pipe_fd = -1;
-        proc->stdin_redirect_from_pipe = 0;
-    }
-    if (proc->stdout_pipe_fd == fd) {
-        proc->stdout_pipe_fd = -1;
-        proc->stdout_redirect_to_pipe = 0;
-    }
     process_fd_reset_slot(proc, slot);
+
+    // 关闭一个具体 fd 之后，再重新扫描当前系统里是否还存在其他 pipe 引用。
+    // 这样至少可以保证：dup2 或 fork 带来的其他可见入口还在时，不会过早把整侧 pipe 标成关闭。
+    process_pipe_buffer.read_open = process_pipe_has_read_reference();
+    process_pipe_buffer.write_open = process_pipe_has_write_reference();
     return 0;
 }
 
@@ -379,6 +387,15 @@ static void process_close_all_fds_for_proc(struct process* proc) {
         fd = PROCESS_FD_BASE + i;
         process_close_fd_for_proc(proc, fd);
     }
+
+    // 进程整体退出时，标准输入输出上的 pipe 绑定也应一并解除，
+    // 避免已经退出的进程仍通过兼容字段“看起来还持有 pipe 引用”。
+    proc->stdin_pipe_fd = -1;
+    proc->stdout_pipe_fd = -1;
+    proc->stdin_redirect_from_pipe = 0;
+    proc->stdout_redirect_to_pipe = 0;
+    process_pipe_buffer.read_open = process_pipe_has_read_reference();
+    process_pipe_buffer.write_open = process_pipe_has_write_reference();
 }
 
 // 关闭当前进程的一个教学版 fd：当前既支持普通文件 fd，也支持最小 pipe read/write fd。

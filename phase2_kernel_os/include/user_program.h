@@ -36,7 +36,10 @@
     X(PROGRAM_DUP2_TEST, 23, "dup2_test", 1)                    \
     X(PROGRAM_FORK_FD_TEST, 24, "fork_fd_test", 1)              \
     X(PROGRAM_PIPE_FORK_DUP2_TEST, 25, "pipe_fork_dup2_test", 1)\
-    X(PROGRAM_PIPE_CLOSE_TEST, 26, "pipe_close_test", 1)
+    X(PROGRAM_PIPE_CLOSE_TEST, 26, "pipe_close_test", 1)        \
+    X(PROGRAM_EXEC_FD_TEST, 27, "exec_fd_test", 1)              \
+    X(PROGRAM_EXEC_FD_WRITER, 28, "exec_fd_writer", 0)          \
+    X(PROGRAM_EXEC_FD_READER, 29, "exec_fd_reader", 0)
 
 // program_id：统一表达内置用户程序身份，避免在 shell / exec / process 里散落魔法数字。
 enum user_program_id {

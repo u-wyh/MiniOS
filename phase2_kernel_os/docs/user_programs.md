@@ -46,6 +46,9 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `PROGRAM_FORK_FD_TEST = 24`
 - `PROGRAM_PIPE_FORK_DUP2_TEST = 25`
 - `PROGRAM_PIPE_CLOSE_TEST = 26`
+- `PROGRAM_EXEC_FD_TEST = 27`
+- `PROGRAM_EXEC_FD_WRITER = 28`
+- `PROGRAM_EXEC_FD_READER = 29`
 
 其中：
 
@@ -80,6 +83,9 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `fork_fd_test -> PROGRAM_FORK_FD_TEST`
 - `pipe_fork_dup2_test -> PROGRAM_PIPE_FORK_DUP2_TEST`
 - `pipe_close_test -> PROGRAM_PIPE_CLOSE_TEST`
+- `exec_fd_test -> PROGRAM_EXEC_FD_TEST`
+- `exec_fd_writer -> PROGRAM_EXEC_FD_WRITER`
+- `exec_fd_reader -> PROGRAM_EXEC_FD_READER`
 
 其中 shell 默认直接暴露给用户的程序主要是：
 
@@ -100,6 +106,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `fork_fd_test`
 - `pipe_fork_dup2_test`
 - `pipe_close_test`
+- `exec_fd_test`
 - `loop`
 - `loop_exit`
 - `sleep_test`
@@ -1142,3 +1149,35 @@ run pipe_close_test
 2. `pipe_close_test: read close write handled`
 3. `pipe_close_test: double close handled`
 4. `pipe_close_test: ok`
+
+## 41. 用户态 exec_fd_test / exec_fd_writer / exec_fd_reader
+
+Task89 新增了三项与 exec + fd 保留语义相关的用户态程序：
+
+1. `exec_fd_test`
+2. `exec_fd_writer`
+3. `exec_fd_reader`
+
+当前最主要的验证入口是：
+
+```text
+run exec_fd_test
+```
+
+`exec_fd_test` 当前验证：
+
+1. 父进程 `pipe(fds)`
+2. 父进程 `fork()`
+3. 子进程 `dup2(fds[1], 1)`
+4. 子进程 `exec(exec_fd_writer)`
+5. 父进程 `waitpid()`
+6. 父进程从 `fds[0]` 读回 `message from exec writer\n`
+
+它主要说明：
+
+1. 当前教学版 `exec` 默认保留 fd table
+2. exec 后 `fd=1` 没有被重置
+3. pipe write fd 经过 `dup2(..., 1)` 之后，exec 后的新程序仍然能继续通过 stdout 写入 pipe
+
+`exec_fd_reader` 当前作为后续更完整用户态 pipeline demo 的积木程序保留，
+它会从 `fd=0` 读取数据，再通过 `fd=1` 输出。

@@ -45,6 +45,8 @@ static struct process_fd_entry* process_fd_get_entry(struct process* proc, int f
 static int process_alloc_fd_slot(struct process* proc);
 static int process_alloc_pipe_fd(struct process* proc, int fd_type);
 static void process_fd_reset_slot(struct process* proc, int slot);
+static int process_pipe_has_read_reference(void);
+static int process_pipe_has_write_reference(void);
 static int process_close_fd_for_proc(struct process* proc, int fd);
 static void process_close_all_fds_for_proc(struct process* proc);
 static void process_copy_fd_table(struct process* child, const struct process* parent);

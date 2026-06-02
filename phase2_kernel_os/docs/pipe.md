@@ -251,6 +251,18 @@ Task88 之后，教学版 pipe close 语义也更清楚了：
 
 因此这仍然只是教学版 close 语义整理，不是完整 UNIX pipe 生命周期。
 
+Task89 之后，pipe / fork / dup2 / exec 这条路线已经能串起来：
+
+1. `pipe(fds)`
+2. `fork()`
+3. 子进程 `dup2(fds[1], 1)`
+4. 子进程 `exec(exec_fd_writer)`
+5. `exec` 后 writer 程序继续通过 `write(1, ...)` 写 pipe
+6. 父进程从 `fds[0]` 读回数据
+
+这说明当前教学版系统已经具备最小“exec 后保留 pipe stdout 绑定”的条件，
+但仍然不是完整 UNIX pipeline，也还没有并发阻塞 pipe。
+
 ## 9. 当前不支持的真实 UNIX pipe 能力
 
 当前教学版 pipe 还不支持：

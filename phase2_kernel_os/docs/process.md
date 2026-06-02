@@ -92,3 +92,25 @@ Task88 没有重写完整进程生命周期，而是补齐了当前教学版 `ex
 4. 子进程退出后，不应错误清空父进程稍后还要读取的 pipe buffer 数据
 
 所以当前更准确地说，是“当前进程退出时清理自己的 fd 视图”，而不是完整 UNIX close/release 语义。
+
+## 8. Task89：fork 与 exec 的区别
+
+Task89 重点整理了当前教学版 `exec` 会替换什么、保留什么：
+
+1. `fork`：
+   - 创建一个新的进程对象
+   - 复制父进程当前的 fd 视图
+   - 子进程继续从相同的用户态返回点执行
+2. `exec`：
+   - 不创建新进程
+   - 只替换当前进程的用户镜像与返回现场
+   - 默认保留当前 fd table
+   - 不主动重置 `fd=0 / fd=1`
+
+因此当前 MiniOS 已经具备最小语义：
+
+1. `dup2(pipe_write_fd, 1)`
+2. `exec(writer_program)`
+3. writer 程序继续通过 `write(1, ...)` 把数据写进 pipe
+
+这一步已经足以为后续用户态 pipeline demo 铺路，但仍然不是完整 POSIX exec。

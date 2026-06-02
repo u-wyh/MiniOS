@@ -3339,3 +3339,46 @@ TODO：
 - Task89 可继续整理 exec 与 fd 保留语义
 - Task90 可继续做用户态 pipeline demo
 - Task91 可继续探索并发 pipe / 阻塞读写雏形
+
+## ✅ Task89：exec 与 fd 保留语义整理
+
+本轮目标：
+
+- 明确当前教学版 `exec` 默认保留 fd table。
+- 验证 `exec` 后 `fd=0 / fd=1` 不会被重置。
+- 为后续用户态 pipeline demo 做准备。
+
+已完成：
+
+- 当前 `exec` 语义明确为：
+  - 替换当前进程的用户镜像
+  - 保留当前进程已有 fd table
+  - 不主动关闭普通文件 fd / pipe fd
+  - 当前也没有 close-on-exec
+- 新增用户态：
+  - `exec_fd_test`
+  - `exec_fd_writer`
+  - `exec_fd_reader`
+- 当前 `exec_fd_test` 验证链路是：
+  - 父进程 `pipe(fds)`
+  - 父进程 `fork()`
+  - 子进程 `dup2(fds[1], 1)`
+  - 子进程 `exec(exec_fd_writer)`
+  - 父进程 `waitpid()`
+  - 父进程 `read(fds[0])`
+  - 读回 `message from exec writer\n`
+
+当前限制：
+
+- 当前不是完整 POSIX exec
+- 当前没有 close-on-exec
+- 当前没有环境变量
+- 当前没有完整 argv/envp
+- 当前仍然只有一个全局教学版 pipe buffer
+- 当前还不是完整 UNIX pipeline
+
+TODO：
+
+- Task90 可继续做用户态 pipeline demo
+- Task91 可继续整理 exec 参数传递
+- Task92 可继续探索阻塞 pipe / 并发 pipe 雏形

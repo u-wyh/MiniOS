@@ -84,6 +84,9 @@ static const unsigned char info_elf[] = {
 #include "../user_program_blobs/fork_fd_test_elf.inc"
 #include "../user_program_blobs/pipe_fork_dup2_test_elf.inc"
 #include "../user_program_blobs/pipe_close_test_elf.inc"
+#include "../user_program_blobs/exec_fd_test_elf.inc"
+#include "../user_program_blobs/exec_fd_writer_elf.inc"
+#include "../user_program_blobs/exec_fd_reader_elf.inc"
 
 
 // fork 文件：父进程 fork 后等待子进程退出，子进程输出后以状态码 7 退出
@@ -270,6 +273,9 @@ static struct file file_table[] = {
     {"fork_fd_test", (void*)fork_fd_test_elf, (uint32_t)sizeof(fork_fd_test_elf)},
     {"pipe_fork_dup2_test", (void*)pipe_fork_dup2_test_elf, (uint32_t)sizeof(pipe_fork_dup2_test_elf)},
     {"pipe_close_test", (void*)pipe_close_test_elf, (uint32_t)sizeof(pipe_close_test_elf)},
+    {"exec_fd_test", (void*)exec_fd_test_elf, (uint32_t)sizeof(exec_fd_test_elf)},
+    {"exec_fd_writer", (void*)exec_fd_writer_elf, (uint32_t)sizeof(exec_fd_writer_elf)},
+    {"exec_fd_reader", (void*)exec_fd_reader_elf, (uint32_t)sizeof(exec_fd_reader_elf)},
     {"fork", (void*)fork_elf, (uint32_t)sizeof(fork_elf)},
     {"execchild", (void*)execchild_elf, (uint32_t)sizeof(execchild_elf)},
     {"forkexec", (void*)forkexec_elf, (uint32_t)sizeof(forkexec_elf)}

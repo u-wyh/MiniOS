@@ -344,6 +344,63 @@ static void process_fd_reset_slot(struct process* proc, int slot) {
     proc->fd_table[slot].offset = 0;
 }
 
+// 扫描当前系统里是否仍有人持有教学版 pipe 读端引用。
+// 当前没有完整引用计数，因此这里用“遍历 PCB + fd 表项/标准入口绑定”的方式做最小近似。
+static int process_pipe_has_read_reference(void) {
+    int i;
+    int j;
+
+    for (i = 0; i < PROCESS_MAX; i++) {
+        if (process_table[i].state == PROCESS_UNUSED) {
+            continue;
+        }
+
+        if (process_table[i].stdin_redirect_from_pipe != 0) {
+            return 1;
+        }
+
+        for (j = 0; j < PROCESS_MAX_OPEN_FILES; j++) {
+            if (process_table[i].fd_table[j].used == 0) {
+                continue;
+            }
+
+            if (process_table[i].fd_table[j].type == PROCESS_FD_TYPE_PIPE_READ) {
+                return 1;
+            }
+        }
+    }
+
+    return 0;
+}
+
+// 扫描当前系统里是否仍有人持有教学版 pipe 写端引用。
+static int process_pipe_has_write_reference(void) {
+    int i;
+    int j;
+
+    for (i = 0; i < PROCESS_MAX; i++) {
+        if (process_table[i].state == PROCESS_UNUSED) {
+            continue;
+        }
+
+        if (process_table[i].stdout_redirect_to_pipe != 0) {
+            return 1;
+        }
+
+        for (j = 0; j < PROCESS_MAX_OPEN_FILES; j++) {
+            if (process_table[i].fd_table[j].used == 0) {
+                continue;
+            }
+
+            if (process_table[i].fd_table[j].type == PROCESS_FD_TYPE_PIPE_WRITE) {
+                return 1;
+            }
+        }
+    }
+
+    return 0;
+}
+
 // 教学版内核内部 dup2 雏形：把 oldfd 对应对象复制或绑定到 newfd。
 // 当前支持 newfd=0/1 的标准入口重定向，以及 newfd>=3 的 fd 表项复制；不实现引用计数或完整 POSIX 语义。
 static int process_fd_dup2(struct process* proc, int oldfd, int newfd) {

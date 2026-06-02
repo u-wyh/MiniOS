@@ -257,6 +257,8 @@ int process_exec_program_args(int program_id, int argc, const char* const* argv,
         return arg_result;
     }
 
+    // 当前教学版 exec 只替换“用户镜像 + 返回现场”，不会主动清空 fd table，
+    // 因此 exec 前已经通过 dup2 / pipe / redirect 建好的 fd 关系会继续保留。
     process_debug_exec_event("begin", (unsigned int)proc->pid, (unsigned int)proc->parent_pid, (unsigned int)program_id);
     exec_result = process_exec_descriptor(proc, target_program);
     if (exec_result != 0) {

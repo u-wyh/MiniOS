@@ -635,3 +635,23 @@
   - `-> close 语义整理`
   - `-> 用户态组合测试`
 - 当前仍然只有一个全局教学版 pipe buffer，也没有引用计数。
+
+## Task89：exec 与 fd 保留语义整理
+
+- 当前任务是“exec 替换镜像，但保留 fd 视图”的语义整理任务。
+- 本轮之后：
+  - `exec` 默认保留当前进程 fd table
+  - `fd=0 / fd=1` 在 exec 后不会被重置
+  - 普通文件 fd / pipe fd 在 exec 后仍然有效
+- 当前 Phase2 数据流链路可以概括为：
+  - `fd 抽象`
+  - `-> pipe / dup2 / fork`
+  - `-> exec 后 fd 保留`
+  - `-> 用户态组合测试`
+- 新增 `exec_fd_test` 用来验证：
+  - `pipe()`
+  - `fork()`
+  - `dup2()`
+  - `exec()`
+  - `read/write`
+- 当前仍然不是完整 POSIX exec，也没有 close-on-exec。
