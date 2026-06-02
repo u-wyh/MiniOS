@@ -200,18 +200,26 @@ Task84 之后，MiniOS 额外新增了教学版 `pipe()` syscall 雏形：
 
 因此它还不是完整 UNIX pipe object，只是把“shell 内部 pipe”进一步向“用户可见 fd 资源”推进了一步。
 
+Task85 之后，pipe fd 还可以继续通过用户态 `dup2` 复制：
+
+1. `dup2(pipe_write_fd, newfd)`
+   - 可以把 pipe 写端复制到另一个教学版 fd 位置
+2. `dup2(pipe_read_fd, newfd)`
+   - 可以把 pipe 读端复制到另一个教学版 fd 位置
+3. 这为后续用户态自己组合 `pipe + dup2 + fork` 奠定了接口基础
+4. 当前仍然没有 fork 后共享 pipe fd，也没有多个独立 pipe object
+
 ## 9. 当前不支持的真实 UNIX pipe 能力
 
 当前教学版 pipe 还不支持：
 
-1. 用户态 `pipe()` syscall
-2. `dup2()`
-3. fork 后共享 pipe fd
-4. 两端并发执行
-5. 阻塞读写
-6. 多级管道
-7. 动态扩容
-8. 多个 pipe object
-9. 调度器驱动的生产者/消费者并发协作
+1. fork 后共享 pipe fd
+2. 两端并发执行
+3. 阻塞读写
+4. 多级管道
+5. 动态扩容
+6. 多个 pipe object
+7. 调度器驱动的生产者/消费者并发协作
+8. 完整 POSIX `dup2` / `pipe` 生命周期语义
 
 所以它更像“内核里的一个临时顺序缓冲区”，而不是完整 UNIX pipe 子系统。

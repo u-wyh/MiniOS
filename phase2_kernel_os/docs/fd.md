@@ -275,3 +275,21 @@ Task84 之后，用户态 `pipe()` syscall 也开始直接返回一对 pipe fd�
    - `FD_PIPE_WRITE`
 
 这说明 pipe 不再只由 shell 内部隐式创建，也可以作为当前进程显式拿到的一对 fd 来测试读写。
+
+Task85 之后，用户态也可以直接调用 `dup2(oldfd, newfd)`：
+
+1. `oldfd`
+   - 表示已有 fd
+2. `newfd`
+   - 表示希望绑定成同一资源入口的新 fd 位置
+3. 成功时返回 `newfd`
+4. 失败时返回 `-1`
+5. `oldfd == newfd` 时直接稳定返回 `newfd`
+6. `newfd` 已打开时，当前沿用教学版“先清理再覆盖”语义
+
+当前仍然不是完整 POSIX `dup2`，原因主要是：
+
+1. 没有引用计数
+2. `newfd >= 3` 时当前仍是表项复制，不共享同一个 offset 对象
+3. 还没有 fork 后共享 fd
+4. 还没有 close-on-exec

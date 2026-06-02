@@ -80,6 +80,7 @@ static const unsigned char info_elf[] = {
 #include "../user_program_blobs/tail_elf.inc"
 #include "../user_program_blobs/sort_elf.inc"
 #include "../user_program_blobs/pipe_test_elf.inc"
+#include "../user_program_blobs/dup2_test_elf.inc"
 
 
 // fork 文件：父进程 fork 后等待子进程退出，子进程输出后以状态码 7 退出
@@ -262,6 +263,7 @@ static struct file file_table[] = {
     {"tail", (void*)tail_elf, (uint32_t)sizeof(tail_elf)},
     {"sort", (void*)sort_elf, (uint32_t)sizeof(sort_elf)},
     {"pipe_test", (void*)pipe_test_elf, (uint32_t)sizeof(pipe_test_elf)},
+    {"dup2_test", (void*)dup2_test_elf, (uint32_t)sizeof(dup2_test_elf)},
     {"fork", (void*)fork_elf, (uint32_t)sizeof(fork_elf)},
     {"execchild", (void*)execchild_elf, (uint32_t)sizeof(execchild_elf)},
     {"forkexec", (void*)forkexec_elf, (uint32_t)sizeof(forkexec_elf)}

@@ -49,6 +49,7 @@
 | 31 | `SYS_FD_WRITE` | `user_fd_write` | `ebx=fd` `ecx=buf` `edx=size` | 字节数 / 负值 | 通过 fd 向 RAMFS 文件写入文本内容 |
 | 32 | `SYS_APPEND_FILE` | `user_append_file` | `ebx=path` `ecx=text` | 追加字节数 / 负值 | 向 RAMFS 文件末尾追加文本内容 |
 | 40 | `SYS_PIPE` | `user_pipe` / `pipe_test` 内部包装 | `ebx=int fds[2]` | `0` / 负值 | 为当前进程创建一对教学版 pipe fd |
+| 41 | `SYS_DUP2` | `user_dup2` / `dup2_test` 内部包装 | `ebx=oldfd` `ecx=newfd` | `newfd` / `-1` | 把 oldfd 复制或绑定到 newfd |
 
 说明：
 
@@ -266,7 +267,29 @@ write(fds[1], ...)
 read(fds[0], ...)
 ```
 
-## 14. Task65 与 syscall 的关系
+## 14. SYS_DUP2 当前语义
+
+当前教学版 `dup2(oldfd, newfd)` 的最小语义是：
+
+1. 内部复用内核既有 `fd_dup2`
+2. `oldfd` 必须是一个当前已打开的教学版 fd
+3. `newfd` 当前支持：
+   - `0`
+   - `1`
+   - `>= 3` 的普通教学版 fd 编号
+4. 成功返回 `newfd`
+5. 失败统一返回 `-1`
+6. `oldfd == newfd` 时稳定返回 `newfd`
+
+当前限制：
+
+1. 不是完整 POSIX `dup2`
+2. 不支持引用计数
+3. `newfd >= 3` 时仍然是教学版表项复制，不共享同一个 file object
+4. 不支持 fork 后共享 fd
+5. 不支持 close-on-exec
+
+## 15. Task65 与 syscall 的关系
 
 Task65 新增的是 shell 语法层的 `>` / `>>`，本轮没有再新增新的 syscall 编号。
 

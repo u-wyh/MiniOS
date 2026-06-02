@@ -175,6 +175,11 @@ static int user_pipe(int* fds) {
     return user_syscall1(SYS_PIPE, (int)fds);
 }
 
+// 为当前进程执行教学版 dup2：把 oldfd 复制或绑定到 newfd，成功返回 newfd。
+static int user_dup2(int oldfd, int newfd) {
+    return user_syscall2(SYS_DUP2, oldfd, newfd);
+}
+
 // 通知内核：该 shell 子进程的重定向/pipe 配置已经完成，可以开始真正执行用户态子分支。
 static int user_set_launch_ready(int pid) {
     return user_syscall1(SYS_SET_LAUNCH_READY, pid);

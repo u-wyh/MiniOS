@@ -394,6 +394,19 @@ static int process_fd_dup2(struct process* proc, int oldfd, int newfd) {
     return 0;
 }
 
+// 当前进程的教学版 dup2 syscall 入口：复用内核内部 fd_dup2，并把“成功返回 newfd / 失败返回 -1”稳定暴露给用户态。
+int process_dup2(int oldfd, int newfd) {
+    if (current_process == (struct process*)0) {
+        return -1;
+    }
+
+    if (process_fd_dup2(current_process, oldfd, newfd) < 0) {
+        return -1;
+    }
+
+    return newfd;
+}
+
 // 判断一个用户态地址范围是否落在当前进程已经建立的用户页或用户栈里。
 // 这里只做教学版最小检查，用来避免 pipe(fds) 这类 syscall 直接对空指针或明显越界地址写回。
 static int process_user_range_is_accessible(struct process* proc, uint32_t address, uint32_t size) {

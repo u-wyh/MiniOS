@@ -568,5 +568,21 @@
   - 用户程序可以调用 `pipe(fds)`
   - `fds[0]` 返回 `pipe read fd`
   - `fds[1]` 返回 `pipe write fd`
-  - `pipe_test` 可以直接验证 pipe fd 的最小读写与 EOF 语义
+- `pipe_test` 可以直接验证 pipe fd 的最小读写与 EOF 语义
 - 当前仍然只支持一个全局教学版 pipe buffer，不支持多个独立 pipe object。
+
+## Task85：dup2 syscall 雏形
+
+- 当前任务是把 `dup2` 从内核内部能力继续暴露给用户态。
+- 当前 Phase2 数据流链路可以概括为：
+  - `fd 抽象`
+  - `-> pipe syscall`
+  - `-> dup2 syscall`
+  - `-> 后续 fork fd 继承`
+  - `-> 用户态组合 pipe`
+- 本轮之后：
+  - 用户程序可以调用 `dup2(oldfd, newfd)`
+  - 成功时返回 `newfd`
+  - 失败时返回 `-1`
+  - `dup2_test` 可以直接验证 pipe fd 的复制、读写和最小错误路径
+- 当前仍然只是教学版 `dup2`，不支持引用计数、close-on-exec 或 fork 后共享 fd。

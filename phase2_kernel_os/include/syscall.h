@@ -70,6 +70,8 @@
 #define SYS_GET_LAUNCH_READY 39
 // 教学版 pipe() syscall 雏形：为当前进程分配一对 pipe fd，并把结果写回用户态 int fds[2]。
 #define SYS_PIPE 40
+// 教学版 dup2() syscall 雏形：把 oldfd 复制/绑定到 newfd，供用户态最小重定向实验。
+#define SYS_DUP2 41
 
 // int 0x80 进入内核后，栈上会按 pusha + CPU 自动压栈的顺序保存现场
 struct interrupt_frame {

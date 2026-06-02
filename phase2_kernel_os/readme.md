@@ -3182,3 +3182,42 @@ TODO：
 - Task85 可继续清理 pipe fd 生命周期
 - 可继续做用户态 `dup2()` syscall 雏形
 - 可继续推进更真实的 pipe object 模型
+
+## ✅ Task85：dup2 syscall 雏形 / 用户态 fd 重定向能力
+
+本轮目标：
+
+- 不改变现有 shell pipe / redirect 行为。
+- 把内核内部 `fd_dup2` 暴露成最小用户态 `dup2(oldfd, newfd)` syscall。
+- 新增用户态 `dup2_test` 程序验证 pipe fd 的复制与读写。
+
+已完成：
+
+- 新增 `SYS_DUP2`
+- 新增内核 `process_dup2(oldfd, newfd)`，内部复用既有 `fd_dup2`
+- 成功时返回 `newfd`
+- 失败时统一返回 `-1`
+- `oldfd == newfd` 时稳定返回 `newfd`
+- 新增用户态 `dup2_test` 程序，当前采用“复制到普通 fd=5/6 再读写”的测试方案，避免覆盖 `stdout`
+- `dup2_test` 可以验证：
+  - `dup2(pipe_write_fd, 5)` 后通过 `write(5, ...)` 写入 pipe
+  - `dup2(pipe_read_fd, 6)` 后通过 `read(6, ...)` 读取 pipe
+  - `dup2(valid_fd, valid_fd)` 的稳定返回
+  - `dup2(-1, 5)` / `dup2(valid_fd, -1)` / `dup2(valid_fd, 99)` 的最小错误路径
+
+当前限制：
+
+- 仍然不是完整 POSIX `dup2`
+- 不支持引用计数
+- 不支持 close-on-exec
+- 不支持 fork 后 fd 共享
+- 不支持并发 pipe
+- 不支持阻塞 pipe
+- 不支持完整错误码
+- 当前 `newfd >= 3` 仍是教学版“表项复制”，不是共享同一个 file object
+
+TODO：
+
+- Task86 可继续推进 fork 后 fd 继承语义
+- Task87 可继续做用户态 `fork + pipe + dup2` 组合实验
+- Task88 可继续探索并发 pipe / 阻塞读写雏形

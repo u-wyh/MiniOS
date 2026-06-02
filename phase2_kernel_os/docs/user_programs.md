@@ -42,6 +42,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `PROGRAM_TAIL = 20`
 - `PROGRAM_SORT = 21`
 - `PROGRAM_PIPE_TEST = 22`
+- `PROGRAM_DUP2_TEST = 23`
 
 其中：
 
@@ -72,6 +73,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `tail -> PROGRAM_TAIL`
 - `sort -> PROGRAM_SORT`
 - `pipe_test -> PROGRAM_PIPE_TEST`
+- `dup2_test -> PROGRAM_DUP2_TEST`
 
 其中 shell 默认直接暴露给用户的程序主要是：
 
@@ -88,6 +90,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `tail`
 - `sort`
 - `pipe_test`
+- `dup2_test`
 - `loop`
 - `loop_exit`
 - `sleep_test`
@@ -1028,3 +1031,31 @@ run pipe_test
 2. `FD_PIPE_WRITE` 可以被 `write`
 3. `FD_PIPE_READ` 可以被 `read`
 4. 当前教学版 pipe 的 EOF 语义仍然成立
+
+## 37. 用户态 dup2_test 程序
+
+Task85 新增了最小用户态 `dup2_test` 程序，用来验证教学版 `dup2()` syscall。
+
+当前用法：
+
+```text
+run dup2_test
+```
+
+当前语义：
+
+1. `dup2_test` 会先调用 `pipe(fds)`
+2. 然后执行 `dup2(fds[1], 5)`，把 pipe 写端复制到普通 fd `5`
+3. 通过 `write(5, ...)` 验证复制后的 pipe write fd 可用
+4. 再执行 `dup2(fds[0], 6)`，把 pipe 读端复制到普通 fd `6`
+5. 通过 `read(6, ...)` 验证复制后的 pipe read fd 可用
+6. 同时验证：
+   - `dup2(valid_fd, valid_fd)` 的稳定返回
+   - `dup2(-1, 5)` / `dup2(valid_fd, -1)` / `dup2(valid_fd, 99)` 的最小错误路径
+
+它的主要作用是验证：
+
+1. 用户态已经可以直接调用 `dup2()`
+2. `dup2` 当前可以复制 pipe write fd
+3. `dup2` 当前可以复制 pipe read fd
+4. `dup2` 当前最小错误路径不会导致 panic

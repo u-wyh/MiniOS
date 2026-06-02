@@ -376,6 +376,12 @@ void syscall_handle(struct interrupt_frame* frame) {
         return;
     }
 
+    // SYS_DUP2(oldfd, newfd)：ebx=oldfd，ecx=newfd；成功返回 newfd，失败返回 -1。
+    if (frame->eax == SYS_DUP2) {
+        frame->eax = (unsigned int)process_dup2((int)frame->ebx, (int)frame->ecx);
+        return;
+    }
+
     // 未知 syscall：当前统一返回 -1，并在控制台打印一条最小调试信息。
     print_string("unknown syscall\n");
     frame->eax = (unsigned int)-1;
