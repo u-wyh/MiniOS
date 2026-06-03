@@ -3431,3 +3431,56 @@ TODO：
 - Task92 可继续做 pipe 并发/阻塞读写雏形
 - Task93 可继续做用户态 mini_pipeline 命令
 - Task94 可继续做多进程 pipeline 文档和演示脚本
+
+## ✅ Task91：exec 参数传递整理 / argv 语义补齐
+
+本轮目标：
+
+- 明确当前教学版 `exec` 的 `argc / argv` 传递语义
+- 新增 `exec_args_test`
+- 新增 `exec_args_target`
+- 验证 `exec` 后目标程序能收到参数
+
+已完成：
+
+- 梳理并确认当前 `SYS_EXEC_ARGS` 已经支持：
+  - `argc`
+  - `argv[0]`
+  - 普通字符串参数
+  - 固定参数数量上限
+  - 固定参数长度上限
+- 当前参数链路明确为：
+  - `shell argv`
+  - `-> SYS_EXEC_ARGS`
+  - `-> PCB 暂存 user_argc / user_argv`
+  - `-> 新程序通过 SYS_GET_ARGC / SYS_GET_ARG 读取`
+- 新增 `exec_args_test`
+  - 调用 `exec_args_target` 并传入：
+    - `argv[0] = "exec_args_target"`
+    - `argv[1] = "hello"`
+    - `argv[2] = "MiniOS"`
+- 新增 `exec_args_target`
+  - 打印收到的 `argc / argv`
+  - 输出 `exec_args_target: ok`
+
+当前支持：
+
+- `argc`
+- `argv[0]`
+- 普通字符串参数
+- 固定参数数量上限
+- 固定参数长度上限
+
+当前限制：
+
+- 不支持 `envp`
+- 不支持完整 POSIX `execve`
+- 不支持复杂用户栈参数布局
+- 不支持引号和转义解析
+- 不支持完整 shell argv parser
+
+TODO：
+
+- Task92 可继续做用户态 pipeline demo 支持带参数程序
+- Task93 可继续整理 shell argv parser
+- Task94 可继续做阻塞 pipe / 并发 pipe 雏形

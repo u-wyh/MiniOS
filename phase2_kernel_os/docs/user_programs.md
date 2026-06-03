@@ -52,6 +52,8 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `PROGRAM_PIPELINE_DEMO = 30`
 - `PROGRAM_PIPELINE_WRITER = 31`
 - `PROGRAM_PIPELINE_READER = 32`
+- `PROGRAM_EXEC_ARGS_TEST = 33`
+- `PROGRAM_EXEC_ARGS_TARGET = 34`
 
 其中：
 
@@ -92,6 +94,8 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `pipeline_demo -> PROGRAM_PIPELINE_DEMO`
 - `pipeline_writer -> PROGRAM_PIPELINE_WRITER`
 - `pipeline_reader -> PROGRAM_PIPELINE_READER`
+- `exec_args_test -> PROGRAM_EXEC_ARGS_TEST`
+- `exec_args_target -> PROGRAM_EXEC_ARGS_TARGET`
 
 其中 shell 默认直接暴露给用户的程序主要是：
 
@@ -114,6 +118,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `pipe_close_test`
 - `exec_fd_test`
 - `pipeline_demo`
+- `exec_args_test`
 - `loop`
 - `loop_exit`
 - `sleep_test`
@@ -163,7 +168,7 @@ run echo hello minios
 
 ## 7. 参数限制
 
-- 最大参数数量：`8`
+- 最大参数数量：`10`
 - 单个参数最大长度：`31` 个可见字符，外加结尾 `'\0'`
 - 参数过多：shell 会直接报错 `Too many args`，不会继续 `fork/exec`
 - 参数过长：shell 会直接报错 `Arg too long`，内核 `process_copy_user_args()` 也会做兜底校验
@@ -1245,3 +1250,43 @@ run pipeline_demo
 4. `exec()`
 
 形成一条最小 `producer | consumer` 演示链路。
+
+## 43. 用户态 exec_args_test / exec_args_target
+
+Task91 新增了两项与教学版 `exec` 参数传递相关的用户程序：
+
+1. `exec_args_test`
+2. `exec_args_target`
+
+当前真正暴露给 shell 直接运行的是：
+
+```text
+run exec_args_test
+```
+
+`exec_args_test` 的作用是：
+
+1. 构造最小 argv：
+   - `argv[0] = "exec_args_target"`
+   - `argv[1] = "hello"`
+   - `argv[2] = "MiniOS"`
+2. 调用 `SYS_EXEC_ARGS`
+3. 把当前进程替换成 `exec_args_target`
+
+`exec_args_target` 的作用是：
+
+1. 读取 `argc`
+2. 读取每一项 `argv[i]`
+3. 打印：
+   - `exec_args_target: argc = ...`
+   - `argv[0] = ...`
+   - `argv[1] = hello`
+   - `argv[2] = MiniOS`
+4. 最后输出 `exec_args_target: ok`
+
+这说明当前教学版 `exec` 已经具备最小参数传递能力：
+
+1. 支持 `argc`
+2. 支持 `argv[0]`
+3. 支持普通字符串参数
+4. 参数当前保存在 PCB 暂存区，由新程序通过 `SYS_GET_ARGC / SYS_GET_ARG` 读取

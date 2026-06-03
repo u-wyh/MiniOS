@@ -134,3 +134,35 @@ Task90 没有继续大改 `fork` 或 `exec` 主体，而是新增用户态 `pipe
 1. `fork` 后 fd 继承已经足以支撑父子两端拿到同一对 pipe fd
 2. `exec` 后 `fd=0 / fd=1` 绑定关系仍然保留
 3. 当前虽然还是教学版顺序模型，但已经能在用户态自己拼出最小 `producer | consumer` 链路
+
+## 10. Task91：exec 的 argc / argv 语义
+
+Task91 没有重写 `exec` 主体，而是把当前教学版参数传递路径补齐说明并新增验证程序：
+
+1. `SYS_EXEC_ARGS(program_id, argc, argv)`
+2. 内核把参数复制到当前进程 PCB 暂存区
+3. `exec` 替换当前用户镜像
+4. 新程序通过：
+   - `SYS_GET_ARGC`
+   - `SYS_GET_ARG`
+   读取自己的教学版 `argc / argv`
+
+当前 `exec` 会替换：
+
+1. 当前进程用户镜像
+2. 返回现场
+3. 当前程序名
+
+当前 `exec` 会保留：
+
+1. 当前进程 pid
+2. fd table
+3. `fd=0 / fd=1` 的教学版绑定关系
+4. pipe / redirect 已接好的数据流状态
+
+当前与 POSIX `execve` 的主要差距是：
+
+1. 没有 `envp`
+2. 没有完整用户栈参数布局
+3. `argv` 当前仍保存在 PCB 暂存区里
+4. 参数数量和长度使用固定上限

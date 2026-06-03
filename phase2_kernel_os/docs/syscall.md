@@ -26,7 +26,7 @@
 | 8 | `SYS_READ_CHAR` | `user_read_char` | 无 | ASCII / 阻塞后恢复 | 读取一个字符 |
 | 9 | `SYS_GET_ARGC` | 用户程序内部原始调用 | 无 | `argc` | 读取当前进程保存的教学版参数个数 |
 | 10 | `SYS_GET_ARG` | 用户程序内部原始调用 | `ebx=index` `ecx=buf` `edx=max_len` | 成功返回长度，失败返回负值 | 读取一项教学版 argv |
-| 11 | `SYS_EXEC_ARGS` | `user_exec_args` | `ebx=program_id` `ecx=argc` `edx=argv` | 成功后不回到旧镜像，失败返回负值 | 当前 shell 主要使用的 exec 入口 |
+| 11 | `SYS_EXEC_ARGS` | `user_exec_args` | `ebx=program_id` `ecx=argc` `edx=argv` | 成功后不回到旧镜像，失败返回负值 | 当前 shell 与 `exec_args_test` 主要使用的 exec 入口 |
 | 12 | `SYS_PS` | `user_ps_get` | `ebx=index` `ecx=process_info*` | 成功返回 `0`，越界/失败返回负值 | 逐条读取进程摘要 |
 | 13 | `SYS_KILL` | `user_kill` | `ebx=pid` | 成功返回 `0`，失败返回负值 | 教学版按 pid 终止目标进程 |
 | 14 | `SYS_WAIT_ANY` | 当前无统一 shell 封装 | 无 | 回收成功返回 pid，无可回收返回 `0`，失败返回负值 | 非阻塞回收任意 zombie 子进程 |
@@ -69,6 +69,42 @@
 7. `get_ticks` / `time`：直接返回当前 tick 数
 8. `exec` / `exec_args`：成功后当前进程镜像被替换，因此不会按“旧程序继续执行”的方式返回成功值
 9. `kill`：成功返回 `0`；目标不存在、目标是 init、目标是当前 shell、目标已经退出等情况返回负值
+
+## 5. SYS_EXEC_ARGS 当前参数模型
+
+当前 `SYS_EXEC_ARGS` 是教学版最小 exec 参数入口：
+
+1. `ebx = program_id`
+2. `ecx = argc`
+3. `edx = argv`
+
+当前支持：
+
+1. `argc`
+2. `argv[0]`
+3. 普通字符串参数
+4. 固定参数数量上限
+5. 固定参数长度上限
+
+当前限制：
+
+1. 不支持 `envp`
+2. 不支持完整 POSIX `execve`
+3. 不支持复杂用户栈参数布局
+4. 不支持引号和转义解析
+
+当前参数约束来自统一常量：
+
+1. 最大参数数量：`USER_PROGRAM_MAX_ARGS = 10`
+2. 单个参数最大长度：`USER_PROGRAM_MAX_ARG_LEN = 32`
+
+失败语义：
+
+1. `argc` 越界时返回负值
+2. `argv` 为 `NULL` 且 `argc > 0` 时返回负值
+3. 任一参数字符串过长时返回负值
+4. 参数复制失败时不会 panic
+5. exec 失败时不会主动清空 fd table
 
 因此，MiniOS 当前 syscall ABI 不是“所有接口都严格统一成 0/-1”，而是保留了少量教学上更直观的特殊返回。
 

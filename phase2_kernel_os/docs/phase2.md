@@ -680,3 +680,23 @@
   - 仍然只有一个全局教学版 pipe buffer
   - 没有并发阻塞 pipe
   - 不支持多级管道
+
+## Task91：exec 参数传递整理 / argv 语义补齐
+
+- 当前任务是“把教学版 exec 的 argc / argv 路径讲清楚，并新增最小验证程序”的参数语义整理任务。
+- 本轮之后：
+  - 新增 `exec_args_test`
+  - 新增 `exec_args_target`
+  - 明确 `SYS_EXEC_ARGS` 的最小参数模型：
+    - `argc`
+    - `argv[0]`
+    - 普通字符串参数
+- 当前 Phase2 数据流链路可以概括为：
+  - `shell argv`
+  - `-> SYS_EXEC_ARGS`
+  - `-> PCB 暂存参数`
+  - `-> 新程序通过 SYS_GET_ARGC / SYS_GET_ARG 读取`
+- 当前仍然不是完整 POSIX `execve`：
+  - 没有 `envp`
+  - 没有完整用户栈 `argc/argv` ABI
+  - 不支持复杂引号与转义
