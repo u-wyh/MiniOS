@@ -24,10 +24,11 @@ static void user_exit(int status) {
     }
 }
 
-// 主流程：只通过 fd=1 输出固定三行，供 pipeline_demo 验证 pipe 写端在 exec 后仍然有效。
+// 主流程：只通过 fd=1 输出固定多行，供 pipeline_demo 与 pipeline_args_demo 复用。
 void _start(void) {
-    user_write("pipeline writer line 1\n");
-    user_write("pipeline writer line 2\n");
-    user_write("pipeline writer line 3\n");
+    user_write("MiniOS line one\n");
+    user_write("normal line two\n");
+    user_write("MiniOS line three\n");
+    user_write("tail line four\n");
     user_exit(0);
 }

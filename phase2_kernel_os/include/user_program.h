@@ -44,7 +44,8 @@
     X(PROGRAM_PIPELINE_WRITER, 31, "pipeline_writer", 0)        \
     X(PROGRAM_PIPELINE_READER, 32, "pipeline_reader", 0)        \
     X(PROGRAM_EXEC_ARGS_TEST, 33, "exec_args_test", 1)          \
-    X(PROGRAM_EXEC_ARGS_TARGET, 34, "exec_args_target", 0)
+    X(PROGRAM_EXEC_ARGS_TARGET, 34, "exec_args_target", 0)      \
+    X(PROGRAM_PIPELINE_ARGS_DEMO, 35, "pipeline_args_demo", 1)
 
 // program_id：统一表达内置用户程序身份，避免在 shell / exec / process 里散落魔法数字。
 enum user_program_id {

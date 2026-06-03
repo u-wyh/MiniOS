@@ -279,6 +279,21 @@ Task90 之后，这条路线已经进一步扩展成一个完整的用户态 dem
 
 这说明当前教学版 pipe 已经不仅能被 shell 内部使用，也能被用户态程序自己用 `pipe + fork + dup2 + exec` 组合出最小 `producer | consumer` 演示。
 
+Task92 之后，这个教学版 pipeline demo 还可以继续承接带参数 consumer：
+
+1. writer 继续是 `pipeline_writer`
+2. consumer 切换成 `grep MiniOS`
+3. `grep` 的关键字参数通过 `exec(argc, argv)` 传入
+4. `grep` 再从 `fd=0` 读取 pipe 数据并输出匹配结果
+
+这说明当前教学版 pipe 已经能和：
+
+1. `dup2`
+2. `exec`
+3. `argv`
+
+一起工作，而不只是跑固定 writer/reader 程序。
+
 ## 9. 当前不支持的真实 UNIX pipe 能力
 
 当前教学版 pipe 还不支持：

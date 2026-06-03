@@ -166,3 +166,17 @@ Task91 没有重写 `exec` 主体，而是把当前教学版参数传递路径�
 2. 没有完整用户栈参数布局
 3. `argv` 当前仍保存在 PCB 暂存区里
 4. 参数数量和长度使用固定上限
+
+## 11. Task92：带参数 pipeline demo
+
+Task92 没有继续大改 `fork` 或 `exec` 主体，而是新增 `pipeline_args_demo` 来验证：
+
+1. writer 子进程能像 Task90 一样执行 `dup2(pipe_write_fd, 1)` 后 `exec(pipeline_writer)`
+2. consumer 子进程能执行 `dup2(pipe_read_fd, 0)` 后 `exec(grep, argc=2, argv={"grep","MiniOS"})`
+3. `grep` 在 `exec` 后既能保留 `fd=0`，又能收到自己的 `argv[1]`
+
+这个 demo 说明：
+
+1. `fork` 后 fd 继承语义仍然足以支撑 pipeline 两端
+2. `exec` 后 fd 保留和 argv 传递已经能同时工作
+3. 当前教学版 pipeline 已经能运行“带参数 consumer”这一类更接近真实 shell 的场景

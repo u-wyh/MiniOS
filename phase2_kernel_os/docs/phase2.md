@@ -700,3 +700,23 @@
   - 没有 `envp`
   - 没有完整用户栈 `argc/argv` ABI
   - 不支持复杂引号与转义
+
+## Task92：用户态 pipeline demo 支持带参数程序 / argv + pipe 组合验证
+
+- 当前任务是“把 exec 参数传递和 pipe/fork/dup2 组合起来”的用户态 demo 验证任务。
+- 本轮之后：
+  - 新增 `pipeline_args_demo`
+  - 验证带参数程序可以作为 pipeline 右侧 consumer 运行
+- 当前 `pipeline_args_demo` 采用教学版顺序模型：
+  - writer 子进程 `exec(pipeline_writer)`
+  - consumer 子进程 `exec(grep, argv={"grep","MiniOS"})`
+- 当前 Phase2 数据流链路可以概括为：
+  - `pipe`
+  - `-> fork`
+  - `-> dup2`
+  - `-> exec(argc, argv)`
+  - `-> 带参数 consumer`
+- 当前仍然不是完整 UNIX pipeline：
+  - 仍然只有一个全局教学版 pipe buffer
+  - 没有并发阻塞 pipe
+  - 不支持多级管道

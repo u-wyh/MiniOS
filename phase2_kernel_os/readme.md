@@ -3484,3 +3484,47 @@ TODO：
 - Task92 可继续做用户态 pipeline demo 支持带参数程序
 - Task93 可继续整理 shell argv parser
 - Task94 可继续做阻塞 pipe / 并发 pipe 雏形
+
+## ✅ Task92：用户态 pipeline demo 支持带参数程序 / argv + pipe 组合验证
+
+本轮目标：
+
+- 新增 `pipeline_args_demo`
+- 验证 `pipe + fork + dup2 + exec(argv)` 能组合起来工作
+- 让带参数程序作为 pipeline 右侧 consumer 运行
+
+已完成：
+
+- 新增 `pipeline_args_demo`
+  - `pipe(fds)`
+  - `fork()` writer 子进程
+  - writer 子进程 `dup2(fds[1], 1)` 后 `exec(pipeline_writer)`
+  - 父进程 `waitpid(writer)`
+  - `fork()` consumer 子进程
+  - consumer 子进程 `dup2(fds[0], 0)` 后 `exec(grep, argc=2, argv={"grep","MiniOS"})`
+  - 父进程 `waitpid(consumer)`
+  - 最终输出 `pipeline_args_demo: ok`
+- 调整 `pipeline_writer`
+  - 当前输出多行文本
+  - 其中包含两行 `MiniOS`，便于验证 `grep MiniOS`
+
+这说明当前 MiniOS 已经可以在用户态组合：
+
+- `pipe()`
+- `fork()`
+- `dup2()`
+- `exec(argc, argv)`
+
+当前限制：
+
+- 当前不是完整 UNIX shell pipeline
+- 当前仍然只有一个全局教学版 pipe buffer
+- 当前不支持并发阻塞 pipe
+- 当前不支持多级管道
+- 当前没有完整 POSIX `execve`
+
+TODO：
+
+- Task93 可继续整理 shell argv parser
+- Task94 可继续做阻塞 pipe / 并发 pipe 雏形
+- Task95 可继续尝试用户态 pipeline demo 支持 `head -n 2` / `sort` / `wc`

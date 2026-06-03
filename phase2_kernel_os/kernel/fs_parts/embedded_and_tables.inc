@@ -92,6 +92,7 @@ static const unsigned char info_elf[] = {
 #include "../user_program_blobs/pipeline_reader_elf.inc"
 #include "../user_program_blobs/exec_args_test_elf.inc"
 #include "../user_program_blobs/exec_args_target_elf.inc"
+#include "../user_program_blobs/pipeline_args_demo_elf.inc"
 
 
 // fork 文件：父进程 fork 后等待子进程退出，子进程输出后以状态码 7 退出
@@ -286,6 +287,7 @@ static struct file file_table[] = {
     {"pipeline_reader", (void*)pipeline_reader_elf, (uint32_t)sizeof(pipeline_reader_elf)},
     {"exec_args_test", (void*)exec_args_test_elf, (uint32_t)sizeof(exec_args_test_elf)},
     {"exec_args_target", (void*)exec_args_target_elf, (uint32_t)sizeof(exec_args_target_elf)},
+    {"pipeline_args_demo", (void*)pipeline_args_demo_elf, (uint32_t)sizeof(pipeline_args_demo_elf)},
     {"fork", (void*)fork_elf, (uint32_t)sizeof(fork_elf)},
     {"execchild", (void*)execchild_elf, (uint32_t)sizeof(execchild_elf)},
     {"forkexec", (void*)forkexec_elf, (uint32_t)sizeof(forkexec_elf)}

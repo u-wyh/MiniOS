@@ -54,6 +54,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `PROGRAM_PIPELINE_READER = 32`
 - `PROGRAM_EXEC_ARGS_TEST = 33`
 - `PROGRAM_EXEC_ARGS_TARGET = 34`
+- `PROGRAM_PIPELINE_ARGS_DEMO = 35`
 
 其中：
 
@@ -96,6 +97,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `pipeline_reader -> PROGRAM_PIPELINE_READER`
 - `exec_args_test -> PROGRAM_EXEC_ARGS_TEST`
 - `exec_args_target -> PROGRAM_EXEC_ARGS_TARGET`
+- `pipeline_args_demo -> PROGRAM_PIPELINE_ARGS_DEMO`
 
 其中 shell 默认直接暴露给用户的程序主要是：
 
@@ -119,6 +121,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `exec_fd_test`
 - `pipeline_demo`
 - `exec_args_test`
+- `pipeline_args_demo`
 - `loop`
 - `loop_exit`
 - `sleep_test`
@@ -1290,3 +1293,51 @@ run exec_args_test
 2. 支持 `argv[0]`
 3. 支持普通字符串参数
 4. 参数当前保存在 PCB 暂存区，由新程序通过 `SYS_GET_ARGC / SYS_GET_ARG` 读取
+
+## 44. 用户态 pipeline_args_demo
+
+Task92 新增了一个更接近真实 pipeline 的用户态 demo：
+
+1. `pipeline_args_demo`
+
+当前真正暴露给 shell 直接运行的是：
+
+```text
+run pipeline_args_demo
+```
+
+当前教学版链路是：
+
+1. `pipeline_args_demo` 调用 `pipe(fds)`
+2. `fork()` writer 子进程
+3. writer 子进程 `dup2(fds[1], 1)` 后 `exec(pipeline_writer)`
+4. 父进程 `waitpid(writer)`
+5. `fork()` consumer 子进程
+6. consumer 子进程 `dup2(fds[0], 0)`
+7. consumer 子进程构造：
+   - `argv[0] = "grep"`
+   - `argv[1] = "MiniOS"`
+8. consumer 子进程 `exec(grep, argc=2, argv)`
+9. 父进程 `waitpid(consumer)`
+10. 最终输出 `pipeline_args_demo: ok`
+
+`pipeline_writer` 当前输出：
+
+1. `MiniOS line one`
+2. `normal line two`
+3. `MiniOS line three`
+4. `tail line four`
+
+因此 `grep MiniOS` 当前预期至少会匹配到：
+
+1. `MiniOS line one`
+2. `MiniOS line three`
+
+这个 demo 说明当前 MiniOS 已经能在用户态组合：
+
+1. `pipe()`
+2. `fork()`
+3. `dup2()`
+4. `exec(argc, argv)`
+
+形成一个带参数 consumer 的最小 pipeline 演示。

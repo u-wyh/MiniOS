@@ -348,3 +348,14 @@ Task90 之后，当前 fd 抽象已经足以在用户态自己组合最小 pipel
 7. `pipeline_reader` 只通过 `read(0, ...)` 读数据
 
 这说明当前教学版系统已经具备最小“标准输入输出只是 fd 入口，背后资源可被重新接线”的演示能力。
+
+Task92 之后，这套 fd 能力已经可以继续承接带参数 consumer：
+
+1. writer 子进程 `dup2(pipe_write_fd, 1)` 后 `exec(pipeline_writer)`
+2. consumer 子进程 `dup2(pipe_read_fd, 0)` 后 `exec(grep, argc=2, argv={"grep","MiniOS"})`
+3. `grep` 继续只通过：
+   - `read(0, ...)`
+   - `SYS_GET_ARGC / SYS_GET_ARG`
+   读取 stdin 和自己的 argv
+
+这说明当前教学版 fd 不仅能承接“固定程序接线”，也已经能承接“带参数程序接线”。
