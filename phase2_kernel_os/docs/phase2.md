@@ -655,3 +655,28 @@
   - `exec()`
   - `read/write`
 - 当前仍然不是完整 POSIX exec，也没有 close-on-exec。
+
+## Task90：用户态 pipeline demo / pipe + fork + dup2 + exec 端到端演示
+
+- 当前任务是“把 pipe / fork / dup2 / exec 在用户态自己串起来”的教学版 demo 任务。
+- 本轮之后：
+  - 新增 `pipeline_demo`
+  - 新增 `pipeline_writer`
+  - 新增 `pipeline_reader`
+- 当前 `pipeline_demo` 采用教学版顺序模型：
+  - `pipe(fds)`
+  - `fork()` writer 子进程
+  - writer 子进程 `dup2(fds[1], 1)` 后 `exec(pipeline_writer)`
+  - 父进程 `waitpid(writer)`
+  - `fork()` reader 子进程
+  - reader 子进程 `dup2(fds[0], 0)` 后 `exec(pipeline_reader)`
+  - 父进程 `waitpid(reader)`
+  - 最终输出 `pipeline_demo: ok`
+- 当前 Phase2 数据流链路可以概括为：
+  - `fd 抽象`
+  - `-> pipe / dup2 / fork / exec`
+  - `-> 用户态 producer / consumer demo`
+- 当前仍然不是完整 UNIX pipeline：
+  - 仍然只有一个全局教学版 pipe buffer
+  - 没有并发阻塞 pipe
+  - 不支持多级管道

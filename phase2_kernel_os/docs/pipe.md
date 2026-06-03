@@ -263,6 +263,22 @@ Task89 之后，pipe / fork / dup2 / exec 这条路线已经能串起来：
 这说明当前教学版系统已经具备最小“exec 后保留 pipe stdout 绑定”的条件，
 但仍然不是完整 UNIX pipeline，也还没有并发阻塞 pipe。
 
+Task90 之后，这条路线已经进一步扩展成一个完整的用户态 demo：
+
+1. `pipeline_demo`
+   - 自己调用 `pipe(fds)`
+   - 自己 `fork()` writer 子进程
+   - writer 子进程 `dup2(fds[1], 1)` 后 `exec(pipeline_writer)`
+   - 父进程等待 writer 结束
+   - 父进程再 `fork()` reader 子进程
+   - reader 子进程 `dup2(fds[0], 0)` 后 `exec(pipeline_reader)`
+2. `pipeline_writer`
+   - 只通过 `write(1, ...)` 输出固定文本
+3. `pipeline_reader`
+   - 只通过 `read(0, ...)` 读取，再通过 `write(1, ...)` 输出
+
+这说明当前教学版 pipe 已经不仅能被 shell 内部使用，也能被用户态程序自己用 `pipe + fork + dup2 + exec` 组合出最小 `producer | consumer` 演示。
+
 ## 9. 当前不支持的真实 UNIX pipe 能力
 
 当前教学版 pipe 还不支持：

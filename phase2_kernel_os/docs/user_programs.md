@@ -49,6 +49,9 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `PROGRAM_EXEC_FD_TEST = 27`
 - `PROGRAM_EXEC_FD_WRITER = 28`
 - `PROGRAM_EXEC_FD_READER = 29`
+- `PROGRAM_PIPELINE_DEMO = 30`
+- `PROGRAM_PIPELINE_WRITER = 31`
+- `PROGRAM_PIPELINE_READER = 32`
 
 其中：
 
@@ -86,6 +89,9 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `exec_fd_test -> PROGRAM_EXEC_FD_TEST`
 - `exec_fd_writer -> PROGRAM_EXEC_FD_WRITER`
 - `exec_fd_reader -> PROGRAM_EXEC_FD_READER`
+- `pipeline_demo -> PROGRAM_PIPELINE_DEMO`
+- `pipeline_writer -> PROGRAM_PIPELINE_WRITER`
+- `pipeline_reader -> PROGRAM_PIPELINE_READER`
 
 其中 shell 默认直接暴露给用户的程序主要是：
 
@@ -107,6 +113,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `pipe_fork_dup2_test`
 - `pipe_close_test`
 - `exec_fd_test`
+- `pipeline_demo`
 - `loop`
 - `loop_exit`
 - `sleep_test`
@@ -1181,3 +1188,60 @@ run exec_fd_test
 
 `exec_fd_reader` 当前作为后续更完整用户态 pipeline demo 的积木程序保留，
 它会从 `fd=0` 读取数据，再通过 `fd=1` 输出。
+
+## 42. 用户态 pipeline_demo / pipeline_writer / pipeline_reader
+
+Task90 新增了三项与用户态 pipeline demo 相关的用户程序：
+
+1. `pipeline_demo`
+2. `pipeline_writer`
+3. `pipeline_reader`
+
+其中真正暴露给 shell 直接运行的是：
+
+```text
+run pipeline_demo
+```
+
+当前教学版链路是：
+
+1. `pipeline_demo` 调用 `pipe(fds)`
+2. `pipeline_demo` `fork()` writer 子进程
+3. writer 子进程 `dup2(fds[1], 1)`
+4. writer 子进程 `exec(pipeline_writer)`
+5. 父进程 `waitpid(writer)`
+6. 父进程 `fork()` reader 子进程
+7. reader 子进程 `dup2(fds[0], 0)`
+8. reader 子进程 `exec(pipeline_reader)`
+9. 父进程 `waitpid(reader)`
+10. 最终输出 `pipeline_demo: ok`
+
+`pipeline_writer` 的职责很单纯：
+
+1. 只通过 `write(1, ...)` 输出固定三行文本
+2. 不关心 `fd=1` 背后是屏幕、文件还是 pipe
+
+`pipeline_reader` 的职责也很单纯：
+
+1. 只通过 `read(0, ...)` 读取输入
+2. 再通过 `write(1, ...)` 输出读到的数据
+3. 结束时输出 `pipeline_reader: ok`
+
+当前 demo 预期能看到类似输出：
+
+1. `pipeline_demo: start`
+2. `pipeline_reader got:`
+3. `pipeline writer line 1`
+4. `pipeline writer line 2`
+5. `pipeline writer line 3`
+6. `pipeline_reader: ok`
+7. `pipeline_demo: ok`
+
+这说明当前 MiniOS 已经能在用户态自己组合：
+
+1. `pipe()`
+2. `fork()`
+3. `dup2()`
+4. `exec()`
+
+形成一条最小 `producer | consumer` 演示链路。

@@ -336,3 +336,15 @@ Task89 之后，当前教学版 `exec` 与 fd table 的关系也更明确了：
 5. 当前没有 close-on-exec：
    - exec 时不会自动关闭某些 fd
    - 这仍然不是完整 POSIX 语义
+
+Task90 之后，当前 fd 抽象已经足以在用户态自己组合最小 pipeline demo：
+
+1. 父进程 `pipe(fds)`
+2. writer 子进程 `dup2(fds[1], 1)`
+3. writer 子进程 `exec(pipeline_writer)`
+4. reader 子进程 `dup2(fds[0], 0)`
+5. reader 子进程 `exec(pipeline_reader)`
+6. `pipeline_writer` 只通过 `write(1, ...)` 写数据
+7. `pipeline_reader` 只通过 `read(0, ...)` 读数据
+
+这说明当前教学版系统已经具备最小“标准输入输出只是 fd 入口，背后资源可被重新接线”的演示能力。

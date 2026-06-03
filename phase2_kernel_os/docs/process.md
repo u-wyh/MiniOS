@@ -114,3 +114,23 @@ Task89 重点整理了当前教学版 `exec` 会替换什么、保留什么：
 3. writer 程序继续通过 `write(1, ...)` 把数据写进 pipe
 
 这一步已经足以为后续用户态 pipeline demo 铺路，但仍然不是完整 POSIX exec。
+
+## 9. Task90：用户态 pipeline demo
+
+Task90 没有继续大改 `fork` 或 `exec` 主体，而是新增用户态 `pipeline_demo` / `pipeline_writer` / `pipeline_reader` 来验证：
+
+1. 父进程 `pipe(fds)`
+2. 父进程 `fork()` writer 子进程
+3. writer 子进程 `dup2(fds[1], 1)`
+4. writer 子进程 `exec(pipeline_writer)`
+5. 父进程 `waitpid(writer)`
+6. 父进程 `fork()` reader 子进程
+7. reader 子进程 `dup2(fds[0], 0)`
+8. reader 子进程 `exec(pipeline_reader)`
+9. 父进程 `waitpid(reader)`
+
+这个 demo 说明：
+
+1. `fork` 后 fd 继承已经足以支撑父子两端拿到同一对 pipe fd
+2. `exec` 后 `fd=0 / fd=1` 绑定关系仍然保留
+3. 当前虽然还是教学版顺序模型，但已经能在用户态自己拼出最小 `producer | consumer` 链路

@@ -3382,3 +3382,52 @@ TODO：
 - Task90 可继续做用户态 pipeline demo
 - Task91 可继续整理 exec 参数传递
 - Task92 可继续探索阻塞 pipe / 并发 pipe 雏形
+
+## ✅ Task90：用户态 pipeline demo / pipe + fork + dup2 + exec 端到端演示
+
+本轮目标：
+
+- 新增用户态 `pipeline_demo`
+- 新增 `pipeline_writer`
+- 新增 `pipeline_reader`
+- 在用户态把 `pipe + fork + dup2 + exec` 串成一条最小管道演示链路
+
+已完成：
+
+- 新增 `pipeline_writer`
+  - 只往 `fd=1` 输出固定三行文本
+- 新增 `pipeline_reader`
+  - 从 `fd=0` 读取，再经 `fd=1` 输出
+- 新增 `pipeline_demo`
+  - `pipe(fds)`
+  - `fork()` writer 子进程
+  - writer 子进程 `dup2(fds[1], 1)` 后 `exec(pipeline_writer)`
+  - 父进程 `waitpid(writer)`
+  - `fork()` reader 子进程
+  - reader 子进程 `dup2(fds[0], 0)` 后 `exec(pipeline_reader)`
+  - 父进程 `waitpid(reader)`
+  - 最终输出 `pipeline_demo: ok`
+
+这说明当前 MiniOS 已经可以在用户态自己组合：
+
+- `pipe()`
+- `fork()`
+- `dup2()`
+- `exec()`
+
+当前限制：
+
+- 这不是完整 UNIX Shell pipeline
+- 当前不支持多级管道
+- 当前不支持真正并发阻塞 pipe
+- 当前没有完整 fd 引用计数
+- 当前没有 close-on-exec
+- 当前仍然只有一个全局教学版 pipe buffer
+- 当前 demo 采用教学版顺序 wait 模型，不是并发模型
+
+TODO：
+
+- Task91 可继续整理 exec 参数传递
+- Task92 可继续做 pipe 并发/阻塞读写雏形
+- Task93 可继续做用户态 mini_pipeline 命令
+- Task94 可继续做多进程 pipeline 文档和演示脚本
