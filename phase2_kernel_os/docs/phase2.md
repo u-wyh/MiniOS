@@ -769,3 +769,31 @@
   - 不支持多级管道
   - 左侧暂不支持参数
   - 仍然只有一个全局教学版 pipe buffer
+
+## Task95：mini_pipeline 支持左侧参数 / 双端 argv 管道命令
+
+- 当前任务不是扩展真正 `|`，而是把 `mini_pipeline` 的双端 `argv` 切分规则补完整：
+  - `run mini_pipeline <left_prog> [left_args...] -- <right_prog> [right_args...]`
+- 本轮之后，MiniOS 已经能在固定用户态 pipeline 入口里同时支持：
+  - 左侧程序名与参数
+  - 右侧程序名与参数
+- 当前 `mini_pipeline` 仍采用教学版顺序模型：
+  - `pipe(fds)`
+  - `fork()` 左侧 writer
+  - 左侧 `dup2(fds[1], 1)` 后 `exec(left_prog, left_argv)`
+  - 父进程 `waitpid(writer)`
+  - `fork()` 右侧 consumer
+  - 右侧 `dup2(fds[0], 0)` 后 `exec(right_prog, right_argv)`
+  - 父进程 `waitpid(consumer)`
+- 当前 Phase2 数据流链路可以进一步概括为：
+  - `shell argv`
+  - `-> mini_pipeline 双端 argv`
+  - `-> pipe`
+  - `-> fork`
+  - `-> dup2`
+  - `-> exec(argc, argv)`
+  - `-> 固定 pipeline 命令入口`
+- 当前仍然不是完整 UNIX pipeline：
+  - 不支持多级管道
+  - 不支持引号与转义
+  - 仍然只有一个全局教学版 pipe buffer

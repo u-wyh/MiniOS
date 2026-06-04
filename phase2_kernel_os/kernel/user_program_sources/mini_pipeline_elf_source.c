@@ -223,7 +223,7 @@ static void mini_pipeline_write_error(const char* message, int code) {
 
 // 输出当前最小用法，强调用 -- 分隔左右命令。
 static void mini_pipeline_write_usage(void) {
-    user_write("usage: mini_pipeline <left_prog> -- <right_prog> [args...]\n");
+    user_write("usage: mini_pipeline <left_prog> [left_args...] -- <right_prog> [right_args...]\n");
 }
 
 // 从当前程序 argv 里读取一个参数到固定缓冲区。
@@ -231,18 +231,64 @@ static int mini_pipeline_load_arg(int index, char* buffer) {
     return user_get_arg(index, buffer, MINI_PIPELINE_ARG_BUF_LEN);
 }
 
+// 在 mini_pipeline 的 argv 中查找 -- 分隔符，返回所在下标，失败返回 -1。
+static int mini_pipeline_find_separator(int argc) {
+    static char token[MINI_PIPELINE_ARG_BUF_LEN];
+    int index;
+
+    for (index = 1; index < argc; index++) {
+        if (mini_pipeline_load_arg(index, token) <= 0) {
+            return -1;
+        }
+        if (mini_pipeline_string_equals(token, "--") != 0) {
+            return index;
+        }
+    }
+
+    return -1;
+}
+
+// 根据 argv 的一段连续区间构造某一侧 exec 要使用的 argc/argv。
+static int mini_pipeline_build_side_argv(
+    int begin_index,
+    int end_index,
+    char storage[USER_PROGRAM_MAX_ARGS][MINI_PIPELINE_ARG_BUF_LEN],
+    const char* argv_out[USER_PROGRAM_MAX_ARGS]) {
+    int argc;
+    int index;
+
+    if (begin_index >= end_index) {
+        return -1;
+    }
+
+    argc = end_index - begin_index;
+    if (argc > USER_PROGRAM_MAX_ARGS) {
+        return -2;
+    }
+
+    for (index = 0; index < argc; index++) {
+        if (mini_pipeline_load_arg(begin_index + index, storage[index]) <= 0) {
+            return -3;
+        }
+        argv_out[index] = storage[index];
+    }
+
+    return argc;
+}
+
 // 主流程：采用教学版顺序 pipeline，先完整运行左侧 writer，再运行右侧 consumer。
 void _start(void) {
-    static char left_name[MINI_PIPELINE_ARG_BUF_LEN];
-    static char separator[MINI_PIPELINE_ARG_BUF_LEN];
+    static char left_storage[USER_PROGRAM_MAX_ARGS][MINI_PIPELINE_ARG_BUF_LEN];
     static char right_storage[USER_PROGRAM_MAX_ARGS][MINI_PIPELINE_ARG_BUF_LEN];
     static const char* right_argv[USER_PROGRAM_MAX_ARGS];
-    static const char* left_argv[1];
+    static const char* left_argv[USER_PROGRAM_MAX_ARGS];
     int argc;
+    int left_argc;
     int right_argc;
+    int separator_index;
     int left_program_id;
     int right_program_id;
-    int index;
+    int build_result;
     int fds[2];
     int pipe_result;
     int writer_pid;
@@ -261,36 +307,27 @@ void _start(void) {
         user_exit(1);
     }
 
-    if (mini_pipeline_load_arg(1, left_name) <= 0) {
+    separator_index = mini_pipeline_find_separator(argc);
+    if (separator_index < 0) {
         mini_pipeline_write_usage();
         user_exit(1);
     }
 
-    if (mini_pipeline_load_arg(2, separator) <= 0) {
+    build_result = mini_pipeline_build_side_argv(1, separator_index, left_storage, left_argv);
+    if (build_result <= 0) {
         mini_pipeline_write_usage();
         user_exit(1);
     }
+    left_argc = build_result;
 
-    if (mini_pipeline_string_equals(separator, "--") == 0) {
+    build_result = mini_pipeline_build_side_argv(separator_index + 1, argc, right_storage, right_argv);
+    if (build_result <= 0) {
         mini_pipeline_write_usage();
         user_exit(1);
     }
+    right_argc = build_result;
 
-    right_argc = argc - 3;
-    if (right_argc <= 0) {
-        mini_pipeline_write_usage();
-        user_exit(1);
-    }
-
-    for (index = 0; index < right_argc; index++) {
-        if (mini_pipeline_load_arg(index + 3, right_storage[index]) <= 0) {
-            mini_pipeline_write_error("invalid right args", 0);
-            user_exit(1);
-        }
-        right_argv[index] = right_storage[index];
-    }
-
-    left_program_id = mini_pipeline_program_id_from_name(left_name);
+    left_program_id = mini_pipeline_program_id_from_name(left_storage[0]);
     right_program_id = mini_pipeline_program_id_from_name(right_storage[0]);
     if (left_program_id == PROGRAM_INVALID || left_program_id == 0) {
         mini_pipeline_write_error("unknown left program", 0);
@@ -301,7 +338,6 @@ void _start(void) {
         user_exit(1);
     }
 
-    left_argv[0] = left_name;
     user_write("mini_pipeline: start\n");
 
     pipe_result = user_pipe(fds);
@@ -324,7 +360,7 @@ void _start(void) {
 
         user_close(fds[0]);
         user_close(fds[1]);
-        if (user_exec_args(left_program_id, 1, left_argv) != 0) {
+        if (user_exec_args(left_program_id, left_argc, left_argv) != 0) {
             user_exit(3);
         }
 

@@ -201,3 +201,22 @@ Task94 没有继续重写 `fork` 或 `exec` 主体，而是新增 `mini_pipeline
 4. 右侧程序继续能收到自己的 `argv`
 
 当前仍然是教学版顺序 pipeline，不依赖并发阻塞 pipe。
+
+## 13. Task95：mini_pipeline 双端 argv
+
+Task95 没有去改 `fork`、`dup2` 或 `exec` 主机制，而是把 `mini_pipeline` 自己的左右两侧参数切分规则补齐：
+
+1. `--` 左边生成 `left_argc / left_argv`
+2. `--` 右边生成 `right_argc / right_argv`
+3. 左侧子进程 `dup2(fds[1], 1)` 后执行 `exec(left_prog, left_argv)`
+4. 右侧子进程 `dup2(fds[0], 0)` 后执行 `exec(right_prog, right_argv)`
+
+这说明当前教学版 process 路线已经不只是能承接“固定 writer/reader”，也已经能承接：
+
+1. 左侧带参数 producer
+2. 右侧带参数 consumer
+
+例如：
+
+1. `run mini_pipeline cat /readme.txt -- grep MiniOS`
+2. `run mini_pipeline cat /readme.txt -- head -n 3`

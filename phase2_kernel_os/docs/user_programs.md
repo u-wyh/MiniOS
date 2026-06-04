@@ -1365,7 +1365,7 @@ Task94 新增了一个更像命令入口的教学版用户态 pipeline 程序：
 当前用法固定为：
 
 ```text
-run mini_pipeline <left_prog> -- <right_prog> [right_args...]
+run mini_pipeline <left_prog> [left_args...] -- <right_prog> [right_args...]
 ```
 
 例如：
@@ -1374,17 +1374,20 @@ run mini_pipeline <left_prog> -- <right_prog> [right_args...]
 run mini_pipeline pipeline_writer -- grep MiniOS
 run mini_pipeline pipeline_writer -- head -n 2
 run mini_pipeline pipeline_writer -- wc
+run mini_pipeline cat /readme.txt -- grep MiniOS
+run mini_pipeline cat /readme.txt -- head -n 3
+run mini_pipeline cat /readme.txt -- wc
 ```
 
 当前最小语义是：
 
-1. 左侧暂时只支持一个程序名，不支持 left args
-2. 右侧支持普通 `argv`
+1. 左侧支持程序名加普通参数
+2. 右侧支持程序名加普通参数
 3. `--` 用来分隔左右命令
 4. 内部仍然采用教学版顺序 pipeline：
    - 先 `pipe(fds)`
    - 再 `fork` 左侧 writer 子进程
-   - 左侧执行 `dup2(fds[1], 1)` 后 `exec(left_prog)`
+   - 左侧执行 `dup2(fds[1], 1)` 后 `exec(left_prog, left_argv)`
    - 父进程 `waitpid(writer)`
    - 再 `fork` 右侧 consumer 子进程
    - 右侧执行 `dup2(fds[0], 0)` 后 `exec(right_prog, argv)`

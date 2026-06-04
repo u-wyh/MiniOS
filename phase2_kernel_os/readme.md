@@ -3611,3 +3611,44 @@ TODO：
 
 - Task95 可继续做更接近真实的 shell pipeline 命令
 - Task96 可继续做阻塞 pipe / 并发 pipe 雏形
+
+## ✅ Task95：mini_pipeline 支持左侧参数 / 双端 argv 管道命令
+
+本轮目标：
+
+- 让 `mini_pipeline` 支持：
+  - `run mini_pipeline <left_prog> [left_args...] -- <right_prog> [right_args...]`
+- 不改 shell parser
+- 继续沿用教学版顺序 pipe
+- 重点整理左右两侧 `argc / argv` 切分
+
+已完成：
+
+- `mini_pipeline` 现在支持双端 argv：
+  - 左侧支持程序名加普通参数
+  - 右侧继续支持程序名加普通参数
+- `--` 左边会生成 `left_argc / left_argv`
+- `--` 右边会生成 `right_argc / right_argv`
+- `--` 本身以及分隔两侧的 token 不会进入任一侧 `argv`
+- 原有 Task94 用法继续兼容：
+  - `run mini_pipeline pipeline_writer -- grep MiniOS`
+  - `run mini_pipeline pipeline_writer -- head -n 2`
+  - `run mini_pipeline pipeline_writer -- wc`
+- 当前重点验证命令扩展为：
+  - `run mini_pipeline cat /readme.txt -- grep MiniOS`
+  - `run mini_pipeline cat /readme.txt -- head -n 3`
+  - `run mini_pipeline cat /readme.txt -- wc`
+  - `run mini_pipeline cat /readme.txt -- sort`
+
+当前限制：
+
+- 当前不是完整 shell pipeline
+- 当前不支持多级管道
+- 当前仍然只有一个全局教学版 pipe buffer
+- 当前仍然没有并发阻塞 pipe
+- 当前仍然不支持引号、转义、环境变量
+
+TODO：
+
+- Task96 可继续做更接近真实 shell 的 pipeline 语法
+- Task97 可继续做阻塞 pipe / 并发 pipe 雏形

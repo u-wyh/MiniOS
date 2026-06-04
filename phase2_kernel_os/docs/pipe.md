@@ -296,17 +296,18 @@ Task92 之后，这个教学版 pipeline demo 还可以继续承接带参数 con
 
 Task94 之后，这条教学版 pipe 路线又进一步收敛成一个更像命令的用户态入口：
 
-1. `run mini_pipeline <left_prog> -- <right_prog> [right_args...]`
+1. `run mini_pipeline <left_prog> [left_args...] -- <right_prog> [right_args...]`
 2. `mini_pipeline` 自己调用：
    - `pipe(fds)`
    - `fork()`
    - `dup2()`
    - `exec(argc, argv)`
-3. 左侧暂时只支持一个程序名：
-   - 例如 `pipeline_writer`
+3. 左侧现在也支持带参数程序：
+   - `cat /readme.txt`
+   - `pipeline_writer`
 4. 右侧支持带参数程序：
    - `grep MiniOS`
-   - `head -n 2`
+   - `head -n 3`
    - `wc`
 5. 当前仍然采用教学版顺序模型：
    - 左侧先完整写入全局 pipe buffer

@@ -374,3 +374,17 @@ Task94 之后，这套 fd 能力又进一步收敛成 `mini_pipeline` 这个用�
    工作
 
 这说明当前教学版 fd 已经不只是 shell 内部接线或 demo 测试，而是开始具备一个最小可复用的用户态 pipeline 命令入口。
+
+Task95 继续把这条入口补成“双端 argv”模型：
+
+1. 左侧子进程：
+   - `dup2(pipe_write_fd, 1)`
+   - `exec(left_prog, left_argv)`
+2. 右侧子进程：
+   - `dup2(pipe_read_fd, 0)`
+   - `exec(right_prog, right_argv)`
+
+这说明当前教学版 fd 已经能同时承接：
+
+1. 左侧带参数文件读取程序
+2. 右侧带参数文本处理程序
