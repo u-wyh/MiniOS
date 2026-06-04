@@ -3528,3 +3528,39 @@ TODO：
 - Task93 可继续整理 shell argv parser
 - Task94 可继续做阻塞 pipe / 并发 pipe 雏形
 - Task95 可继续尝试用户态 pipeline demo 支持 `head -n 2` / `sort` / `wc`
+
+## ✅ Task93：Shell argv parser 整理 / 为 mini_pipeline 命令做准备
+
+本轮目标：
+
+- 不重写整个 shell
+- 只整理 `run` 命令在 `argv / redirect / pipe` 交织场景下的参数解析边界
+- 为后续 Task94 的 `mini_pipeline` 命令做准备
+
+已完成：
+
+- shell 继续沿用最小空格分词规则，不引入引号/转义
+- 当前 `run` 的程序名会稳定作为用户程序 `argv[0]`
+- 当前普通参数会稳定保留在 `argv[1..]`
+- 当前 `<`、`>`、`>>` 及其目标 token 不会进入用户程序 `argv`
+- 当前 `|` 不会进入左右两侧用户程序 `argv`
+- 新增统一辅助逻辑，普通 `run` 与 pipe 左右两侧复用同一条“有效 argc”规则
+- 典型目标命令包括：
+  - `run grep MiniOS < /readme.txt`
+  - `run head -n 3 < /readme.txt`
+  - `run tail -n 3 < /readme.txt`
+  - `run cat /readme.txt | run grep MiniOS`
+  - `run cat /readme.txt | run head -n 3`
+
+当前限制：
+
+- 不支持引号
+- 不支持转义
+- 不支持环境变量
+- 不支持多级管道
+- 不支持复杂 shell 语法
+
+TODO：
+
+- Task94 可继续做 `mini_pipeline` 命令
+- Task95 可继续做阻塞 pipe / 并发 pipe 雏形

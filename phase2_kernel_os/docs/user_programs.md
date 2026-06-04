@@ -176,6 +176,38 @@ run echo hello minios
 - 参数过多：shell 会直接报错 `Too many args`，不会继续 `fork/exec`
 - 参数过长：shell 会直接报错 `Arg too long`，内核 `process_copy_user_args()` 也会做兜底校验
 
+## 7.1 Shell run 下的 argv 规则
+
+当前 shell 在 `run/start` 下采用最小教学版 `argv` 规则：
+
+- `run` / `start` 自己不进入用户程序 `argv`
+- 程序名会作为 `argv[0]`
+- 后续普通 token 依次成为 `argv[1..]`
+- `<`、`>`、`>>`、`|` 以及它们的目标 token 不会进入用户程序 `argv`
+
+例如：
+
+```text
+run grep MiniOS < /readme.txt
+```
+
+用户程序最终收到：
+
+- `argv[0] = "grep"`
+- `argv[1] = "MiniOS"`
+
+例如：
+
+```text
+run cat /readme.txt | run head -n 3
+```
+
+右侧用户程序最终收到：
+
+- `argv[0] = "head"`
+- `argv[1] = "-n"`
+- `argv[2] = "3"`
+
 ## 8. echo 验证方式
 
 - `run echo`：验证“无附加参数”路径，程序应安全输出空行并退出

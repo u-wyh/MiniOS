@@ -311,3 +311,16 @@ static int shell_parse_run_redirects(int argc, char** argv, int output_index, in
     return 0;
 }
 
+// 根据 run 命令解析出的重定向信息，计算真正应该传给用户程序的 argc。
+// 这样可以统一保证 < / > / >> 以及它们的目标文件名不会混进用户程序 argv。
+static int shell_effective_run_argc(int argc, const struct shell_redirect_info* info) {
+    if (info == (const struct shell_redirect_info*)0) {
+        return argc;
+    }
+
+    if (info->first_redirect_index > 0 && info->first_redirect_index < argc) {
+        return info->first_redirect_index;
+    }
+
+    return argc;
+}

@@ -90,7 +90,7 @@ void _start(void) {
                 }
 
                 if (left_pipe_redirects.first_redirect_index > 0) {
-                    left_effective_argc = left_pipe_redirects.first_redirect_index;
+                    left_effective_argc = shell_effective_run_argc(pipe_index, &left_pipe_redirects);
                 }
 
             } else {
@@ -119,9 +119,7 @@ void _start(void) {
                     continue;
                 }
 
-                if (right_pipe_redirects.first_redirect_index > 0) {
-                    right_effective_argc = right_pipe_redirects.first_redirect_index;
-                }
+                right_effective_argc = shell_effective_run_argc(argc - pipe_index - 1, &right_pipe_redirects);
             } else {
                 right_pipe_redirects.has_stdout = 0;
                 right_pipe_redirects.stdout_append = 0;
@@ -336,9 +334,7 @@ void _start(void) {
                 }
             }
 
-            if (run_redirects.first_redirect_index > 0) {
-                program_argc = run_redirects.first_redirect_index - 1;
-            }
+            program_argc = shell_effective_run_argc(argc, &run_redirects) - 1;
 
             program_id = shell_program_id_from_name(argv[1]);
             if (program_id == PROGRAM_INVALID) {

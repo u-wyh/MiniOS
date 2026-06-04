@@ -720,3 +720,23 @@
   - 仍然只有一个全局教学版 pipe buffer
   - 没有并发阻塞 pipe
   - 不支持多级管道
+
+## Task93：Shell argv parser 整理 / 为 mini_pipeline 命令做准备
+
+- 当前任务不是重写整个 shell，而是整理 `run` 命令在 `argv / redirect / pipe` 交织场景下的参数边界。
+- 本轮之后，普通 `run` 和 pipe 左右两侧都会统一按“先识别 `< / > / >>`，再计算真正用户程序 `argc`”的规则工作。
+- 当前可以更稳定地支持：
+  - `run grep MiniOS < /readme.txt`
+  - `run head -n 3 < /readme.txt`
+  - `run tail -n 3 < /readme.txt`
+  - `run cat /readme.txt | run grep MiniOS`
+  - `run cat /readme.txt | run head -n 3`
+- 当前 Phase2 数据流链路可以概括为：
+  - `shell token`
+  - `-> run argv`
+  - `-> redirect / pipe 剥离`
+  - `-> 用户程序 argc/argv`
+- 当前仍然只支持最小 shell 语法：
+  - 不支持引号
+  - 不支持转义
+  - 不支持多级管道
