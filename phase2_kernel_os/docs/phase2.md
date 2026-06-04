@@ -740,3 +740,32 @@
   - 不支持引号
   - 不支持转义
   - 不支持多级管道
+
+## Task94：mini_pipeline 命令 / 用户态固定管道命令入口
+
+- 当前任务不是重写 shell，也不是直接扩展真正 `|` 语法，而是新增一个用户态固定格式命令入口：
+  - `run mini_pipeline <left_prog> -- <right_prog> [right_args...]`
+- 本轮之后，MiniOS 已经具备一个可直接演示的用户态 pipeline 命令：
+  - 左侧程序名
+  - `--`
+  - 右侧程序名与参数
+- 当前 `mini_pipeline` 采用教学版顺序模型：
+  - `pipe(fds)`
+  - `fork()` 左侧 writer
+  - 左侧 `dup2(fds[1], 1)` 后 `exec(left_prog)`
+  - 父进程 `waitpid(writer)`
+  - `fork()` 右侧 consumer
+  - 右侧 `dup2(fds[0], 0)` 后 `exec(right_prog, argv)`
+  - 父进程 `waitpid(consumer)`
+- 当前 Phase2 数据流链路可以概括为：
+  - `shell argv`
+  - `-> mini_pipeline argv`
+  - `-> pipe`
+  - `-> fork`
+  - `-> dup2`
+  - `-> exec(argc, argv)`
+  - `-> 固定 pipeline 命令入口`
+- 当前仍然不是完整 UNIX pipeline：
+  - 不支持多级管道
+  - 左侧暂不支持参数
+  - 仍然只有一个全局教学版 pipe buffer

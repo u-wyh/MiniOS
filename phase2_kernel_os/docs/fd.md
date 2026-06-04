@@ -359,3 +359,18 @@ Task92 之后，这套 fd 能力已经可以继续承接带参数 consumer：
    读取 stdin 和自己的 argv
 
 这说明当前教学版 fd 不仅能承接“固定程序接线”，也已经能承接“带参数程序接线”。
+
+Task94 之后，这套 fd 能力又进一步收敛成 `mini_pipeline` 这个用户态固定命令入口：
+
+1. 左侧子进程：
+   - `dup2(pipe_write_fd, 1)`
+   - `exec(left_prog)`
+2. 右侧子进程：
+   - `dup2(pipe_read_fd, 0)`
+   - `exec(right_prog, argv)`
+3. 右侧程序仍然只通过：
+   - `read(0, ...)`
+   - `SYS_GET_ARGC / SYS_GET_ARG`
+   工作
+
+这说明当前教学版 fd 已经不只是 shell 内部接线或 demo 测试，而是开始具备一个最小可复用的用户态 pipeline 命令入口。

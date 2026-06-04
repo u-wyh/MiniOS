@@ -3564,3 +3564,50 @@ TODO：
 
 - Task94 可继续做 `mini_pipeline` 命令
 - Task95 可继续做阻塞 pipe / 并发 pipe 雏形
+
+## ✅ Task94：mini_pipeline 命令 / 用户态固定管道命令入口
+
+本轮目标：
+
+- 新增用户态 `mini_pipeline`
+- 不重写 shell parser
+- 用 `--` 分隔左右命令
+- 在用户态复用：
+  - `pipe()`
+  - `fork()`
+  - `dup2()`
+  - `exec(argc, argv)`
+
+已完成：
+
+- 新增 `mini_pipeline`
+- 当前格式固定为：
+  - `run mini_pipeline <left_prog> -- <right_prog> [right_args...]`
+- 当前左侧暂时只支持一个程序名，不支持 left args
+- 当前右侧支持普通参数
+- 当前内部采用教学版顺序 pipeline：
+  - `pipe(fds)`
+  - `fork()` 左侧 writer
+  - 左侧 `dup2(fds[1], 1)` 后 `exec(left_prog)`
+  - 父进程 `waitpid(writer)`
+  - `fork()` 右侧 consumer
+  - 右侧 `dup2(fds[0], 0)` 后 `exec(right_prog, argv)`
+  - 父进程 `waitpid(consumer)`
+  - 最终输出 `mini_pipeline: ok`
+- 当前重点验证命令包括：
+  - `run mini_pipeline pipeline_writer -- grep MiniOS`
+  - `run mini_pipeline pipeline_writer -- head -n 2`
+  - `run mini_pipeline pipeline_writer -- wc`
+
+当前限制：
+
+- 当前不是完整 shell pipeline
+- 当前不支持多级管道
+- 当前左侧不支持参数
+- 当前仍然只有一个全局教学版 pipe buffer
+- 当前仍然没有并发阻塞 pipe
+
+TODO：
+
+- Task95 可继续做更接近真实的 shell pipeline 命令
+- Task96 可继续做阻塞 pipe / 并发 pipe 雏形

@@ -294,6 +294,27 @@ Task92 之后，这个教学版 pipeline demo 还可以继续承接带参数 con
 
 一起工作，而不只是跑固定 writer/reader 程序。
 
+Task94 之后，这条教学版 pipe 路线又进一步收敛成一个更像命令的用户态入口：
+
+1. `run mini_pipeline <left_prog> -- <right_prog> [right_args...]`
+2. `mini_pipeline` 自己调用：
+   - `pipe(fds)`
+   - `fork()`
+   - `dup2()`
+   - `exec(argc, argv)`
+3. 左侧暂时只支持一个程序名：
+   - 例如 `pipeline_writer`
+4. 右侧支持带参数程序：
+   - `grep MiniOS`
+   - `head -n 2`
+   - `wc`
+5. 当前仍然采用教学版顺序模型：
+   - 左侧先完整写入全局 pipe buffer
+   - 父进程等待左侧结束
+   - 再启动右侧从同一全局 pipe buffer 读取
+
+这说明当前教学版 pipe 已经不只是 shell 内部机制、测试 syscall 或固定 demo，而是开始具备一个最小可复用的用户态 pipeline 命令入口。
+
 ## 9. 当前不支持的真实 UNIX pipe 能力
 
 当前教学版 pipe 还不支持：

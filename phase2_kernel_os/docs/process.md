@@ -180,3 +180,24 @@ Task92 没有继续大改 `fork` 或 `exec` 主体，而是新增 `pipeline_args
 1. `fork` 后 fd 继承语义仍然足以支撑 pipeline 两端
 2. `exec` 后 fd 保留和 argv 传递已经能同时工作
 3. 当前教学版 pipeline 已经能运行“带参数 consumer”这一类更接近真实 shell 的场景
+
+## 12. Task94：mini_pipeline 命令
+
+Task94 没有继续重写 `fork` 或 `exec` 主体，而是新增 `mini_pipeline` 来把现有能力收敛成一个更像命令入口的用户态程序：
+
+1. `pipe(fds)`
+2. `fork()` 左侧 writer 子进程
+3. 左侧子进程 `dup2(fds[1], 1)` 后 `exec(left_prog)`
+4. 父进程 `waitpid(writer)`
+5. `fork()` 右侧 consumer 子进程
+6. 右侧子进程 `dup2(fds[0], 0)` 后 `exec(right_prog, argv)`
+7. 父进程 `waitpid(consumer)`
+
+它验证的是：
+
+1. `fork` 继续能复制当前教学版 fd 视图
+2. `dup2` 继续能把 pipe 端点接到 `fd=0 / fd=1`
+3. `exec` 继续能保留这层 fd 绑定
+4. 右侧程序继续能收到自己的 `argv`
+
+当前仍然是教学版顺序 pipeline，不依赖并发阻塞 pipe。

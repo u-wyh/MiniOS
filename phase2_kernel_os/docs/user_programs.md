@@ -55,6 +55,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `PROGRAM_EXEC_ARGS_TEST = 33`
 - `PROGRAM_EXEC_ARGS_TARGET = 34`
 - `PROGRAM_PIPELINE_ARGS_DEMO = 35`
+- `PROGRAM_MINI_PIPELINE = 36`
 
 其中：
 
@@ -98,6 +99,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `exec_args_test -> PROGRAM_EXEC_ARGS_TEST`
 - `exec_args_target -> PROGRAM_EXEC_ARGS_TARGET`
 - `pipeline_args_demo -> PROGRAM_PIPELINE_ARGS_DEMO`
+- `mini_pipeline -> PROGRAM_MINI_PIPELINE`
 
 其中 shell 默认直接暴露给用户的程序主要是：
 
@@ -122,6 +124,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `pipeline_demo`
 - `exec_args_test`
 - `pipeline_args_demo`
+- `mini_pipeline`
 - `loop`
 - `loop_exit`
 - `sleep_test`
@@ -1352,6 +1355,52 @@ run pipeline_args_demo
 8. consumer 子进程 `exec(grep, argc=2, argv)`
 9. 父进程 `waitpid(consumer)`
 10. 最终输出 `pipeline_args_demo: ok`
+
+## 45. 用户态 mini_pipeline
+
+Task94 新增了一个更像命令入口的教学版用户态 pipeline 程序：
+
+1. `mini_pipeline`
+
+当前用法固定为：
+
+```text
+run mini_pipeline <left_prog> -- <right_prog> [right_args...]
+```
+
+例如：
+
+```text
+run mini_pipeline pipeline_writer -- grep MiniOS
+run mini_pipeline pipeline_writer -- head -n 2
+run mini_pipeline pipeline_writer -- wc
+```
+
+当前最小语义是：
+
+1. 左侧暂时只支持一个程序名，不支持 left args
+2. 右侧支持普通 `argv`
+3. `--` 用来分隔左右命令
+4. 内部仍然采用教学版顺序 pipeline：
+   - 先 `pipe(fds)`
+   - 再 `fork` 左侧 writer 子进程
+   - 左侧执行 `dup2(fds[1], 1)` 后 `exec(left_prog)`
+   - 父进程 `waitpid(writer)`
+   - 再 `fork` 右侧 consumer 子进程
+   - 右侧执行 `dup2(fds[0], 0)` 后 `exec(right_prog, argv)`
+   - 父进程 `waitpid(consumer)`
+5. 成功时输出 `mini_pipeline: ok`
+
+它的意义是：
+
+1. 不改 shell parser
+2. 不依赖真正的 `|`
+3. 直接在用户态程序内部把：
+   - `pipe()`
+   - `fork()`
+   - `dup2()`
+   - `exec(argc, argv)`
+   串成一条最小可演示 pipeline
 
 `pipeline_writer` 当前输出：
 
