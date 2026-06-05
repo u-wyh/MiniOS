@@ -838,3 +838,27 @@
   - 没有复杂引用计数
   - 没有 close-on-exec
   - 还不支持多级 Shell pipeline
+
+## Task98：mini_pipeline 多级管道
+
+- 当前任务不是重写 shell 的 `|` parser，而是继续沿用 `mini_pipeline ... -- ... -- ...` 这种教学版固定格式。
+- 本轮之后：
+  - `mini_pipeline` 不再只支持两段命令
+  - 已经支持至少三段命令
+  - 若有 `N` 个命令段，就会创建 `N-1` 个独立 pipe object
+- 当前 Phase2 数据流链路可以概括为：
+  - `mini_pipeline argv`
+  - `-> 多段命令切分`
+  - `-> N-1 个 pipe`
+  - `-> 多子进程 fork`
+  - `-> dup2(fd=0/1)`
+  - `-> exec(argc, argv)`
+- 典型示例包括：
+  - `run mini_pipeline cat /readme.txt -- grep MiniOS -- wc`
+  - `run mini_pipeline cat /readme.txt -- head -n 5 -- tail -n 2`
+  - `run mini_pipeline pipeline_writer -- grep MiniOS -- wc`
+- 当前仍然不是完整 shell pipeline：
+  - 不支持真正 `|`
+  - 不支持引号/转义
+  - 不支持环境变量
+  - 不支持进程组

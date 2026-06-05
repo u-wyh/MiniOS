@@ -1368,7 +1368,7 @@ Task94 新增了一个更像命令入口的教学版用户态 pipeline 程序：
 当前用法固定为：
 
 ```text
-run mini_pipeline <left_prog> [left_args...] -- <right_prog> [right_args...]
+run mini_pipeline <cmd1> [args...] -- <cmd2> [args...] [-- <cmd3> [args...] ...]
 ```
 
 例如：
@@ -1380,20 +1380,23 @@ run mini_pipeline pipeline_writer -- wc
 run mini_pipeline cat /readme.txt -- grep MiniOS
 run mini_pipeline cat /readme.txt -- head -n 3
 run mini_pipeline cat /readme.txt -- wc
+run mini_pipeline cat /readme.txt -- grep MiniOS -- wc
+run mini_pipeline cat /readme.txt -- head -n 5 -- tail -n 2
+run mini_pipeline pipeline_writer -- grep MiniOS -- wc
 ```
 
 当前最小语义是：
 
-1. 左侧支持程序名加普通参数
-2. 右侧支持程序名加普通参数
-3. `--` 用来分隔左右命令
-4. 内部仍然采用教学版顺序 pipeline：
-   - 先 `pipe(fds)`
-   - 依次 `fork` 左侧 writer 子进程和右侧 consumer 子进程
-   - 左侧执行 `dup2(fds[1], 1)` 后 `exec(left_prog, left_argv)`
-   - 右侧执行 `dup2(fds[0], 0)` 后 `exec(right_prog, argv)`
-   - 父进程关闭自己的 pipe 端点，再分别 `waitpid(writer)` / `waitpid(consumer)`
-5. 成功时输出 `mini_pipeline: ok`
+1. `--` 用来分隔多个命令段
+2. 每个命令段都保留自己的 `argc / argv`
+3. 若有 `N` 个命令段，则创建 `N-1` 个 pipe
+4. 第一个命令只把 `fd=1` 接到第一个 pipe write
+5. 中间命令同时连接：
+   - `fd=0 -> 前一个 pipe read`
+   - `fd=1 -> 后一个 pipe write`
+6. 最后一个命令只把 `fd=0` 接到最后一个 pipe read
+7. 父进程在 fork 完全部子进程后关闭所有 pipe fd，再 wait 所有子进程
+8. 成功时输出 `mini_pipeline: ok`
 
 它的意义是：
 
@@ -1418,11 +1421,11 @@ run mini_pipeline cat /readme.txt -- wc
 1. `MiniOS line one`
 2. `MiniOS line three`
 
-Task96 之后，`mini_pipeline` 的模型已经从“顺序 writer/reader”推进到“最小并发 pipeline”：
+Task98 之后，`mini_pipeline` 的模型已经从“二段并发 pipeline”推进到“多段并发 pipeline”：
 
-1. 左右两侧子进程都会先创建出来
-2. 左侧向 pipe 写入时，若缓冲区满会等待 reader 消费
-3. 右侧从 pipe 读取时，若缓冲区空且写端未关闭会等待 writer 继续写
+1. 所有命令段对应的子进程都会先创建出来
+2. 相邻命令段之间各自使用独立 pipe object
+3. 多余 pipe fd 会在子进程和父进程中尽快关闭，避免 EOF 无法到达
 4. 当前等待机制仍是教学版 busy-wait，不是完整阻塞队列
 
 这个 demo 说明当前 MiniOS 已经能在用户态组合：

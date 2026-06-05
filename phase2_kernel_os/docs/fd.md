@@ -435,3 +435,25 @@ pipe_table[pipe_id]
    - pipe fd 继承时也只是继承同一个 `pipe_id`
 
 当前仍然没有完整 POSIX file object / 引用计数模型，但 fd 已经不再直接“挂在一份全局 pipe 数据上”，而是通过 `pipe_id` 间接访问 pipe object。
+
+Task98 之后，多级 `mini_pipeline` 里的 `fd=0 / fd=1` 设置也更明确了：
+
+1. 第一个命令段：
+   - `dup2(pipe0_write_fd, 1)`
+2. 中间命令段：
+   - `dup2(prev_pipe_read_fd, 0)`
+   - `dup2(next_pipe_write_fd, 1)`
+3. 最后一个命令段：
+   - `dup2(last_pipe_read_fd, 0)`
+
+这说明 `dup2` 在多级 pipeline 中的作用，就是把“某一段命令的标准输入输出”接到正确的 pipe object 端点上。
+
+同样重要的是 close：
+
+1. 子进程在完成 `dup2` 之后，会关闭自己手里的全部原始 pipe fd
+2. 父进程在 fork 完所有子进程后，也会关闭自己手里的全部 pipe fd
+
+这样做的原因是：
+
+1. 避免多余写端仍然存活，导致下游 reader 永远收不到 EOF
+2. 避免多余读端/写端干扰 pipe object 生命周期

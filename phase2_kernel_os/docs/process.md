@@ -263,3 +263,29 @@ Task97 没有重写 `fork`、`dup2` 或 `exit` 主机制，而是把它们与 pi
 1. “每个进程里的 pipe fd 只保存 `pipe_id`”
 2. “真正的数据和开关状态在 `pipe_table[pipe_id]`”
 3. “fork/dup2/close/exit` 都围绕这个 `pipe_id` 工作”
+
+## 16. Task98：多级 pipeline 中的多子进程关系
+
+Task98 没有重写 scheduler，也没有实现完整 shell 进程组；它只是把 `mini_pipeline` 推进成：
+
+1. 一个命令段对应一个子进程
+2. 父进程依次 `fork()` 出所有子进程
+3. 每个子进程根据自己所在位置决定是否：
+   - 绑定 `stdin`
+   - 绑定 `stdout`
+4. 父进程在所有子进程建立完后关闭全部 pipe fd
+5. 父进程最后 `waitpid()` 所有子进程
+
+这和真实 shell 的差距仍然包括：
+
+1. 没有进程组
+2. 没有作业控制
+3. 没有完整的 shell `|` parser
+4. 当前仍是教学版 busy-wait pipe
+
+但它已经足以表达最小多级 pipeline 的进程关系：
+
+1. `cmd0` 一个子进程
+2. `cmd1` 一个子进程
+3. `cmd2` 一个子进程
+4. 各进程之间只通过 pipe object 传递数据

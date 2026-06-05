@@ -14,6 +14,14 @@
 #include "../../include/user_program.h"
 
 #define MINI_PIPELINE_ARG_BUF_LEN USER_PROGRAM_MAX_ARG_LEN
+#define MINI_PIPELINE_MAX_CMDS USER_PROGRAM_MAX_ARGS
+
+// 教学版 pipeline 命令段：记录这一段自己的 argc / argv 以及解析出的目标程序编号。
+struct mini_pipeline_cmd {
+    int argc;
+    int program_id;
+    const char* argv[USER_PROGRAM_MAX_ARGS];
+};
 
 struct mini_pipeline_program_entry {
     const char* name;
@@ -223,7 +231,7 @@ static void mini_pipeline_write_error(const char* message, int code) {
 
 // 输出当前最小用法，强调用 -- 分隔左右命令。
 static void mini_pipeline_write_usage(void) {
-    user_write("usage: mini_pipeline <left_prog> [left_args...] -- <right_prog> [right_args...]\n");
+    user_write("usage: mini_pipeline <cmd1> [args...] -- <cmd2> [args...] [-- <cmd3> [args...] ...]\n");
 }
 
 // 从当前程序 argv 里读取一个参数到固定缓冲区。
@@ -231,70 +239,120 @@ static int mini_pipeline_load_arg(int index, char* buffer) {
     return user_get_arg(index, buffer, MINI_PIPELINE_ARG_BUF_LEN);
 }
 
-// 在 mini_pipeline 的 argv 中查找 -- 分隔符，返回所在下标，失败返回 -1。
-static int mini_pipeline_find_separator(int argc) {
-    static char token[MINI_PIPELINE_ARG_BUF_LEN];
+// 关闭 mini_pipeline 当前持有的所有 pipe fd：父进程和子进程都复用这一逻辑，避免多余端点阻碍 EOF。
+static void mini_pipeline_close_all_pipes(int pipe_count, int pipe_fds[MINI_PIPELINE_MAX_CMDS - 1][2]) {
     int index;
 
-    for (index = 1; index < argc; index++) {
-        if (mini_pipeline_load_arg(index, token) <= 0) {
-            return -1;
-        }
-        if (mini_pipeline_string_equals(token, "--") != 0) {
-            return index;
-        }
+    for (index = 0; index < pipe_count; index++) {
+        user_close(pipe_fds[index][0]);
+        user_close(pipe_fds[index][1]);
     }
-
-    return -1;
 }
 
-// 根据 argv 的一段连续区间构造某一侧 exec 要使用的 argc/argv。
-static int mini_pipeline_build_side_argv(
-    int begin_index,
-    int end_index,
-    char storage[USER_PROGRAM_MAX_ARGS][MINI_PIPELINE_ARG_BUF_LEN],
-    const char* argv_out[USER_PROGRAM_MAX_ARGS]) {
-    int argc;
+// 解析多段 mini_pipeline 参数：
+// 1. 用 -- 分隔命令段
+// 2. 每段至少一个 token
+// 3. 每段都保留自己的 argv
+// 4. -- 本身不进入任何命令段
+static int mini_pipeline_parse_args(
+    int argc,
+    struct mini_pipeline_cmd* cmds,
+    int* cmd_count_out,
+    char storage[MINI_PIPELINE_MAX_CMDS][USER_PROGRAM_MAX_ARGS][MINI_PIPELINE_ARG_BUF_LEN]) {
+    static char token[MINI_PIPELINE_ARG_BUF_LEN];
+    int cmd_index = 0;
+    int arg_index = 0;
+    int saw_separator = 0;
     int index;
 
-    if (begin_index >= end_index) {
+    if (cmds == (struct mini_pipeline_cmd*)0 || cmd_count_out == (int*)0) {
         return -1;
     }
 
-    argc = end_index - begin_index;
-    if (argc > USER_PROGRAM_MAX_ARGS) {
-        return -2;
+    for (index = 0; index < MINI_PIPELINE_MAX_CMDS; index++) {
+        cmds[index].argc = 0;
+        cmds[index].program_id = 0;
     }
 
-    for (index = 0; index < argc; index++) {
-        if (mini_pipeline_load_arg(begin_index + index, storage[index]) <= 0) {
-            return -3;
+    for (index = 1; index < argc; index++) {
+        if (mini_pipeline_load_arg(index, token) <= 0) {
+            return -2;
         }
-        argv_out[index] = storage[index];
+
+        if (mini_pipeline_string_equals(token, "--") != 0) {
+            saw_separator = 1;
+            if (arg_index == 0) {
+                return -3;
+            }
+            cmds[cmd_index].argc = arg_index;
+            cmd_index++;
+            if (cmd_index >= MINI_PIPELINE_MAX_CMDS) {
+                return -4;
+            }
+            arg_index = 0;
+            continue;
+        }
+
+        if (arg_index >= USER_PROGRAM_MAX_ARGS) {
+            return -5;
+        }
+
+        if (cmd_index >= MINI_PIPELINE_MAX_CMDS) {
+            return -4;
+        }
+
+        if (mini_pipeline_load_arg(index, storage[cmd_index][arg_index]) <= 0) {
+            return -2;
+        }
+        cmds[cmd_index].argv[arg_index] = storage[cmd_index][arg_index];
+        arg_index++;
     }
 
-    return argc;
+    if (arg_index == 0) {
+        return -3;
+    }
+
+    cmds[cmd_index].argc = arg_index;
+    cmd_index++;
+
+    if (saw_separator == 0 || cmd_index < 2) {
+        return -6;
+    }
+
+    *cmd_count_out = cmd_index;
+    return 0;
 }
 
-// 主流程：采用教学版最小并发 pipeline，左右两侧都先 fork 出来，再由父进程分别 wait。
+// 根据命令名查找每一段的 program_id；只要有未知程序就直接报错退出。
+static int mini_pipeline_resolve_program_ids(struct mini_pipeline_cmd* cmds, int cmd_count) {
+    int index;
+
+    for (index = 0; index < cmd_count; index++) {
+        cmds[index].program_id = mini_pipeline_program_id_from_name(cmds[index].argv[0]);
+        if (cmds[index].program_id == PROGRAM_INVALID || cmds[index].program_id == 0) {
+            return index + 1;
+        }
+    }
+
+    return 0;
+}
+
+// 主流程：采用教学版最小多级并发 pipeline，N 个命令使用 N-1 个 pipe 串联。
 void _start(void) {
-    static char left_storage[USER_PROGRAM_MAX_ARGS][MINI_PIPELINE_ARG_BUF_LEN];
-    static char right_storage[USER_PROGRAM_MAX_ARGS][MINI_PIPELINE_ARG_BUF_LEN];
-    static const char* right_argv[USER_PROGRAM_MAX_ARGS];
-    static const char* left_argv[USER_PROGRAM_MAX_ARGS];
+    static struct mini_pipeline_cmd cmds[MINI_PIPELINE_MAX_CMDS];
+    static char storage[MINI_PIPELINE_MAX_CMDS][USER_PROGRAM_MAX_ARGS][MINI_PIPELINE_ARG_BUF_LEN];
+    static int pipe_fds[MINI_PIPELINE_MAX_CMDS - 1][2];
+    static int child_pids[MINI_PIPELINE_MAX_CMDS];
     int argc;
-    int left_argc;
-    int right_argc;
-    int separator_index;
-    int left_program_id;
-    int right_program_id;
-    int build_result;
-    int fds[2];
-    int pipe_result;
-    int writer_pid;
-    int reader_pid;
+    int cmd_count;
+    int parse_result;
+    int resolve_result;
+    int pipe_index;
+    int child_index;
+    int created_pipes = 0;
+    int started_children = 0;
     int wait_result;
-    int dup_result;
+    int fork_result;
 
     argc = user_get_argc();
     if (argc < 4) {
@@ -307,104 +365,82 @@ void _start(void) {
         user_exit(1);
     }
 
-    separator_index = mini_pipeline_find_separator(argc);
-    if (separator_index < 0) {
+    parse_result = mini_pipeline_parse_args(argc, cmds, &cmd_count, storage);
+    if (parse_result != 0) {
         mini_pipeline_write_usage();
         user_exit(1);
     }
 
-    build_result = mini_pipeline_build_side_argv(1, separator_index, left_storage, left_argv);
-    if (build_result <= 0) {
-        mini_pipeline_write_usage();
-        user_exit(1);
-    }
-    left_argc = build_result;
-
-    build_result = mini_pipeline_build_side_argv(separator_index + 1, argc, right_storage, right_argv);
-    if (build_result <= 0) {
-        mini_pipeline_write_usage();
-        user_exit(1);
-    }
-    right_argc = build_result;
-
-    left_program_id = mini_pipeline_program_id_from_name(left_storage[0]);
-    right_program_id = mini_pipeline_program_id_from_name(right_storage[0]);
-    if (left_program_id == PROGRAM_INVALID || left_program_id == 0) {
-        mini_pipeline_write_error("unknown left program", 0);
-        user_exit(1);
-    }
-    if (right_program_id == PROGRAM_INVALID || right_program_id == 0) {
-        mini_pipeline_write_error("unknown right program", 0);
+    resolve_result = mini_pipeline_resolve_program_ids(cmds, cmd_count);
+    if (resolve_result != 0) {
+        mini_pipeline_write_error("unknown program", resolve_result);
         user_exit(1);
     }
 
     user_write("mini_pipeline: start\n");
 
-    pipe_result = user_pipe(fds);
-    if (pipe_result != 0) {
-        mini_pipeline_write_error("pipe failed", pipe_result);
-        user_exit(1);
+    for (pipe_index = 0; pipe_index < cmd_count - 1; pipe_index++) {
+        parse_result = user_pipe(pipe_fds[pipe_index]);
+        if (parse_result != 0) {
+            mini_pipeline_close_all_pipes(created_pipes, pipe_fds);
+            mini_pipeline_write_error("pipe failed", parse_result);
+            user_exit(1);
+        }
+        created_pipes++;
     }
 
-    writer_pid = user_fork();
-    if (writer_pid < 0) {
-        mini_pipeline_write_error("fork left failed", writer_pid);
-        user_exit(1);
-    }
-
-    if (writer_pid == 0) {
-        dup_result = user_dup2(fds[1], 1);
-        if (dup_result != 1) {
-            user_exit(2);
+    for (child_index = 0; child_index < cmd_count; child_index++) {
+        fork_result = user_fork();
+        if (fork_result < 0) {
+            mini_pipeline_close_all_pipes(created_pipes, pipe_fds);
+            mini_pipeline_write_error("fork failed", fork_result);
+            while (started_children > 0) {
+                started_children--;
+                user_waitpid(child_pids[started_children]);
+            }
+            user_exit(1);
         }
 
-        user_close(fds[0]);
-        user_close(fds[1]);
-        if (user_exec_args(left_program_id, left_argc, left_argv) != 0) {
-            user_exit(3);
+        if (fork_result == 0) {
+            int dup_result;
+
+            if (child_index > 0) {
+                dup_result = user_dup2(pipe_fds[child_index - 1][0], 0);
+                if (dup_result != 0) {
+                    user_exit(10 + child_index);
+                }
+            }
+
+            if (child_index < cmd_count - 1) {
+                dup_result = user_dup2(pipe_fds[child_index][1], 1);
+                if (dup_result != 1) {
+                    user_exit(20 + child_index);
+                }
+            }
+
+            // 子进程完成 dup2 之后，必须关闭自己手里的所有原始 pipe fd，
+            // 否则多余写端会让下游永远等不到 EOF。
+            mini_pipeline_close_all_pipes(created_pipes, pipe_fds);
+            if (user_exec_args(cmds[child_index].program_id, cmds[child_index].argc, cmds[child_index].argv) != 0) {
+                user_exit(30 + child_index);
+            }
+
+            user_exit(40 + child_index);
         }
 
-        user_exit(4);
+        child_pids[started_children] = fork_result;
+        started_children++;
     }
 
-    reader_pid = user_fork();
-    if (reader_pid < 0) {
-        user_close(fds[0]);
-        user_close(fds[1]);
-        mini_pipeline_write_error("fork right failed", reader_pid);
-        user_exit(1);
-    }
+    // 父进程不参与真正的数据读写，因此在所有子进程建立完后立即关闭自己的 pipe 端点。
+    mini_pipeline_close_all_pipes(created_pipes, pipe_fds);
 
-    if (reader_pid == 0) {
-        dup_result = user_dup2(fds[0], 0);
-        if (dup_result != 0) {
-            user_exit(5);
+    for (child_index = 0; child_index < cmd_count; child_index++) {
+        wait_result = user_waitpid(child_pids[child_index]);
+        if (wait_result != child_pids[child_index]) {
+            mini_pipeline_write_error("wait failed", wait_result);
+            user_exit(1);
         }
-
-        user_close(fds[0]);
-        user_close(fds[1]);
-        if (user_exec_args(right_program_id, right_argc, right_argv) != 0) {
-            user_exit(6);
-        }
-
-        user_exit(7);
-    }
-
-    // 父进程不参与真正的数据读写，因此在两个子进程都建立完后立即关闭自己的 pipe 端点。
-    // 这样 reader 才能在 writer 退出后正确观察到 write end 关闭并最终得到 EOF。
-    user_close(fds[0]);
-    user_close(fds[1]);
-
-    wait_result = user_waitpid(writer_pid);
-    if (wait_result != writer_pid) {
-        mini_pipeline_write_error("wait left failed", wait_result);
-        user_exit(1);
-    }
-
-    wait_result = user_waitpid(reader_pid);
-    if (wait_result != reader_pid) {
-        mini_pipeline_write_error("wait right failed", wait_result);
-        user_exit(1);
     }
 
     user_write("mini_pipeline: ok\n");

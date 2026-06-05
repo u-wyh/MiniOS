@@ -3685,6 +3685,57 @@ TODO：
 - Task97 可继续做更真实的 sleep/wakeup pipe 等待队列
 - Task98 可继续做多个 pipe object 和更接近 UNIX 的生命周期
 
+## ✅ Task98：mini_pipeline 支持多级管道 / 多 pipe object 组合验证
+
+本轮目标：
+
+- 把 `mini_pipeline` 从二段命令推进到多级命令
+- 支持格式：
+  - `run mini_pipeline <cmd1> [args...] -- <cmd2> [args...] -- <cmd3> [args...] ...`
+- 重点验证：
+  - 多命令 `argv`
+  - 多 pipe object
+  - `fork`
+  - `dup2`
+  - `exec`
+  - fd 保留
+  - pipe 数据隔离
+
+已完成：
+
+- `mini_pipeline` 现在继续兼容二段用法
+- `mini_pipeline` 现在支持至少三段命令
+- `--` 会被解析成多个命令段的分隔符，不会进入任何一侧 `argv`
+- 若有 `N` 个命令段，则会创建 `N-1` 个 pipe
+- 第一个命令：
+  - 只把 `fd=1` 接到第一个 pipe write
+- 中间命令：
+  - `fd=0` 接前一个 pipe read
+  - `fd=1` 接下一个 pipe write
+- 最后一个命令：
+  - 只把 `fd=0` 接到最后一个 pipe read
+- 父进程在 fork 完全部子进程后关闭所有 pipe fd，再 wait 所有子进程
+- 当前重点示例包括：
+  - `run mini_pipeline cat /readme.txt -- grep MiniOS -- wc`
+  - `run mini_pipeline cat /readme.txt -- head -n 5 -- tail -n 2`
+  - `run mini_pipeline pipeline_writer -- grep MiniOS -- wc`
+
+当前限制：
+
+- 不是完整 Shell pipeline
+- 不支持真正的 `|`
+- 不支持引号/转义
+- 不支持环境变量
+- 不支持通配符
+- 不支持进程组
+- fd 引用计数仍然简化
+
+TODO：
+
+- Task99 可以做真正 Shell 多级管道解析雏形
+- Task100 可以做 Phase2 fd/pipe/process 总结文档
+- Task101 可以做测试清单和阶段收尾
+
 ## ✅ Task97：多个 pipe object / pipe 分配表雏形
 
 本轮目标：

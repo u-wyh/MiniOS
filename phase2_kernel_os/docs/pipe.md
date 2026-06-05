@@ -393,3 +393,46 @@ pipe_table[PROCESS_MAX_PIPE_OBJECTS]
 2. fork/dup2 只是复制 `pipe_id`
 3. close 语义仍是教学版近似模型
 4. 还不支持多级 Shell pipeline
+
+## 12. Task98：多级 mini_pipeline 与多个 pipe 串联
+
+Task98 之后，`mini_pipeline` 已经可以把多个命令段串起来：
+
+```text
+run mini_pipeline <cmd1> [args...] -- <cmd2> [args...] -- <cmd3> [args...] ...
+```
+
+这里的关键点是：
+
+1. 若有 `N` 个命令段，就需要 `N-1` 个 pipe
+2. 每个 pipe 都必须是独立 pipe object
+3. 相邻命令段通过各自对应的 pipe object 串联
+
+例如：
+
+```text
+run mini_pipeline cat /readme.txt -- grep MiniOS -- wc
+```
+
+需要：
+
+1. `pipe0`
+   - `cat stdout -> grep stdin`
+2. `pipe1`
+   - `grep stdout -> wc stdin`
+
+因此多级 pipeline 中每个子进程的接线关系是：
+
+1. 第一个命令：
+   - `fd=1 -> pipe0 write`
+2. 中间命令：
+   - `fd=0 -> pipe(i-1) read`
+   - `fd=1 -> pipe(i) write`
+3. 最后一个命令：
+   - `fd=0 -> 最后一个 pipe read`
+
+这也是 Task97 多个 pipe object 的直接组合验证：
+
+1. `pipe0` 和 `pipe1` 不能串数据
+2. 父进程和子进程都必须及时关闭自己不需要的 pipe fd
+3. 否则下游 reader 可能永远观察不到 EOF
