@@ -347,3 +347,10 @@ run cat /readme.txt | run grep MiniOS | run wc
 3. [process.md](/home/wyh/MiniOS/phase2_kernel_os/docs/process.md)
 4. [shell.md](/home/wyh/MiniOS/phase2_kernel_os/docs/shell.md)
 5. [syscall.md](/home/wyh/MiniOS/phase2_kernel_os/docs/syscall.md)
+
+## 17. Phase2 验收测试入口
+
+如果要验证当前 Phase2 是否仍然稳定，建议优先看：
+
+1. [tests/phase2_smoke.md](/home/wyh/MiniOS/phase2_kernel_os/docs/tests/phase2_smoke.md)
+2. [tests/phase2_regression.md](/home/wyh/MiniOS/phase2_kernel_os/docs/tests/phase2_regression.md)

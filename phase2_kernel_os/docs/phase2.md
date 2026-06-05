@@ -907,3 +907,16 @@
 - 当前 Phase2 已进入收尾阶段：
   - Task101 主要做回归测试清单
   - Task102 主要做阶段冻结和收尾整理
+
+## Task101：Phase2 回归测试清单
+
+- 本轮不新增内核功能，而是建立阶段验收测试文档。
+- 新增：
+  - `docs/tests/phase2_regression.md`
+  - `docs/tests/phase2_smoke.md`
+  - `docs/tasks/task101_phase2_regression.md`
+- 当前建议流程是：
+  - 先跑 smoke
+  - 再跑完整 regression
+- 当前 Phase2 已进入收尾阶段：
+  - Task102 主要做阶段冻结和收尾清理

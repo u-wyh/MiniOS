@@ -3858,6 +3858,49 @@ TODO：
 - Task101：Phase2 回归测试清单
 - Task102：Phase2 收尾清理 / phase2-complete 冻结点
 
+## ✅ Task101：Phase2 回归测试清单
+
+本轮目标：
+
+- 不新增功能
+- 建立 Phase2 阶段验收测试文档
+- 把后续每次修改后该跑哪些命令固定下来
+
+已完成：
+
+- 新增：
+  - `docs/tests/phase2_regression.md`
+  - `docs/tests/phase2_smoke.md`
+  - `docs/tasks/task101_phase2_regression.md`
+- 回归测试覆盖：
+  - RAMFS
+  - 用户程序
+  - redirect
+  - pipe
+  - pipe object
+  - close
+  - dup2
+  - fork
+  - exec
+  - argv
+  - mini_pipeline
+  - Shell 多级管道
+  - 错误输入
+- 当前建议：
+  - 改完功能先跑 `phase2_smoke`
+  - 再跑 `phase2_regression`
+
+当前状态：
+
+- Phase2 已进入收尾阶段
+- 后续更适合优先做：
+  - Task102：Phase2 收尾清理 / 冻结点
+
+测试文档入口：
+
+1. [docs/tests/phase2_smoke.md](/home/wyh/MiniOS/phase2_kernel_os/docs/tests/phase2_smoke.md)
+2. [docs/tests/phase2_regression.md](/home/wyh/MiniOS/phase2_kernel_os/docs/tests/phase2_regression.md)
+
 ## ✅ Task97：多个 pipe object / pipe 分配表雏形
 
 本轮目标：
