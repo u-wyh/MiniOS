@@ -237,3 +237,29 @@ Task96 没有重写 scheduler 或 `exec` 主体，而是把 `mini_pipeline` 自�
 1. 父进程只负责搭线和回收
 2. 左右两个子进程并存
 3. 数据通过单全局教学版 pipe 在二者之间流动
+
+## 15. Task97：fork / exit 与 pipe_id 生命周期
+
+Task97 没有重写 `fork`、`dup2` 或 `exit` 主机制，而是把它们与 pipe object 的关系整理成：
+
+1. `fork()`
+   - 子进程复制父进程 `fd_table[]`
+   - pipe fd 继承时复制的是同一个 `pipe_id`
+   - 当前仍然不是完整引用计数模型
+2. `dup2()`
+   - 复制 pipe fd 时也只是复制 `pipe_id`
+   - 不会新建 pipe object
+3. `close()` / `exit`
+   - 关闭一个 pipe fd 后，只更新对应 `pipe_id` 那个对象的 `read_open / write_open`
+   - 不会把别的 pipe object 一起影响掉
+   - 当对应 pipe object 的读写两端都关闭后，对象槽位才会被回收
+
+这说明当前 process 维度已经从：
+
+1. “所有 pipe 都共用一份全局状态”
+
+推进到了：
+
+1. “每个进程里的 pipe fd 只保存 `pipe_id`”
+2. “真正的数据和开关状态在 `pipe_table[pipe_id]`”
+3. “fork/dup2/close/exit` 都围绕这个 `pipe_id` 工作”

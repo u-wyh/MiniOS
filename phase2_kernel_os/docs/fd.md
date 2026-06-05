@@ -400,3 +400,38 @@ Task96 之后，这套 fd 接线又往真实 pipeline 靠近了一步：
 1. 仍然只有一个全局 pipe buffer
 2. 当前等待是 busy-wait，不是完整阻塞队列
 3. 但 file fd / pipe fd / dup2 / exec 的组合已经足以跑最小并发 pipeline
+
+Task97 之后，fd 与 pipe 的关系又更清晰了一步：
+
+1. `struct process_fd_entry` 现在直接保存 `pipe_id`
+2. `FD_PIPE_READ / FD_PIPE_WRITE` 不再直接代表“那一份全局 pipe 数据”
+3. 它们只表示：
+   - 这个 fd 是读端还是写端
+   - 它绑定到哪一个 `pipe_id`
+
+也就是说：
+
+```text
+fd 3 -> FD_PIPE_READ  -> pipe_id = 0
+fd 4 -> FD_PIPE_WRITE -> pipe_id = 0
+fd 5 -> FD_PIPE_READ  -> pipe_id = 1
+fd 6 -> FD_PIPE_WRITE -> pipe_id = 1
+```
+
+真正的数据状态保存在：
+
+```text
+pipe_table[pipe_id]
+```
+
+当前 `dup2` / `fork` 对 pipe fd 的影响也可以更精确地描述为：
+
+1. `dup2(pipe_fd, newfd)`
+   - 复制 pipe fd 表项
+   - 同时复制 `pipe_id`
+   - 不会新建 pipe object
+2. `fork()`
+   - 子进程复制父进程 `fd_table[]`
+   - pipe fd 继承时也只是继承同一个 `pipe_id`
+
+当前仍然没有完整 POSIX file object / 引用计数模型，但 fd 已经不再直接“挂在一份全局 pipe 数据上”，而是通过 `pipe_id` 间接访问 pipe object。

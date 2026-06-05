@@ -144,6 +144,8 @@ int process_set_stdin_redirect_by_pid(int pid, const char* path) {
 // Task83 之后，这里的核心接线语义是“先分配 pipe write fd，再 fd_dup2(pipe_write_fd, 1)”。
 int process_set_stdout_pipe_by_pid(int pid) {
     struct process* target = process_find_by_pid(pid);
+    struct process_pipe_object* pipe;
+    int pipe_id;
     int pipe_fd;
     int dup_result;
 
@@ -151,17 +153,32 @@ int process_set_stdout_pipe_by_pid(int pid) {
         return -1;
     }
 
-    pipe_fd = process_alloc_pipe_fd(target, PROCESS_FD_TYPE_PIPE_WRITE);
-    if (pipe_fd < 0) {
+    pipe_id = process_shell_pipe_id;
+    if (pipe_id < 0) {
+        pipe_id = process_pipe_alloc();
+        if (pipe_id < 0) {
+            return -2;
+        }
+        process_shell_pipe_id = pipe_id;
+    }
+
+    pipe = process_pipe_get(pipe_id);
+    if (pipe == (struct process_pipe_object*)0) {
         return -2;
     }
 
-    process_pipe_buffer.active = 1;
-    process_pipe_buffer.write_open = 1;
+    pipe_fd = process_alloc_pipe_fd(target, PROCESS_FD_TYPE_PIPE_WRITE, pipe_id);
+    if (pipe_fd < 0) {
+        return -3;
+    }
+
+    pipe->used = 1;
+    pipe->active = 1;
+    pipe->write_open = 1;
     dup_result = process_fd_dup2(target, pipe_fd, 1);
     if (dup_result < 0) {
         process_fd_reset_slot(target, process_fd_slot_from_number(pipe_fd));
-        return -3;
+        return -4;
     }
     return 0;
 }
@@ -170,6 +187,8 @@ int process_set_stdout_pipe_by_pid(int pid) {
 // Task83 之后，这里的核心接线语义是“先分配 pipe read fd，再 fd_dup2(pipe_read_fd, 0)”。
 int process_set_stdin_pipe_by_pid(int pid) {
     struct process* target = process_find_by_pid(pid);
+    struct process_pipe_object* pipe;
+    int pipe_id;
     int pipe_fd;
     int dup_result;
 
@@ -177,18 +196,32 @@ int process_set_stdin_pipe_by_pid(int pid) {
         return -1;
     }
 
-    pipe_fd = process_alloc_pipe_fd(target, PROCESS_FD_TYPE_PIPE_READ);
-    if (pipe_fd < 0) {
+    pipe_id = process_shell_pipe_id;
+    if (pipe_id < 0) {
+        pipe_id = process_pipe_alloc();
+        if (pipe_id < 0) {
+            return -2;
+        }
+        process_shell_pipe_id = pipe_id;
+    }
+
+    pipe = process_pipe_get(pipe_id);
+    if (pipe == (struct process_pipe_object*)0) {
         return -2;
     }
 
-    process_pipe_buffer.active = 1;
-    process_pipe_buffer.read_open = 1;
-    process_pipe_buffer.read_offset = 0;
+    pipe_fd = process_alloc_pipe_fd(target, PROCESS_FD_TYPE_PIPE_READ, pipe_id);
+    if (pipe_fd < 0) {
+        return -3;
+    }
+
+    pipe->used = 1;
+    pipe->active = 1;
+    pipe->read_open = 1;
     dup_result = process_fd_dup2(target, pipe_fd, 0);
     if (dup_result < 0) {
         process_fd_reset_slot(target, process_fd_slot_from_number(pipe_fd));
-        return -3;
+        return -4;
     }
     return 0;
 }
@@ -229,6 +262,8 @@ int process_current_has_stdout_redirect(void) {
 
 // 判断当前进程是否启用了 stdout -> pipe：供 SYS_WRITE 把文本优先写入教学版 pipe buffer。
 int process_current_has_stdout_pipe(void) {
+    struct process_pipe_object* pipe;
+
     if (current_process == (struct process*)0 || current_process->state != PROCESS_RUNNING) {
         return 0;
     }
@@ -237,7 +272,12 @@ int process_current_has_stdout_pipe(void) {
         return 0;
     }
 
-    if (process_pipe_buffer.write_open == 0) {
+    pipe = process_pipe_get(current_process->stdout_pipe_id);
+    if (pipe == (struct process_pipe_object*)0) {
+        return 0;
+    }
+
+    if (pipe->write_open == 0) {
         return 0;
     }
 
@@ -297,6 +337,7 @@ int process_write_stdout_redirect(const char* text) {
 // Task96 之后，若缓冲区暂时写满，会在内核里做最小 busy-wait，直到 reader 读走数据或检测到读端关闭。
 int process_write_stdout_pipe(const char* text) {
     struct process* proc = current_process;
+    struct process_pipe_object* pipe;
     int text_len;
 
     if (proc == (struct process*)0) {
@@ -316,26 +357,43 @@ int process_write_stdout_pipe(const char* text) {
         return -3;
     }
 
-    if (process_pipe_buffer.read_open == 0) {
+    pipe = process_pipe_get(proc->stdout_pipe_id);
+    if (pipe == (struct process_pipe_object*)0) {
         return -4;
     }
 
-    if (process_pipe_buffer.write_open == 0) {
+    if (pipe->read_open == 0) {
         return -5;
     }
 
-    return process_pipe_append_from_user(text, text_len);
+    if (pipe->write_open == 0) {
+        return -6;
+    }
+
+    return process_pipe_append_from_user(pipe, text, text_len);
 }
 
-// 清空教学版单管道缓冲区：shell 在执行 run A | run B 前后都应调用，避免残留旧数据。
+// 清空 shell 顺序管道当前使用的 pipe object：只影响 shell 的“run A | run B”路径，
+// 不会顺手把用户态 pipe() syscall 已经分配出的别的 pipe object 一起清空。
 void process_pipe_reset(void) {
-    process_pipe_buffer_clear();
+    struct process_pipe_object* pipe;
+
+    if (process_shell_pipe_id < 0) {
+        return;
+    }
+
+    pipe = process_pipe_get(process_shell_pipe_id);
+    if (pipe != (struct process_pipe_object*)0) {
+        process_pipe_object_clear(pipe);
+    }
+    process_shell_pipe_id = -1;
 }
 
 // 为当前进程创建一对教学版 pipe fd：fds[0] 返回读端，fds[1] 返回写端。
-// 当前仍然只复用一个全局 pipe buffer，因此创建新 pipe 时会先 reset 全局状态。
+// Task97 之后，每次 pipe() 都从 pipe_table[] 分配一个独立 pipe object。
 int process_pipe_create_fds(int* user_fds) {
     struct process* proc = current_process;
+    int pipe_id;
     int read_fd;
     int write_fd;
 
@@ -347,22 +405,22 @@ int process_pipe_create_fds(int* user_fds) {
         return -2;
     }
 
-    process_pipe_reset();
-    process_pipe_buffer.active = 1;
-    process_pipe_buffer.read_open = 1;
-    process_pipe_buffer.write_open = 1;
-
-    read_fd = process_alloc_pipe_fd(proc, PROCESS_FD_TYPE_PIPE_READ);
-    if (read_fd < 0) {
-        process_pipe_reset();
+    pipe_id = process_pipe_alloc();
+    if (pipe_id < 0) {
         return -3;
     }
 
-    write_fd = process_alloc_pipe_fd(proc, PROCESS_FD_TYPE_PIPE_WRITE);
+    read_fd = process_alloc_pipe_fd(proc, PROCESS_FD_TYPE_PIPE_READ, pipe_id);
+    if (read_fd < 0) {
+        process_pipe_try_free(pipe_id);
+        return -4;
+    }
+
+    write_fd = process_alloc_pipe_fd(proc, PROCESS_FD_TYPE_PIPE_WRITE, pipe_id);
     if (write_fd < 0) {
         process_close_file(read_fd);
-        process_pipe_reset();
-        return -4;
+        process_pipe_try_free(pipe_id);
+        return -5;
     }
 
     user_fds[0] = read_fd;

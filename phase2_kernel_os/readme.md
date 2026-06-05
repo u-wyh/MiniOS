@@ -3684,3 +3684,55 @@ TODO：
 
 - Task97 可继续做更真实的 sleep/wakeup pipe 等待队列
 - Task98 可继续做多个 pipe object 和更接近 UNIX 的生命周期
+
+## ✅ Task97：多个 pipe object / pipe 分配表雏形
+
+本轮目标：
+
+- 从“单全局 pipe buffer”推进到“`pipe_table[MAX_PIPE]`”
+- 让每次 `pipe()` 都分配一个独立 pipe object
+- 让 `FD_PIPE_READ / FD_PIPE_WRITE` 通过 `pipe_id` 绑定到同一个 pipe object
+- 新增 `pipe_multi_test`
+
+已完成：
+
+- 内核新增固定大小的 `pipe_table[PROCESS_MAX_PIPE_OBJECTS]`
+- 每个 pipe object 现在独立维护：
+  - `used`
+  - `active`
+  - `data[PROCESS_PIPE_BUFFER_SIZE]`
+  - `read_pos`
+  - `write_pos`
+  - `count`
+  - `read_open`
+  - `write_open`
+- `pipe()` 每次都会从 `pipe_table[]` 分配一个空闲对象
+- `fds[0] / fds[1]` 现在绑定到同一个 `pipe_id`
+- `read/write/close` 都会先通过 fd 表项找到对应 `pipe_id`，再操作对应 pipe object
+- pipe 两端都关闭后，对应 pipe object 可回收并复用
+- 新增 `pipe_multi_test`
+  - 同时创建 pipe A / pipe B
+  - 写入 `AAA\\n` / `BBB\\n`
+  - 分别读回并确认不串数据
+  - close 后再创建 pipe C，验证对象可复用
+
+当前支持：
+
+- 多个 pipe object
+- 不同 pipe 数据隔离
+- close 后回收
+- pipe object 可复用
+
+当前限制：
+
+- 不支持完整 fd 引用计数
+- 不支持完整 POSIX close 语义
+- 不支持 close-on-exec
+- 不支持多级 Shell pipeline
+- `MAX_PIPE` 固定
+
+TODO：
+
+- Task98 可继续做多级 pipeline 数据结构
+- Task99 可继续做真正 Shell pipeline 多级解析雏形
+- Task100 可继续做 Phase2 fd/pipe/process 总结

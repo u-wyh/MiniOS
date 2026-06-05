@@ -817,3 +817,24 @@
   - 仍然只有一个全局教学版 pipe buffer
   - 没有真正 sleep/wakeup 队列
   - 没有多个独立 pipe object
+
+## Task97：多个 pipe object / pipe 分配表雏形
+
+- 当前任务是把教学版 pipe 从“单全局 pipe buffer”推进到“`pipe_table[MAX_PIPE]`”
+- 本轮之后：
+  - `pipe()` 每次会分配一个独立 pipe object
+  - `FD_PIPE_READ / FD_PIPE_WRITE` 会通过 `pipe_id` 绑定到同一个对象
+  - `read/write/close` 都会按 `pipe_id` 找到对应 pipe object
+- 当前 Phase2 数据流链路可以进一步概括为：
+  - `fd`
+  - `-> pipe_id`
+  - `-> pipe_table[pipe_id]`
+  - `-> buffer / read_pos / write_pos / count`
+- 当前已经支持：
+  - 多个 pipe object
+  - 多次 `pipe_test / pipe_close_test / mini_pipeline` 之间的状态隔离
+  - pipe object 在读写端都关闭后回收复用
+- 当前仍然不是完整 POSIX pipe 生命周期：
+  - 没有复杂引用计数
+  - 没有 close-on-exec
+  - 还不支持多级 Shell pipeline

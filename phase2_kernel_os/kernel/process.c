@@ -22,7 +22,8 @@ extern void enter_user_mode(unsigned int user_entry, unsigned int user_stack_top
 static struct process process_table[PROCESS_MAX];
 static struct process* current_process = (struct process*)0;
 static struct process* last_exited_process = (struct process*)0;
-static struct process_pipe_buffer process_pipe_buffer;
+static struct process_pipe_object process_pipe_table[PROCESS_MAX_PIPE_OBJECTS];
+static int process_shell_pipe_id = -1;
 static int next_pid = 1;
 // 记录教学版 init 进程 pid：用于孤儿进程 reparent，默认 -1 表示尚未建立 init
 static int init_pid = -1;
@@ -43,10 +44,15 @@ static int process_text_length(const char* text);
 static int process_fd_slot_from_number(int fd);
 static struct process_fd_entry* process_fd_get_entry(struct process* proc, int fd);
 static int process_alloc_fd_slot(struct process* proc);
-static int process_alloc_pipe_fd(struct process* proc, int fd_type);
+static int process_alloc_pipe_fd(struct process* proc, int fd_type, int pipe_id);
 static void process_fd_reset_slot(struct process* proc, int slot);
-static int process_pipe_has_read_reference(void);
-static int process_pipe_has_write_reference(void);
+static void process_pipe_table_clear(void);
+static void process_pipe_object_clear(struct process_pipe_object* pipe);
+static struct process_pipe_object* process_pipe_get(int pipe_id);
+static int process_pipe_alloc(void);
+static void process_pipe_try_free(int pipe_id);
+static int process_pipe_has_read_reference(int pipe_id);
+static int process_pipe_has_write_reference(int pipe_id);
 static int process_close_fd_for_proc(struct process* proc, int fd);
 static void process_close_all_fds_for_proc(struct process* proc);
 static void process_copy_fd_table(struct process* child, const struct process* parent);
@@ -67,10 +73,10 @@ static int process_set_stdout_redirect(struct process* proc, const char* path, i
 static int process_set_stdin_redirect(struct process* proc, const char* path);
 static void process_pipe_buffer_clear(void);
 static void process_pipe_wait_briefly(void);
-static void process_pipe_compact_buffer(void);
-static uint32_t process_pipe_readable_bytes(void);
-static int process_pipe_copy_to_user(char* user_buf, int size);
-static int process_pipe_append_from_user(const char* user_buf, int size);
+static void process_pipe_compact_buffer(struct process_pipe_object* pipe);
+static uint32_t process_pipe_readable_bytes(struct process_pipe_object* pipe);
+static int process_pipe_copy_to_user(struct process_pipe_object* pipe, char* user_buf, int size);
+static int process_pipe_append_from_user(struct process_pipe_object* pipe, const char* user_buf, int size);
 static int process_is_init_waiting_shell_restart(struct process* child, struct process* parent);
 static void process_record_schedule(struct process* proc);
 

@@ -349,3 +349,47 @@ Task96 之后，当前 pipe 的最小等待语义变成：
 8. 完整 POSIX `dup2` / `pipe` 生命周期语义
 
 所以它更像“内核里的一个临时顺序缓冲区”，而不是完整 UNIX pipe 子系统。
+
+## 11. Task97：pipe_table 与多个 pipe object
+
+Task97 之后，教学版 pipe 的核心结构已经从“单全局 pipe buffer”推进到：
+
+```text
+pipe_table[PROCESS_MAX_PIPE_OBJECTS]
+```
+
+每个 pipe object 现在独立维护：
+
+1. `used`
+2. `active`
+3. `data[PROCESS_PIPE_BUFFER_SIZE]`
+4. `read_pos`
+5. `write_pos`
+6. `count`
+7. `read_open`
+8. `write_open`
+
+这意味着：
+
+1. `pipe()` 每次会分配一个空闲 `pipe_id`
+2. `fds[0]` 绑定为 `FD_PIPE_READ + pipe_id`
+3. `fds[1]` 绑定为 `FD_PIPE_WRITE + pipe_id`
+4. `read/write/close` 都先经由 fd 表项找到 `pipe_id`
+5. 不同 pipe object 的数据不会互相污染
+
+当前最小分配/回收语义是：
+
+1. `pipe_alloc()`
+   - 扫描 `pipe_table[]`
+   - 找一个 `used == 0` 的对象
+   - 初始化 buffer / pos / count / open 状态
+2. `pipe_try_free(pipe_id)`
+   - 当 `read_open == 0 && write_open == 0` 时清空对象
+   - 对象槽位可以被后续新的 `pipe()` 复用
+
+当前仍然不是完整 POSIX 生命周期：
+
+1. 没有复杂引用计数
+2. fork/dup2 只是复制 `pipe_id`
+3. close 语义仍是教学版近似模型
+4. 还不支持多级 Shell pipeline

@@ -56,6 +56,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `PROGRAM_EXEC_ARGS_TARGET = 34`
 - `PROGRAM_PIPELINE_ARGS_DEMO = 35`
 - `PROGRAM_MINI_PIPELINE = 36`
+- `PROGRAM_PIPE_MULTI_TEST = 37`
 
 其中：
 
@@ -100,6 +101,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `exec_args_target -> PROGRAM_EXEC_ARGS_TARGET`
 - `pipeline_args_demo -> PROGRAM_PIPELINE_ARGS_DEMO`
 - `mini_pipeline -> PROGRAM_MINI_PIPELINE`
+- `pipe_multi_test -> PROGRAM_PIPE_MULTI_TEST`
 
 其中 shell 默认直接暴露给用户的程序主要是：
 
@@ -125,6 +127,7 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 - `exec_args_test`
 - `pipeline_args_demo`
 - `mini_pipeline`
+- `pipe_multi_test`
 - `loop`
 - `loop_exit`
 - `sleep_test`
@@ -1430,3 +1433,33 @@ Task96 之后，`mini_pipeline` 的模型已经从“顺序 writer/reader”推�
 4. `exec(argc, argv)`
 
 形成一个带参数 consumer 的最小 pipeline 演示。
+
+## 46. 用户态 pipe_multi_test
+
+Task97 新增了一个专门验证“多个 pipe object 数据隔离”的最小程序：
+
+```text
+run pipe_multi_test
+```
+
+它当前会做三件事：
+
+1. 创建 pipe A 和 pipe B
+2. 分别写入：
+   - `AAA\n`
+   - `BBB\n`
+3. 分别从 A / B 读回并确认不会串数据
+4. close A / B 两端后，再创建 pipe C，验证 pipe object 槽位可以复用
+
+成功时预期输出：
+
+1. `pipe_multi_test: start`
+2. `pipe_multi_test: multi-pipe isolation ok`
+3. `pipe_multi_test: pipe reuse ok`
+4. `pipe_multi_test: ok`
+
+这个程序的意义是：
+
+1. 验证 `pipe_table[]` 已经存在
+2. 验证不同 `pipe_id` 的 buffer / open 状态已经彼此独立
+3. 验证 close 后 pipe object 可以被后续新的 `pipe()` 重新分配

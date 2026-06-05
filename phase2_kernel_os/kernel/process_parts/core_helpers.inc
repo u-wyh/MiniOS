@@ -178,6 +178,8 @@ static void process_clear_slot(struct process* proc) {
     proc->stdin_redirect_offset = 0;
     proc->stdin_pipe_fd = -1;
     proc->stdout_pipe_fd = -1;
+    proc->stdin_pipe_id = -1;
+    proc->stdout_pipe_id = -1;
     proc->stdout_redirect_to_pipe = 0;
     proc->stdin_redirect_from_pipe = 0;
     proc->launch_ready = 0;
@@ -187,15 +189,88 @@ static void process_clear_slot(struct process* proc) {
     proc->used = 0;
 }
 
-// 清空教学版单管道缓冲区：每次执行 run A | run B 前后都调用，避免残留上一次输出内容。
+// 清空一个 pipe object 槽位：复位使用标记、环形缓冲区状态和开端状态。
+static void process_pipe_object_clear(struct process_pipe_object* pipe) {
+    if (pipe == (struct process_pipe_object*)0) {
+        return;
+    }
+
+    pipe->used = 0;
+    pipe->active = 0;
+    pipe->overflowed = 0;
+    pipe->read_open = 0;
+    pipe->write_open = 0;
+    pipe->read_pos = 0;
+    pipe->write_pos = 0;
+    pipe->count = 0;
+}
+
+// 清空整个教学版 pipe object 表：供 process_init 和大范围 reset 使用。
+static void process_pipe_table_clear(void) {
+    int i;
+
+    for (i = 0; i < PROCESS_MAX_PIPE_OBJECTS; i++) {
+        process_pipe_object_clear(&process_pipe_table[i]);
+    }
+}
+
+// 兼容旧调用名：当前“清空 pipe 状态”表示清空整个 pipe object 表，并重置 shell 顺序 pipe 的活动 id。
 static void process_pipe_buffer_clear(void) {
-    process_pipe_buffer.active = 0;
-    process_pipe_buffer.used = 0;
-    process_pipe_buffer.overflowed = 0;
-    process_pipe_buffer.read_open = 0;
-    process_pipe_buffer.write_open = 0;
-    process_pipe_buffer.size = 0;
-    process_pipe_buffer.read_offset = 0;
+    process_pipe_table_clear();
+    process_shell_pipe_id = -1;
+}
+
+// 根据 pipe_id 取出对应 pipe object；非法或未占用时返回空指针。
+static struct process_pipe_object* process_pipe_get(int pipe_id) {
+    if (pipe_id < 0 || pipe_id >= PROCESS_MAX_PIPE_OBJECTS) {
+        return (struct process_pipe_object*)0;
+    }
+
+    if (process_pipe_table[pipe_id].used == 0) {
+        return (struct process_pipe_object*)0;
+    }
+
+    return &process_pipe_table[pipe_id];
+}
+
+// 分配一个空闲 pipe object：成功返回 pipe_id，失败返回 -1。
+static int process_pipe_alloc(void) {
+    int i;
+    struct process_pipe_object* pipe;
+
+    for (i = 0; i < PROCESS_MAX_PIPE_OBJECTS; i++) {
+        if (process_pipe_table[i].used != 0) {
+            continue;
+        }
+
+        pipe = &process_pipe_table[i];
+        process_pipe_object_clear(pipe);
+        pipe->used = 1;
+        pipe->active = 1;
+        pipe->read_open = 1;
+        pipe->write_open = 1;
+        return i;
+    }
+
+    return -1;
+}
+
+// 当一个 pipe object 的读写两端都关闭时，回收该对象槽位。
+static void process_pipe_try_free(int pipe_id) {
+    struct process_pipe_object* pipe = process_pipe_get(pipe_id);
+
+    if (pipe == (struct process_pipe_object*)0) {
+        return;
+    }
+
+    if (pipe->read_open != 0 || pipe->write_open != 0) {
+        return;
+    }
+
+    process_pipe_object_clear(pipe);
+    if (process_shell_pipe_id == pipe_id) {
+        process_shell_pipe_id = -1;
+    }
 }
 
 // 进行一次很短的 busy-wait，让当前 syscall 路径在 pipe 空/满时不要立刻失败。
@@ -208,52 +283,26 @@ static void process_pipe_wait_briefly(void) {
     }
 }
 
-// 把尚未读完的 pipe 数据压到缓冲区开头，给后续写入腾出连续空间。
-// 当前仍使用线性缓冲区，而不是完整环形队列；Task96 先以最小改动支持并发读写推进。
-static void process_pipe_compact_buffer(void) {
-    uint32_t remaining;
-    uint32_t i;
-
-    if (process_pipe_buffer.read_offset == 0) {
-        return;
-    }
-
-    if (process_pipe_buffer.read_offset >= process_pipe_buffer.size) {
-        process_pipe_buffer.size = 0;
-        process_pipe_buffer.read_offset = 0;
-        process_pipe_buffer.used = 0;
-        process_pipe_buffer.overflowed = 0;
-        return;
-    }
-
-    remaining = process_pipe_buffer.size - process_pipe_buffer.read_offset;
-    for (i = 0; i < remaining; i++) {
-        process_pipe_buffer.data[i] = process_pipe_buffer.data[process_pipe_buffer.read_offset + i];
-    }
-
-    process_pipe_buffer.size = remaining;
-    process_pipe_buffer.read_offset = 0;
-    process_pipe_buffer.used = (remaining > 0) ? 1 : 0;
-    if (process_pipe_buffer.size < PROCESS_PIPE_BUFFER_SIZE) {
-        process_pipe_buffer.overflowed = 0;
-    }
+// 当前环形缓冲区不需要像 Task96 那样做整体压缩；保留空函数名仅为复用调用点。
+static void process_pipe_compact_buffer(struct process_pipe_object* pipe) {
+    (void)pipe;
 }
 
-// 返回当前 pipe 还能被读出的有效字节数；若没有数据，则统一返回 0。
-static uint32_t process_pipe_readable_bytes(void) {
-    if (process_pipe_buffer.active == 0 || process_pipe_buffer.used == 0) {
+// 返回指定 pipe object 当前还能被读出的有效字节数；若没有数据，则统一返回 0。
+static uint32_t process_pipe_readable_bytes(struct process_pipe_object* pipe) {
+    if (pipe == (struct process_pipe_object*)0) {
         return 0;
     }
 
-    if (process_pipe_buffer.read_offset >= process_pipe_buffer.size) {
+    if (pipe->active == 0 || pipe->count == 0) {
         return 0;
     }
 
-    return process_pipe_buffer.size - process_pipe_buffer.read_offset;
+    return pipe->count;
 }
 
 // 从当前全局教学版 pipe 中复制一段数据到用户缓冲区。
-static int process_pipe_copy_to_user(char* user_buf, int size) {
+static int process_pipe_copy_to_user(struct process_pipe_object* pipe, char* user_buf, int size) {
     uint32_t readable;
     uint32_t to_copy;
     uint32_t i;
@@ -262,7 +311,7 @@ static int process_pipe_copy_to_user(char* user_buf, int size) {
         return -1;
     }
 
-    readable = process_pipe_readable_bytes();
+    readable = process_pipe_readable_bytes(pipe);
     if (readable == 0) {
         return 0;
     }
@@ -273,19 +322,23 @@ static int process_pipe_copy_to_user(char* user_buf, int size) {
     }
 
     for (i = 0; i < to_copy; i++) {
-        user_buf[i] = process_pipe_buffer.data[process_pipe_buffer.read_offset + i];
+        user_buf[i] = pipe->data[(pipe->read_pos + i) % PROCESS_PIPE_BUFFER_SIZE];
     }
 
-    process_pipe_buffer.read_offset += to_copy;
-    process_pipe_compact_buffer();
+    pipe->read_pos = (pipe->read_pos + to_copy) % PROCESS_PIPE_BUFFER_SIZE;
+    pipe->count -= to_copy;
+    if (pipe->count == 0) {
+        pipe->overflowed = 0;
+    }
+    process_pipe_compact_buffer(pipe);
     return (int)to_copy;
 }
 
 // 向当前全局教学版 pipe 追加一段数据；若缓冲区满则分批推进，直到全部写入或检测到读端关闭。
-static int process_pipe_append_from_user(const char* user_buf, int size) {
+static int process_pipe_append_from_user(struct process_pipe_object* pipe, const char* user_buf, int size) {
     int written = 0;
 
-    if (user_buf == (const char*)0) {
+    if (pipe == (struct process_pipe_object*)0 || user_buf == (const char*)0) {
         return -1;
     }
 
@@ -293,33 +346,33 @@ static int process_pipe_append_from_user(const char* user_buf, int size) {
         return size;
     }
 
-    process_pipe_buffer.active = 1;
+    pipe->active = 1;
     while (written < size) {
         uint32_t remaining;
         uint32_t to_copy;
         uint32_t i;
 
-        if (process_pipe_buffer.read_open == 0) {
+        if (pipe->read_open == 0) {
             return (written > 0) ? written : -4;
         }
 
-        if (process_pipe_buffer.write_open == 0) {
+        if (pipe->write_open == 0) {
             return (written > 0) ? written : -5;
         }
 
-        process_pipe_compact_buffer();
-        remaining = PROCESS_PIPE_BUFFER_SIZE - process_pipe_buffer.size;
+        process_pipe_compact_buffer(pipe);
+        remaining = PROCESS_PIPE_BUFFER_SIZE - pipe->count;
         if (remaining == 0) {
-            if (process_pipe_buffer.overflowed == 0) {
+            if (pipe->overflowed == 0) {
                 print_string("pipe: buffer full\n");
-                process_pipe_buffer.overflowed = 1;
+                pipe->overflowed = 1;
             }
             process_pipe_wait_briefly();
             continue;
         }
 
-        if (process_pipe_buffer.overflowed != 0) {
-            process_pipe_buffer.overflowed = 0;
+        if (pipe->overflowed != 0) {
+            pipe->overflowed = 0;
         }
 
         to_copy = (uint32_t)(size - written);
@@ -328,13 +381,11 @@ static int process_pipe_append_from_user(const char* user_buf, int size) {
         }
 
         for (i = 0; i < to_copy; i++) {
-            process_pipe_buffer.data[process_pipe_buffer.size + i] = user_buf[written + (int)i];
+            pipe->data[(pipe->write_pos + i) % PROCESS_PIPE_BUFFER_SIZE] = user_buf[written + (int)i];
         }
 
-        process_pipe_buffer.size += to_copy;
-        if (process_pipe_buffer.size > 0) {
-            process_pipe_buffer.used = 1;
-        }
+        pipe->write_pos = (pipe->write_pos + to_copy) % PROCESS_PIPE_BUFFER_SIZE;
+        pipe->count += to_copy;
         written += (int)to_copy;
     }
 
@@ -397,6 +448,8 @@ static void process_copy_fd_table(struct process* child, const struct process* p
 
     child->stdin_pipe_fd = parent->stdin_pipe_fd;
     child->stdout_pipe_fd = parent->stdout_pipe_fd;
+    child->stdin_pipe_id = parent->stdin_pipe_id;
+    child->stdout_pipe_id = parent->stdout_pipe_id;
     child->stdout_redirect_to_pipe = parent->stdout_redirect_to_pipe;
     child->stdin_redirect_from_pipe = parent->stdin_redirect_from_pipe;
 }
@@ -446,7 +499,7 @@ static int process_alloc_fd_slot(struct process* proc) {
 }
 
 // 为当前教学版 pipe 分配一个 fd 端点；当前只支持 read end / write end 两种最小类型。
-static int process_alloc_pipe_fd(struct process* proc, int fd_type) {
+static int process_alloc_pipe_fd(struct process* proc, int fd_type, int pipe_id) {
     int slot;
 
     if (proc == (struct process*)0) {
@@ -464,6 +517,7 @@ static int process_alloc_pipe_fd(struct process* proc, int fd_type) {
 
     proc->fd_table[slot].used = 1;
     proc->fd_table[slot].type = fd_type;
+    proc->fd_table[slot].pipe_id = pipe_id;
     proc->fd_table[slot].path[0] = '\0';
     proc->fd_table[slot].can_write = (fd_type == PROCESS_FD_TYPE_PIPE_WRITE) ? 1 : 0;
     proc->fd_table[slot].offset = 0;
@@ -482,6 +536,7 @@ static void process_fd_reset_slot(struct process* proc, int slot) {
 
     proc->fd_table[slot].used = 0;
     proc->fd_table[slot].type = PROCESS_FD_TYPE_NONE;
+    proc->fd_table[slot].pipe_id = -1;
     proc->fd_table[slot].path[0] = '\0';
     proc->fd_table[slot].can_write = 0;
     proc->fd_table[slot].offset = 0;
@@ -489,7 +544,7 @@ static void process_fd_reset_slot(struct process* proc, int slot) {
 
 // 扫描当前系统里是否仍有人持有教学版 pipe 读端引用。
 // 当前没有完整引用计数，因此这里用“遍历 PCB + fd 表项/标准入口绑定”的方式做最小近似。
-static int process_pipe_has_read_reference(void) {
+static int process_pipe_has_read_reference(int pipe_id) {
     int i;
     int j;
 
@@ -498,7 +553,7 @@ static int process_pipe_has_read_reference(void) {
             continue;
         }
 
-        if (process_table[i].stdin_redirect_from_pipe != 0) {
+        if (process_table[i].stdin_redirect_from_pipe != 0 && process_table[i].stdin_pipe_id == pipe_id) {
             return 1;
         }
 
@@ -507,7 +562,8 @@ static int process_pipe_has_read_reference(void) {
                 continue;
             }
 
-            if (process_table[i].fd_table[j].type == PROCESS_FD_TYPE_PIPE_READ) {
+            if (process_table[i].fd_table[j].type == PROCESS_FD_TYPE_PIPE_READ &&
+                process_table[i].fd_table[j].pipe_id == pipe_id) {
                 return 1;
             }
         }
@@ -517,7 +573,7 @@ static int process_pipe_has_read_reference(void) {
 }
 
 // 扫描当前系统里是否仍有人持有教学版 pipe 写端引用。
-static int process_pipe_has_write_reference(void) {
+static int process_pipe_has_write_reference(int pipe_id) {
     int i;
     int j;
 
@@ -526,7 +582,7 @@ static int process_pipe_has_write_reference(void) {
             continue;
         }
 
-        if (process_table[i].stdout_redirect_to_pipe != 0) {
+        if (process_table[i].stdout_redirect_to_pipe != 0 && process_table[i].stdout_pipe_id == pipe_id) {
             return 1;
         }
 
@@ -535,7 +591,8 @@ static int process_pipe_has_write_reference(void) {
                 continue;
             }
 
-            if (process_table[i].fd_table[j].type == PROCESS_FD_TYPE_PIPE_WRITE) {
+            if (process_table[i].fd_table[j].type == PROCESS_FD_TYPE_PIPE_WRITE &&
+                process_table[i].fd_table[j].pipe_id == pipe_id) {
                 return 1;
             }
         }
@@ -576,6 +633,7 @@ static int process_fd_dup2(struct process* proc, int oldfd, int newfd) {
 
         if (old_entry->type == PROCESS_FD_TYPE_PIPE_READ) {
             proc->stdin_pipe_fd = oldfd;
+            proc->stdin_pipe_id = old_entry->pipe_id;
             proc->stdin_redirect_from_pipe = 1;
             return 0;
         }
@@ -586,6 +644,7 @@ static int process_fd_dup2(struct process* proc, int oldfd, int newfd) {
         }
         proc->stdin_redirect_enabled = 1;
         proc->stdin_redirect_offset = old_entry->offset;
+        proc->stdin_pipe_id = -1;
         return 0;
     }
 
@@ -603,6 +662,7 @@ static int process_fd_dup2(struct process* proc, int oldfd, int newfd) {
 
         if (old_entry->type == PROCESS_FD_TYPE_PIPE_WRITE) {
             proc->stdout_pipe_fd = oldfd;
+            proc->stdout_pipe_id = old_entry->pipe_id;
             proc->stdout_redirect_to_pipe = 1;
             return 0;
         }
@@ -616,6 +676,7 @@ static int process_fd_dup2(struct process* proc, int oldfd, int newfd) {
         proc->stdout_redirect_enabled = 1;
         proc->stdout_redirect_append = 0;
         proc->stdout_redirect_started = 0;
+        proc->stdout_pipe_id = -1;
         return 0;
     }
 

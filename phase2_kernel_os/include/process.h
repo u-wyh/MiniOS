@@ -35,6 +35,8 @@
 #define PROCESS_KILL_EXIT_STATUS -9
 // 教学版单管道缓冲区上限：左侧程序 stdout 全部先写入这里；当前固定容量，不做动态扩容。
 #define PROCESS_PIPE_BUFFER_SIZE 512
+// 教学版 pipe object 上限：当前只做最小固定分配表，不引入动态分配。
+#define PROCESS_MAX_PIPE_OBJECTS 8
 
 // 用户态 ps 使用的进程只读摘要：避免直接暴露内核 PCB 结构
 struct process_info {
@@ -53,32 +55,29 @@ struct process_info {
 };
 
 // 教学版文件描述符表项：记录 fd 是否占用、当前类型、当前打开的是哪个路径、是否允许写入，以及当前偏移。
-// 对 pipe fd 来说，path 当前为空字符串；真正的数据仍绑定到全局教学版 pipe buffer。
+// 对 pipe fd 来说，path 当前为空字符串；真正的数据通过 pipe_id 绑定到 pipe_table[] 里的某个 pipe object。
 struct process_fd_entry {
     int used;
     int type;
+    int pipe_id;
     char path[MAX_FS_PATH_LEN];
     // can_write 为 1 表示该 fd 允许写入；当前只给 RAMFS 写打开路径设置，内置只读文件始终为 0。
     int can_write;
     uint32_t offset;
 };
 
-// 教学版单管道缓冲区：当前仍然只支持一个活动 pipe object。
-// active 为 1 表示当前全局 pipe 正在被使用；size 表示缓冲区当前持有的有效字节数；
-// read_offset 表示下一个可读位置；overflowed 用于保证“buffer full”提示只输出一次。
-// Task96 之后，读取/写入会在缓冲区空/满时采用最小 busy-wait + PIT 抢占式让出效果，
-// 但它仍然不是完整 POSIX pipe，也没有真正的睡眠队列或多个独立 pipe object。
-struct process_pipe_buffer {
-    int active;
+// 教学版 pipe object：当前仍然不是完整 POSIX pipe，但已经从“单全局 pipe”推进到“固定分配表里的多个对象”。
+// read_pos / write_pos / count 组成最小环形缓冲区；overflowed 仅用于避免重复刷屏提示。
+struct process_pipe_object {
     int used;
+    int active;
     int overflowed;
-    // read_open / write_open 表示当前教学版 pipe 的读端/写端是否仍被视为打开。
-    // 当前没有引用计数：任意一个对应端被 close，都直接把这一侧标记为关闭。
     int read_open;
     int write_open;
     char data[PROCESS_PIPE_BUFFER_SIZE];
-    uint32_t size;
-    uint32_t read_offset;
+    uint32_t read_pos;
+    uint32_t write_pos;
+    uint32_t count;
 };
 
 // 最小 PCB：保存进程身份、父子关系、状态与用户态入口现场
@@ -134,6 +133,10 @@ struct process {
     // stdin_pipe_fd / stdout_pipe_fd 表示当前进程绑定到教学版 pipe 的 fd 端点；-1 表示未绑定。
     int stdin_pipe_fd;
     int stdout_pipe_fd;
+    // stdin_pipe_id / stdout_pipe_id 表示当前标准输入输出绑定到哪个 pipe object；
+    // 这样即使原始 oldfd 已关闭，fd=0/1 仍能继续找到对应的 pipe object。
+    int stdin_pipe_id;
+    int stdout_pipe_id;
     // stdout_redirect_to_pipe / stdin_redirect_from_pipe 目前保留为兼容字段：
     // Task83 之后，shell pipe 连接已经优先通过内核内部 fd_dup2(oldfd, 0/1) 绑定到标准入口；
     // 这些标记更多用于兼容旧路径、教学版 SYS_WRITE/SYS_READ 入口与文档表达。

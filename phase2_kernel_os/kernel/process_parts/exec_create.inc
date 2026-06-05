@@ -160,7 +160,8 @@ void process_init(void) {
 
     current_process = (struct process*)0;
     last_exited_process = (struct process*)0;
-    process_pipe_buffer_clear();
+    process_pipe_table_clear();
+    process_shell_pipe_id = -1;
     next_pid = 1;
     init_pid = -1;
 }
