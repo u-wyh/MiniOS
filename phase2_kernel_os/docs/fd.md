@@ -470,3 +470,11 @@ Task99 之后，shell 原生 `|` 语法也会走同一套 fd 接线，只是多�
    - 末段：`dup2(last_pipe_read_fd, 0)`
 
 这说明当前 shell 原生多级管道虽然语法上更像真实 shell，但底层 fd 接线仍然统一复用 Task98 已经整理好的模型。
+
+## 结尾说明
+
+如果想先看总览，再回来看细节，建议配合：
+
+1. [phase2_summary.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase2_summary.md)
+2. [pipe.md](/home/wyh/MiniOS/phase2_kernel_os/docs/pipe.md)
+3. [process.md](/home/wyh/MiniOS/phase2_kernel_os/docs/process.md)

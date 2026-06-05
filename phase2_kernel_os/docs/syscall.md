@@ -662,3 +662,11 @@ Task74 没有新增 syscall，而是用新的用户态 `grep` 程序验证已有
 1. `grep` 当前不直接打开路径
 2. `grep` 第一个参数只作为关键字
 3. `fd=0` 当前仍然来自文件 stdin 重定向或 pipe，不是交互式 tty
+
+## 23. 交叉阅读
+
+如果想从系统调用继续追主线，建议配合：
+
+1. [phase2_summary.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase2_summary.md)
+2. [fd.md](/home/wyh/MiniOS/phase2_kernel_os/docs/fd.md)
+3. [process.md](/home/wyh/MiniOS/phase2_kernel_os/docs/process.md)

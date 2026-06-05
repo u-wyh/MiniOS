@@ -3779,6 +3779,85 @@ TODO：
 - Task100 可以整理 Phase2 shell/fd/pipe/process 总结文档
 - Task101 可以补交互式回归测试脚本
 
+## ✅ Task100：Phase2 fd / pipe / process 总结文档
+
+本轮目标：
+
+- 不继续新增大功能
+- 把 Phase2 当前主线整理成系统总结文档
+- 明确当前教学版实现的能力边界，不夸大成完整 POSIX / Linux
+
+已完成：
+
+- 新增：
+  - `docs/phase2_summary.md`
+  - `docs/tasks/task100_phase2_summary.md`
+- 系统总结了：
+  - fd table
+  - stdin/stdout
+  - redirect
+  - pipe fd 与 pipe object
+  - fork / dup2 / exec
+  - argv
+  - mini_pipeline
+  - shell 多级管道
+- 更新了专题文档之间的交叉引用：
+  - `fd.md`
+  - `pipe.md`
+  - `process.md`
+  - `shell.md`
+  - `syscall.md`
+  - `user_programs.md`
+- 当前 Phase2 主线已经可以概括为：
+  - 用户程序
+  - `-> fd table`
+  - `-> open/read/write/close`
+  - `-> stdin/stdout`
+  - `-> redirect`
+  - `-> pipe`
+  - `-> pipe object table`
+  - `-> fork`
+  - `-> dup2`
+  - `-> exec`
+  - `-> argv`
+  - `-> mini_pipeline`
+  - `-> Shell 多级管道`
+
+当前状态：
+
+- 当前完成到 `Task100`
+- Phase2 主线已经基本完成
+- 当前已经进入 Phase2 收尾阶段
+- 当前系统已具备：
+  - RAMFS
+  - 用户程序
+  - fd table
+  - open/read/write/close
+  - redirect
+  - pipe
+  - pipe object table
+  - fork
+  - dup2
+  - exec
+  - argv
+  - mini_pipeline
+  - Shell 多级管道
+  - `cat / wc / grep / head / tail / sort`
+
+当前限制仍然如实保留：
+
+- 不是完整 POSIX
+- 不支持完整 shell parser
+- 不支持信号 / SIGPIPE / job control / 进程组
+- 不支持环境变量
+- 不支持真实磁盘文件系统
+- 不支持完整 ELF 动态加载
+
+TODO：
+
+- Task101：Phase2 回归测试清单
+- Task102：Phase2 收尾清理 / phase2-complete 冻结点
+
 ## ✅ Task97：多个 pipe object / pipe 分配表雏形
 
 本轮目标：

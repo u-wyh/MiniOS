@@ -310,3 +310,11 @@ Task99 没有再新增一套新的进程模型，而是明确分工成两层：
 1. shell 自己只启动一个 `mini_pipeline` 进程
 2. `mini_pipeline` 再 fork 出每一段真正的用户程序子进程
 3. 各段用户程序之间通过多个 pipe object 传数据
+
+## 结尾说明
+
+如果需要从“整体主线”回看 process 的位置，建议配合：
+
+1. [phase2_summary.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase2_summary.md)
+2. [fd.md](/home/wyh/MiniOS/phase2_kernel_os/docs/fd.md)
+3. [shell.md](/home/wyh/MiniOS/phase2_kernel_os/docs/shell.md)

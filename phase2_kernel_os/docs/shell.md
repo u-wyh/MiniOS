@@ -190,3 +190,11 @@ Task99 之后，shell 已经能把多级 `run ... | run ... | run ...` 翻译成
 - 切出每一段 `argv`
 - 剥离首段输入重定向和末段输出重定向
 - 把 `|` 转成 `mini_pipeline` 能识别的 `--`
+
+## 9. 交叉阅读
+
+如果想先看 Phase2 全局主线，再回来看 shell 细节，建议配合：
+
+1. [phase2_summary.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase2_summary.md)
+2. [process.md](/home/wyh/MiniOS/phase2_kernel_os/docs/process.md)
+3. [pipe.md](/home/wyh/MiniOS/phase2_kernel_os/docs/pipe.md)

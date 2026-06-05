@@ -1448,6 +1448,14 @@ run cat /readme.txt | run grep MiniOS | run wc
 1. `mini_pipeline` 仍然是当前教学版多级 pipeline 的底层执行入口
 2. shell 只是补上了更接近真实 shell 的 `|` 语法入口
 
+## 47. 交叉阅读
+
+如果想先看 Phase2 总图，再回来看这些用户程序各自验证哪条链路，建议配合：
+
+1. [phase2_summary.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase2_summary.md)
+2. [pipe.md](/home/wyh/MiniOS/phase2_kernel_os/docs/pipe.md)
+3. [process.md](/home/wyh/MiniOS/phase2_kernel_os/docs/process.md)
+
 ## 46. 用户态 pipe_multi_test
 
 Task97 新增了一个专门验证“多个 pipe object 数据隔离”的最小程序：

@@ -888,3 +888,22 @@
   - 中间段不支持重定向
   - 不支持引号/转义
   - 不支持环境变量
+
+## Task100：Phase2 fd / pipe / process 总结文档
+
+- 本轮不是继续加功能，而是进入阶段性总结。
+- 新增：
+  - `docs/phase2_summary.md`
+  - `docs/tasks/task100_phase2_summary.md`
+- 当前总结文档会系统梳理：
+  - fd table
+  - stdin/stdout
+  - redirect
+  - pipe fd / pipe object
+  - fork / dup2 / exec
+  - argv
+  - mini_pipeline
+  - shell 多级管道
+- 当前 Phase2 已进入收尾阶段：
+  - Task101 主要做回归测试清单
+  - Task102 主要做阶段冻结和收尾整理

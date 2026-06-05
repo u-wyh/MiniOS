@@ -465,3 +465,11 @@ run mini_pipeline A ... -- B ... -- C ...
 2. 只允许首段 `< input`
 3. 只允许末段 `> output` 或 `>> output`
 4. 中间段若出现 `<` / `>` / `>>` 会直接报错
+
+## 结尾说明
+
+如果想先看 Phase2 总图，再回来对照 pipe 细节，建议配合：
+
+1. [phase2_summary.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase2_summary.md)
+2. [fd.md](/home/wyh/MiniOS/phase2_kernel_os/docs/fd.md)
+3. [process.md](/home/wyh/MiniOS/phase2_kernel_os/docs/process.md)
