@@ -276,7 +276,7 @@ static int mini_pipeline_build_side_argv(
     return argc;
 }
 
-// 主流程：采用教学版顺序 pipeline，先完整运行左侧 writer，再运行右侧 consumer。
+// 主流程：采用教学版最小并发 pipeline，左右两侧都先 fork 出来，再由父进程分别 wait。
 void _start(void) {
     static char left_storage[USER_PROGRAM_MAX_ARGS][MINI_PIPELINE_ARG_BUF_LEN];
     static char right_storage[USER_PROGRAM_MAX_ARGS][MINI_PIPELINE_ARG_BUF_LEN];
@@ -367,14 +367,10 @@ void _start(void) {
         user_exit(4);
     }
 
-    wait_result = user_waitpid(writer_pid);
-    if (wait_result != writer_pid) {
-        mini_pipeline_write_error("wait left failed", wait_result);
-        user_exit(1);
-    }
-
     reader_pid = user_fork();
     if (reader_pid < 0) {
+        user_close(fds[0]);
+        user_close(fds[1]);
         mini_pipeline_write_error("fork right failed", reader_pid);
         user_exit(1);
     }
@@ -394,14 +390,23 @@ void _start(void) {
         user_exit(7);
     }
 
+    // 父进程不参与真正的数据读写，因此在两个子进程都建立完后立即关闭自己的 pipe 端点。
+    // 这样 reader 才能在 writer 退出后正确观察到 write end 关闭并最终得到 EOF。
+    user_close(fds[0]);
+    user_close(fds[1]);
+
+    wait_result = user_waitpid(writer_pid);
+    if (wait_result != writer_pid) {
+        mini_pipeline_write_error("wait left failed", wait_result);
+        user_exit(1);
+    }
+
     wait_result = user_waitpid(reader_pid);
     if (wait_result != reader_pid) {
         mini_pipeline_write_error("wait right failed", wait_result);
         user_exit(1);
     }
 
-    user_close(fds[0]);
-    user_close(fds[1]);
     user_write("mini_pipeline: ok\n");
     user_exit(0);
 }

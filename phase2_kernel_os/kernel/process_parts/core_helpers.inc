@@ -198,6 +198,149 @@ static void process_pipe_buffer_clear(void) {
     process_pipe_buffer.read_offset = 0;
 }
 
+// 进行一次很短的 busy-wait，让当前 syscall 路径在 pipe 空/满时不要立刻失败。
+// 这里只是教学版“等待”雏形：真正的让出 CPU 仍主要依赖 PIT 抢占，而不是睡眠队列。
+static void process_pipe_wait_briefly(void) {
+    volatile unsigned int spin;
+
+    for (spin = 0; spin < 4096; spin++) {
+        __asm__ __volatile__("pause");
+    }
+}
+
+// 把尚未读完的 pipe 数据压到缓冲区开头，给后续写入腾出连续空间。
+// 当前仍使用线性缓冲区，而不是完整环形队列；Task96 先以最小改动支持并发读写推进。
+static void process_pipe_compact_buffer(void) {
+    uint32_t remaining;
+    uint32_t i;
+
+    if (process_pipe_buffer.read_offset == 0) {
+        return;
+    }
+
+    if (process_pipe_buffer.read_offset >= process_pipe_buffer.size) {
+        process_pipe_buffer.size = 0;
+        process_pipe_buffer.read_offset = 0;
+        process_pipe_buffer.used = 0;
+        process_pipe_buffer.overflowed = 0;
+        return;
+    }
+
+    remaining = process_pipe_buffer.size - process_pipe_buffer.read_offset;
+    for (i = 0; i < remaining; i++) {
+        process_pipe_buffer.data[i] = process_pipe_buffer.data[process_pipe_buffer.read_offset + i];
+    }
+
+    process_pipe_buffer.size = remaining;
+    process_pipe_buffer.read_offset = 0;
+    process_pipe_buffer.used = (remaining > 0) ? 1 : 0;
+    if (process_pipe_buffer.size < PROCESS_PIPE_BUFFER_SIZE) {
+        process_pipe_buffer.overflowed = 0;
+    }
+}
+
+// 返回当前 pipe 还能被读出的有效字节数；若没有数据，则统一返回 0。
+static uint32_t process_pipe_readable_bytes(void) {
+    if (process_pipe_buffer.active == 0 || process_pipe_buffer.used == 0) {
+        return 0;
+    }
+
+    if (process_pipe_buffer.read_offset >= process_pipe_buffer.size) {
+        return 0;
+    }
+
+    return process_pipe_buffer.size - process_pipe_buffer.read_offset;
+}
+
+// 从当前全局教学版 pipe 中复制一段数据到用户缓冲区。
+static int process_pipe_copy_to_user(char* user_buf, int size) {
+    uint32_t readable;
+    uint32_t to_copy;
+    uint32_t i;
+
+    if (user_buf == (char*)0 || size <= 0) {
+        return -1;
+    }
+
+    readable = process_pipe_readable_bytes();
+    if (readable == 0) {
+        return 0;
+    }
+
+    to_copy = (uint32_t)size;
+    if (to_copy > readable) {
+        to_copy = readable;
+    }
+
+    for (i = 0; i < to_copy; i++) {
+        user_buf[i] = process_pipe_buffer.data[process_pipe_buffer.read_offset + i];
+    }
+
+    process_pipe_buffer.read_offset += to_copy;
+    process_pipe_compact_buffer();
+    return (int)to_copy;
+}
+
+// 向当前全局教学版 pipe 追加一段数据；若缓冲区满则分批推进，直到全部写入或检测到读端关闭。
+static int process_pipe_append_from_user(const char* user_buf, int size) {
+    int written = 0;
+
+    if (user_buf == (const char*)0) {
+        return -1;
+    }
+
+    if (size <= 0) {
+        return size;
+    }
+
+    process_pipe_buffer.active = 1;
+    while (written < size) {
+        uint32_t remaining;
+        uint32_t to_copy;
+        uint32_t i;
+
+        if (process_pipe_buffer.read_open == 0) {
+            return (written > 0) ? written : -4;
+        }
+
+        if (process_pipe_buffer.write_open == 0) {
+            return (written > 0) ? written : -5;
+        }
+
+        process_pipe_compact_buffer();
+        remaining = PROCESS_PIPE_BUFFER_SIZE - process_pipe_buffer.size;
+        if (remaining == 0) {
+            if (process_pipe_buffer.overflowed == 0) {
+                print_string("pipe: buffer full\n");
+                process_pipe_buffer.overflowed = 1;
+            }
+            process_pipe_wait_briefly();
+            continue;
+        }
+
+        if (process_pipe_buffer.overflowed != 0) {
+            process_pipe_buffer.overflowed = 0;
+        }
+
+        to_copy = (uint32_t)(size - written);
+        if (to_copy > remaining) {
+            to_copy = remaining;
+        }
+
+        for (i = 0; i < to_copy; i++) {
+            process_pipe_buffer.data[process_pipe_buffer.size + i] = user_buf[written + (int)i];
+        }
+
+        process_pipe_buffer.size += to_copy;
+        if (process_pipe_buffer.size > 0) {
+            process_pipe_buffer.used = 1;
+        }
+        written += (int)to_copy;
+    }
+
+    return written;
+}
+
 // 在真正决定“接下来让哪个进程运行”时记一次调度次数。
 // 这里只统计被选中运行的次数，不统计 CPU 时间，也不在候选遍历阶段递增。
 static void process_record_schedule(struct process* proc) {

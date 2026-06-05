@@ -388,3 +388,15 @@ Task95 继续把这条入口补成“双端 argv”模型：
 
 1. 左侧带参数文件读取程序
 2. 右侧带参数文本处理程序
+
+Task96 之后，这套 fd 接线又往真实 pipeline 靠近了一步：
+
+1. 左侧子进程先通过 `dup2(pipe_write_fd, 1)` 把 `fd=1` 接到 pipe 写端
+2. 右侧子进程先通过 `dup2(pipe_read_fd, 0)` 把 `fd=0` 接到 pipe 读端
+3. 双方都已经存在时，pipe 读写不再要求“左侧全部结束后右侧再开始”
+
+当前仍然是教学版实现：
+
+1. 仍然只有一个全局 pipe buffer
+2. 当前等待是 busy-wait，不是完整阻塞队列
+3. 但 file fd / pipe fd / dup2 / exec 的组合已经足以跑最小并发 pipeline

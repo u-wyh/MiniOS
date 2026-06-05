@@ -3652,3 +3652,35 @@ TODO：
 
 - Task96 可继续做更接近真实 shell 的 pipeline 语法
 - Task97 可继续做阻塞 pipe / 并发 pipe 雏形
+
+## ✅ Task96：阻塞 pipe / 并发 pipeline 雏形
+
+本轮目标：
+
+- 把教学版 pipe 从“顺序写完再读”推进到“左右两侧都先 fork 出来”的最小并发模型
+- 当 pipe 空且写端仍打开时，read 不再直接返回 EOF
+- 当 pipe 满且读端仍打开时，write 不再直接丢数据
+- 继续沿用单全局 pipe buffer，不重写 scheduler / exec 主逻辑
+
+已完成：
+
+- `mini_pipeline` 现在先 fork 左侧 writer，再 fork 右侧 reader，父进程最后分别 wait
+- 父进程在两个子进程建立后会立即关闭自己手里的 pipe 端点，避免干扰 EOF 判断
+- pipe 读取在“缓冲区暂时为空但写端还开着”时，会做教学版 busy-wait
+- pipe 写入在“缓冲区暂时写满但读端还开着”时，会做教学版 busy-wait
+- pipe 读取在“写端已关闭且数据读完”后返回 0，继续保持最小 EOF 语义
+- pipe 写入在“读端已关闭”后返回错误，不 panic
+- 通过“读后压缩未读数据到缓冲区开头”的最小线性缓冲策略，支持大于 512 字节的数据逐段推进
+
+当前限制：
+
+- 当前仍然只有一个全局教学版 pipe buffer
+- 当前不是完整 POSIX pipe
+- 当前没有真正 sleep/wakeup 队列
+- 当前等待语义是 busy-wait + PIT 抢占式让出效果，不是完整阻塞队列
+- 当前不支持多级管道或多个独立 pipe object
+
+TODO：
+
+- Task97 可继续做更真实的 sleep/wakeup pipe 等待队列
+- Task98 可继续做多个 pipe object 和更接近 UNIX 的生命周期

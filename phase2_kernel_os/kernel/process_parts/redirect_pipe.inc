@@ -294,7 +294,7 @@ int process_write_stdout_redirect(const char* text) {
 }
 
 // 把当前进程的一次 SYS_WRITE 文本输出追加到教学版 pipe buffer：
-// 当前采用“尽量写入剩余空间 + 满时只提示一次”的教学版策略，避免越界和 panic。
+// Task96 之后，若缓冲区暂时写满，会在内核里做最小 busy-wait，直到 reader 读走数据或检测到读端关闭。
 int process_write_stdout_pipe(const char* text) {
     struct process* proc = current_process;
     int text_len;
@@ -324,43 +324,7 @@ int process_write_stdout_pipe(const char* text) {
         return -5;
     }
 
-    process_pipe_buffer.active = 1;
-    if ((uint32_t)text_len > PROCESS_PIPE_BUFFER_SIZE - process_pipe_buffer.size) {
-        uint32_t remaining = PROCESS_PIPE_BUFFER_SIZE - process_pipe_buffer.size;
-        uint32_t i;
-
-        if (remaining == 0) {
-            if (process_pipe_buffer.overflowed == 0) {
-                print_string("pipe: buffer full\n");
-                process_pipe_buffer.overflowed = 1;
-            }
-            return 0;
-        }
-
-        if (process_pipe_buffer.overflowed == 0) {
-            print_string("pipe: buffer full\n");
-            process_pipe_buffer.overflowed = 1;
-        }
-
-        for (i = 0; i < remaining; i++) {
-            process_pipe_buffer.data[process_pipe_buffer.size + i] = text[i];
-        }
-        process_pipe_buffer.size += remaining;
-        process_pipe_buffer.used = 1;
-        return (int)remaining;
-    }
-
-    {
-        uint32_t i;
-
-        for (i = 0; i < (uint32_t)text_len; i++) {
-            process_pipe_buffer.data[process_pipe_buffer.size + i] = text[i];
-        }
-        process_pipe_buffer.size += (uint32_t)text_len;
-        process_pipe_buffer.used = 1;
-    }
-
-    return text_len;
+    return process_pipe_append_from_user(text, text_len);
 }
 
 // 清空教学版单管道缓冲区：shell 在执行 run A | run B 前后都应调用，避免残留旧数据。

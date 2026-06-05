@@ -1386,12 +1386,10 @@ run mini_pipeline cat /readme.txt -- wc
 3. `--` 用来分隔左右命令
 4. 内部仍然采用教学版顺序 pipeline：
    - 先 `pipe(fds)`
-   - 再 `fork` 左侧 writer 子进程
+   - 依次 `fork` 左侧 writer 子进程和右侧 consumer 子进程
    - 左侧执行 `dup2(fds[1], 1)` 后 `exec(left_prog, left_argv)`
-   - 父进程 `waitpid(writer)`
-   - 再 `fork` 右侧 consumer 子进程
    - 右侧执行 `dup2(fds[0], 0)` 后 `exec(right_prog, argv)`
-   - 父进程 `waitpid(consumer)`
+   - 父进程关闭自己的 pipe 端点，再分别 `waitpid(writer)` / `waitpid(consumer)`
 5. 成功时输出 `mini_pipeline: ok`
 
 它的意义是：
@@ -1416,6 +1414,13 @@ run mini_pipeline cat /readme.txt -- wc
 
 1. `MiniOS line one`
 2. `MiniOS line three`
+
+Task96 之后，`mini_pipeline` 的模型已经从“顺序 writer/reader”推进到“最小并发 pipeline”：
+
+1. 左右两侧子进程都会先创建出来
+2. 左侧向 pipe 写入时，若缓冲区满会等待 reader 消费
+3. 右侧从 pipe 读取时，若缓冲区空且写端未关闭会等待 writer 继续写
+4. 当前等待机制仍是教学版 busy-wait，不是完整阻塞队列
 
 这个 demo 说明当前 MiniOS 已经能在用户态组合：
 

@@ -1,9 +1,6 @@
-// 从教学版 pipe read fd 读取数据：读到末尾或 pipe 未激活时返回 0，表示最小 EOF 语义。
+// 从教学版 pipe read fd 读取数据：空 pipe 且写端仍打开时做教学版等待，写端关闭且无数据时返回 EOF。
 static int process_read_pipe_fd(struct process* proc, int fd, char* user_buf, int size) {
     struct process_fd_entry* entry;
-    uint32_t remaining;
-    uint32_t to_copy;
-    uint32_t i;
 
     if (proc == (struct process*)0 || user_buf == (char*)0) {
         return -1;
@@ -18,36 +15,25 @@ static int process_read_pipe_fd(struct process* proc, int fd, char* user_buf, in
         return -3;
     }
 
-    // 教学版 close 语义：只要读端已经被 close，就不再继续提供新数据。
-    // 若缓冲区里还有尚未读出的旧数据，仍允许把这部分数据读完。
-    if (process_pipe_buffer.active == 0 || process_pipe_buffer.used == 0) {
-        return 0;
-    }
+    for (;;) {
+        int copy_result;
 
-    if (process_pipe_buffer.read_offset >= process_pipe_buffer.size) {
-        return 0;
-    }
+        copy_result = process_pipe_copy_to_user(user_buf, size);
+        if (copy_result > 0) {
+            return copy_result;
+        }
 
-    remaining = process_pipe_buffer.size - process_pipe_buffer.read_offset;
-    to_copy = (uint32_t)size;
-    if (to_copy > remaining) {
-        to_copy = remaining;
-    }
+        if (process_pipe_buffer.write_open == 0) {
+            return 0;
+        }
 
-    for (i = 0; i < to_copy; i++) {
-        user_buf[i] = process_pipe_buffer.data[process_pipe_buffer.read_offset + i];
+        process_pipe_wait_briefly();
     }
-
-    process_pipe_buffer.read_offset += to_copy;
-    return (int)to_copy;
 }
 
-// 向教学版 pipe write fd 写入数据：容量限制与“buffer full”提示沿用 Task78 的整理结果。
+// 向教学版 pipe write fd 写入数据：缓冲区满时做教学版等待，直到 reader 读走数据或检测到读端关闭。
 static int process_write_pipe_fd(struct process* proc, int fd, const char* user_buf, int size) {
     struct process_fd_entry* entry;
-    uint32_t remaining;
-    uint32_t to_copy;
-    uint32_t i;
 
     if (proc == (struct process*)0 || user_buf == (const char*)0) {
         return -1;
@@ -66,43 +52,7 @@ static int process_write_pipe_fd(struct process* proc, int fd, const char* user_
         return size;
     }
 
-    // 教学版 close 语义：读端关闭后继续写不 panic，而是直接返回错误。
-    if (process_pipe_buffer.read_open == 0) {
-        return -4;
-    }
-
-    // 写端自身已经被关闭后，不再允许继续向全局 pipe buffer 写入。
-    if (process_pipe_buffer.write_open == 0) {
-        return -5;
-    }
-
-    process_pipe_buffer.active = 1;
-    remaining = PROCESS_PIPE_BUFFER_SIZE - process_pipe_buffer.size;
-    if (remaining == 0) {
-        if (process_pipe_buffer.overflowed == 0) {
-            print_string("pipe: buffer full\n");
-            process_pipe_buffer.overflowed = 1;
-        }
-        return 0;
-    }
-
-    to_copy = (uint32_t)size;
-    if (to_copy > remaining) {
-        to_copy = remaining;
-        if (process_pipe_buffer.overflowed == 0) {
-            print_string("pipe: buffer full\n");
-            process_pipe_buffer.overflowed = 1;
-        }
-    }
-
-    for (i = 0; i < to_copy; i++) {
-        process_pipe_buffer.data[process_pipe_buffer.size + i] = user_buf[i];
-    }
-    process_pipe_buffer.size += to_copy;
-    if (process_pipe_buffer.size > 0) {
-        process_pipe_buffer.used = 1;
-    }
-    return (int)to_copy;
+    return process_pipe_append_from_user(user_buf, size);
 }
 
 // 为指定进程打开一个当前可见文本文件：返回绑定在该进程 fd_table 里的教学版文件 fd。
@@ -217,30 +167,19 @@ int process_read_file(int fd, char* user_buf, int size) {
         // 兼容入口保留：fd=0 仍然不是完全由 fd_table 统一管理，
         // 但 pipe stdin 现在优先按“stdin 已绑定到 pipe”处理，而不是强依赖原始 oldfd 仍然占着 fd 表槽位。
         if (proc->stdin_redirect_from_pipe != 0) {
-            uint32_t remaining;
-            uint32_t to_copy;
-            uint32_t i;
+            for (;;) {
+                int copy_result = process_pipe_copy_to_user(user_buf, size);
 
-            if (process_pipe_buffer.active == 0 || process_pipe_buffer.used == 0) {
-                return 0;
+                if (copy_result > 0) {
+                    return copy_result;
+                }
+
+                if (process_pipe_buffer.write_open == 0) {
+                    return 0;
+                }
+
+                process_pipe_wait_briefly();
             }
-
-            if (process_pipe_buffer.read_offset >= process_pipe_buffer.size) {
-                return 0;
-            }
-
-            remaining = process_pipe_buffer.size - process_pipe_buffer.read_offset;
-            to_copy = (uint32_t)size;
-            if (to_copy > remaining) {
-                to_copy = remaining;
-            }
-
-            for (i = 0; i < to_copy; i++) {
-                user_buf[i] = process_pipe_buffer.data[process_pipe_buffer.read_offset + i];
-            }
-
-            process_pipe_buffer.read_offset += to_copy;
-            return (int)to_copy;
         }
 
         // 当用户程序读取 fd=0 且 shell 已经配置输入文件时，

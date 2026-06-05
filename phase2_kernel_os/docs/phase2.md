@@ -797,3 +797,23 @@
   - 不支持多级管道
   - 不支持引号与转义
   - 仍然只有一个全局教学版 pipe buffer
+
+## Task96：阻塞 pipe / 并发 pipeline 雏形
+
+- 当前任务不是实现完整 POSIX pipe，而是把教学版 pipe 从“顺序模型”推进到“最小并发模型”
+- 本轮之后，`mini_pipeline` 的执行流程变成：
+  - `pipe(fds)`
+  - `fork()` 左侧 writer
+  - `fork()` 右侧 reader
+  - 左侧 `dup2(fds[1], 1)` 后 `exec(left_prog, left_argv)`
+  - 右侧 `dup2(fds[0], 0)` 后 `exec(right_prog, right_argv)`
+  - 父进程关闭自己的 pipe 端点后分别 `waitpid()`
+- 当前 pipe 读写语义补成了：
+  - 空 pipe 且写端还开着：busy-wait 等待数据
+  - 满 pipe 且读端还开着：busy-wait 等待可写空间
+  - 写端关闭且数据读完：返回 EOF
+  - 读端关闭：写返回错误，不 panic
+- 当前仍然不是完整 UNIX pipeline：
+  - 仍然只有一个全局教学版 pipe buffer
+  - 没有真正 sleep/wakeup 队列
+  - 没有多个独立 pipe object

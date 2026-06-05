@@ -63,9 +63,11 @@ struct process_fd_entry {
     uint32_t offset;
 };
 
-// 教学版单管道缓冲区：当前只支持一条前台 run A | run B，顺序执行而不是并发 pipe。
-// active 为 1 表示 shell 正在执行一条教学版 pipe 命令；size 表示当前有效字节数；
-// read_offset 表示右侧程序已经读取到的位置；overflowed 用于保证“buffer full”提示只输出一次。
+// 教学版单管道缓冲区：当前仍然只支持一个活动 pipe object。
+// active 为 1 表示当前全局 pipe 正在被使用；size 表示缓冲区当前持有的有效字节数；
+// read_offset 表示下一个可读位置；overflowed 用于保证“buffer full”提示只输出一次。
+// Task96 之后，读取/写入会在缓冲区空/满时采用最小 busy-wait + PIT 抢占式让出效果，
+// 但它仍然不是完整 POSIX pipe，也没有真正的睡眠队列或多个独立 pipe object。
 struct process_pipe_buffer {
     int active;
     int used;

@@ -66,6 +66,11 @@ static struct process* process_find_by_pid(int pid);
 static int process_set_stdout_redirect(struct process* proc, const char* path, int is_append);
 static int process_set_stdin_redirect(struct process* proc, const char* path);
 static void process_pipe_buffer_clear(void);
+static void process_pipe_wait_briefly(void);
+static void process_pipe_compact_buffer(void);
+static uint32_t process_pipe_readable_bytes(void);
+static int process_pipe_copy_to_user(char* user_buf, int size);
+static int process_pipe_append_from_user(const char* user_buf, int size);
 static int process_is_init_waiting_shell_restart(struct process* child, struct process* parent);
 static void process_record_schedule(struct process* proc);
 

@@ -220,3 +220,20 @@ Task95 没有去改 `fork`、`dup2` 或 `exec` 主机制，而是把 `mini_pipel
 
 1. `run mini_pipeline cat /readme.txt -- grep MiniOS`
 2. `run mini_pipeline cat /readme.txt -- head -n 3`
+
+## 14. Task96：并发 mini_pipeline
+
+Task96 没有重写 scheduler 或 `exec` 主体，而是把 `mini_pipeline` 自身的流程推进成最小并发模型：
+
+1. `pipe(fds)`
+2. `fork()` 左侧 writer
+3. `fork()` 右侧 reader
+4. 左侧 `dup2(fds[1], 1)` 后 `exec(left_prog, left_argv)`
+5. 右侧 `dup2(fds[0], 0)` 后 `exec(right_prog, right_argv)`
+6. 父进程关闭自己的 pipe 端点，再分别 `waitpid()`
+
+这说明当前 process 路线已经能支撑：
+
+1. 父进程只负责搭线和回收
+2. 左右两个子进程并存
+3. 数据通过单全局教学版 pipe 在二者之间流动
