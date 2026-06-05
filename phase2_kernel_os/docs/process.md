@@ -289,3 +289,24 @@ Task98 没有重写 scheduler，也没有实现完整 shell 进程组；它只�
 2. `cmd1` 一个子进程
 3. `cmd2` 一个子进程
 4. 各进程之间只通过 pipe object 传递数据
+
+## 17. Task99：shell 多级 pipeline 与 mini_pipeline 的分工
+
+Task99 没有再新增一套新的进程模型，而是明确分工成两层：
+
+1. shell
+   - 负责把 `run ... | run ... | run ...` 切成多个命令段
+   - 负责剥离首段 `< input` 和末段 `> output` / `>> output`
+   - 负责把 `|` 翻译成 `mini_pipeline` 的 `--`
+2. `mini_pipeline`
+   - 负责真正创建 `N-1` 个 pipe
+   - 负责 `fork`
+   - 负责 `dup2(fd=0/1)`
+   - 负责 `exec(argc, argv)`
+   - 负责父进程统一 `waitpid()`
+
+所以 Task99 之后，shell 原生多级管道的执行关系仍然是：
+
+1. shell 自己只启动一个 `mini_pipeline` 进程
+2. `mini_pipeline` 再 fork 出每一段真正的用户程序子进程
+3. 各段用户程序之间通过多个 pipe object 传数据

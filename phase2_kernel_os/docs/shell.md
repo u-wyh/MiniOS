@@ -10,7 +10,7 @@
 - 用户程序 `argv`
 - 输入重定向
 - 输出重定向
-- 单个管道左右两侧命令
+- 多级管道各段命令
 
 当前重点不是实现完整 shell 语法，而是让 `run`、`pipe`、`redirect` 和用户态程序链路稳定工作。
 
@@ -25,15 +25,16 @@
 - `run <program> [args...] >> file`
 - `run <program> [args...] < file > file`
 - `run A [args...] | run B [args...]`
+- `run A [args...] | run B [args...] | run C [args...]`
 - `run A [args...] | run B [args...] > file`
 - `run A [args...] < file | run B [args...]`
+- `run A [args...] < file | run B [args...] | run C [args...] > file`
 
 当前不支持：
 
 - 引号
 - 转义
 - 环境变量
-- 多级管道
 - 命令替换
 - 通配符
 
@@ -97,25 +98,30 @@ run head -n 3 < /readme.txt
 - `argv[1] = "-n"`
 - `argv[2] = "3"`
 
-## 5. pipe 两侧 argv 规则
+## 5. pipe 各段 argv 规则
 
-当前只支持一个 `|`。
+当前支持多级 `|`，但每一段都必须显式写成 `run ...`。
 
 例如：
 
 ```text
-run cat /readme.txt | run grep MiniOS
+run cat /readme.txt | run grep MiniOS | run wc
 ```
 
-左侧会变成：
+第一段会变成：
 
 - program：`cat`
 - `argv = ["cat", "/readme.txt"]`
 
-右侧会变成：
+第二段会变成：
 
 - program：`grep`
 - `argv = ["grep", "MiniOS"]`
+
+第三段会变成：
+
+- program：`wc`
+- `argv = ["wc"]`
 
 例如：
 
@@ -144,7 +150,15 @@ run cat /readme.txt | run head -n 3
 - `> /out.txt` 不会进入 `argv`
 - `>> /out.txt` 不会进入 `argv`
 
-Task93 之后，这条规则在普通 `run` 和 pipe 左右两侧都统一复用同一个辅助逻辑。
+Task99 之后，这条规则在普通 `run` 和多级 pipe 各段都统一复用同一个辅助逻辑。
+
+另外当前只允许：
+
+- 首段使用 `< file`
+- 末段使用 `> file`
+- 末段使用 `>> file`
+
+中间命令段如果带 `<` / `>` / `>>`，shell 会直接报错，不会把这些 token 混进用户程序 `argv`。
 
 ## 7. 错误输入处理
 
@@ -155,6 +169,8 @@ Task93 之后，这条规则在普通 `run` 和 pipe 左右两侧都统一复用
 - `run grep <`
 - `run cat /readme.txt |`
 - `| run wc`
+- `run cat /readme.txt | run grep > /x | run wc`
+- `run cat /readme.txt | run grep < /x`
 - 参数数量超过上限
 
 常见错误提示包括：
@@ -167,6 +183,10 @@ Task93 之后，这条规则在普通 `run` 和 pipe 左右两侧都统一复用
 
 ## 8. 与后续任务的关系
 
-Task93 的重点不是做完整 shell，而是把 `argv` 解析和 `pipe/redirect` 下的参数保留整理稳定。
+Task99 之后，shell 已经能把多级 `run ... | run ... | run ...` 翻译成一次用户态 `mini_pipeline` 调用。
 
-这能为后续 Task94 的 `mini_pipeline` 命令做准备。
+也就是说，当前真正执行多级管道的还是用户态 `mini_pipeline`，shell 负责：
+
+- 切出每一段 `argv`
+- 剥离首段输入重定向和末段输出重定向
+- 把 `|` 转成 `mini_pipeline` 能识别的 `--`

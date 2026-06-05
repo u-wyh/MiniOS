@@ -3736,6 +3736,49 @@ TODO：
 - Task100 可以做 Phase2 fd/pipe/process 总结文档
 - Task101 可以做测试清单和阶段收尾
 
+## ✅ Task99：真正 Shell 多级管道解析雏形 / | 语法接入多级 pipeline
+
+本轮目标：
+
+- 让 shell 原生支持多级 `run ... | run ... | run ...`
+- 把 shell 的 `|` 语法接到已有用户态 `mini_pipeline`
+- 保持：
+  - 首段 `< input`
+  - 末段 `> output`
+  - 末段 `>> output`
+  这几类组合继续可用
+
+已完成：
+
+- shell 现在可以统计一行命令中的多个 `|`
+- 多级管道每一段都必须显式写成 `run ...`
+- shell 会把：
+  - `|`
+  - 首段 `< file`
+  - 末段 `> file` / `>> file`
+  从用户程序 `argv` 中剥离
+- shell 会把原生命令：
+  - `run cat /readme.txt | run grep MiniOS | run wc`
+  翻译成一次 `mini_pipeline` 执行
+- 典型示例包括：
+  - `run cat /readme.txt | run grep MiniOS | run wc`
+  - `run cat /readme.txt | run head -n 5 | run tail -n 2`
+  - `run cat < /readme.txt | run grep MiniOS | run wc > /count.txt`
+
+当前限制：
+
+- 还不是完整 shell pipeline
+- 每一段必须显式写 `run`
+- 中间命令段仍不支持 `<` / `>` / `>>`
+- 不支持引号/转义
+- 不支持环境变量
+- 仍然复用教学版 `mini_pipeline` 和教学版 pipe/fd 语义
+
+TODO：
+
+- Task100 可以整理 Phase2 shell/fd/pipe/process 总结文档
+- Task101 可以补交互式回归测试脚本
+
 ## ✅ Task97：多个 pipe object / pipe 分配表雏形
 
 本轮目标：

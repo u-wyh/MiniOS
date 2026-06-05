@@ -436,3 +436,32 @@ run mini_pipeline cat /readme.txt -- grep MiniOS -- wc
 1. `pipe0` 和 `pipe1` 不能串数据
 2. 父进程和子进程都必须及时关闭自己不需要的 pipe fd
 3. 否则下游 reader 可能永远观察不到 EOF
+
+## 13. Task99：shell 原生多级 `|` 接入 mini_pipeline
+
+Task99 没有重写 pipe object，也没有重写 `mini_pipeline` 的底层数据流；它做的是把 shell 原生：
+
+```text
+run A ... | run B ... | run C ...
+```
+
+翻译成一次等价的：
+
+```text
+run mini_pipeline A ... -- B ... -- C ...
+```
+
+因此当前 shell 多级 pipeline 的 pipe 语义，本质上仍然继承自 Task98：
+
+1. 若有 `N` 段命令，则创建 `N-1` 个 pipe object
+2. 相邻两段命令之间各自用独立 pipe object 连接
+3. 第一个命令只接 stdout
+4. 中间命令同时接 stdin 和 stdout
+5. 最后一个命令只接 stdin
+
+当前额外的 shell 侧限制是：
+
+1. 每段都必须显式写 `run`
+2. 只允许首段 `< input`
+3. 只允许末段 `> output` 或 `>> output`
+4. 中间段若出现 `<` / `>` / `>>` 会直接报错

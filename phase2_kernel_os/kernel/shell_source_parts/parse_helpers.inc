@@ -232,6 +232,31 @@ static int shell_find_pipe(int argc, char** argv, int* out_index) {
     return 0;
 }
 
+// 扫描当前命令里的所有 | 位置：成功返回 pipe 数量，并把每个 | 的下标写入 out_indices。
+// 当前只是最小统计辅助，不负责判断每段命令是否有效。
+static int shell_collect_pipes(int argc, char** argv, int* out_indices, int max_indices) {
+    int count = 0;
+    int i;
+
+    if (out_indices == (int*)0 || max_indices <= 0) {
+        return -1;
+    }
+
+    for (i = 0; i < argc; i++) {
+        if (shell_is_pipe_token(argv[i]) == 0) {
+            continue;
+        }
+
+        if (count >= max_indices) {
+            return -2;
+        }
+
+        out_indices[count++] = i;
+    }
+
+    return count;
+}
+
 // 解析 run 命令中的教学版 < / > / >> 重定向；当前只支持每种最多一个，并保证它们不会进入用户 argv。
 static int shell_parse_run_redirects(int argc, char** argv, int output_index, int output_is_append, int input_index, struct shell_redirect_info* out_info) {
     int i;

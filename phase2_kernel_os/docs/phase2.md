@@ -862,3 +862,29 @@
   - 不支持引号/转义
   - 不支持环境变量
   - 不支持进程组
+
+## Task99：Shell 多级 `|` 解析雏形
+
+- 当前任务不是重写 pipe/fork/dup2/exec 主机制，而是把 shell 原生 `|` 语法接到已有 `mini_pipeline`。
+- 本轮之后：
+  - shell 可以直接解析多级 `run ... | run ... | run ...`
+  - shell 会把每一段裁成独立 `argv`
+  - shell 会把 `|` 翻译成 `mini_pipeline` 使用的 `--`
+  - 首段 `< input` 和末段 `> output` / `>> output` 继续可用
+- 当前 Phase2 数据流链路可以概括为：
+  - `shell line`
+  - `-> 多段 run argv`
+  - `-> mini_pipeline argv`
+  - `-> N-1 个 pipe`
+  - `-> 多子进程 fork`
+  - `-> dup2(fd=0/1)`
+  - `-> exec(argc, argv)`
+- 典型示例包括：
+  - `run cat /readme.txt | run grep MiniOS | run wc`
+  - `run cat /readme.txt | run head -n 5 | run tail -n 2`
+  - `run cat < /readme.txt | run grep MiniOS | run wc > /count.txt`
+- 当前仍然不是完整 shell pipeline：
+  - 每一段都必须显式写 `run`
+  - 中间段不支持重定向
+  - 不支持引号/转义
+  - 不支持环境变量

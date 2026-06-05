@@ -1437,6 +1437,17 @@ Task98 之后，`mini_pipeline` 的模型已经从“二段并发 pipeline”推
 
 形成一个带参数 consumer 的最小 pipeline 演示。
 
+Task99 之后，shell 也已经能把原生多级：
+
+```text
+run cat /readme.txt | run grep MiniOS | run wc
+```
+
+翻译到这套 `mini_pipeline` 模型上。因此：
+
+1. `mini_pipeline` 仍然是当前教学版多级 pipeline 的底层执行入口
+2. shell 只是补上了更接近真实 shell 的 `|` 语法入口
+
 ## 46. 用户态 pipe_multi_test
 
 Task97 新增了一个专门验证“多个 pipe object 数据隔离”的最小程序：

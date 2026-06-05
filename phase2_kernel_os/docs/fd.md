@@ -457,3 +457,16 @@ Task98 之后，多级 `mini_pipeline` 里的 `fd=0 / fd=1` 设置也更明确�
 
 1. 避免多余写端仍然存活，导致下游 reader 永远收不到 EOF
 2. 避免多余读端/写端干扰 pipe object 生命周期
+
+Task99 之后，shell 原生 `|` 语法也会走同一套 fd 接线，只是多了一层 shell 到 `mini_pipeline` 的翻译：
+
+1. shell 先把：
+   - `run cat /readme.txt | run grep MiniOS | run wc`
+   变成：
+   - `mini_pipeline cat /readme.txt -- grep MiniOS -- wc`
+2. `mini_pipeline` 再按多级规则执行：
+   - 第一段：`dup2(pipe0_write_fd, 1)`
+   - 中间段：`dup2(prev_pipe_read_fd, 0)` + `dup2(next_pipe_write_fd, 1)`
+   - 末段：`dup2(last_pipe_read_fd, 0)`
+
+这说明当前 shell 原生多级管道虽然语法上更像真实 shell，但底层 fd 接线仍然统一复用 Task98 已经整理好的模型。

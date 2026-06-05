@@ -5,6 +5,7 @@ void _start(void) {
     static char line[SHELL_LINE_MAX];
     static char* argv[SHELL_ARGV_MAX];
     static char* hello_argv[] = {"hello"};
+    static int pipe_indices[SHELL_ARGV_MAX];
 
     user_write("shell start\n");
 
@@ -12,6 +13,7 @@ void _start(void) {
         int argc;
         int pipe_index;
         int pipe_status;
+        int pipe_count;
         int redirect_index;
         int redirect_is_append;
         int redirect_status;
@@ -39,9 +41,10 @@ void _start(void) {
         }
 
         pipe_index = -1;
-        pipe_status = shell_find_pipe(argc, argv, &pipe_index);
+        pipe_count = shell_collect_pipes(argc, argv, pipe_indices, SHELL_ARGV_MAX);
+        pipe_status = (pipe_count < 0) ? -1 : shell_find_pipe(argc, argv, &pipe_index);
         if (pipe_status < 0) {
-            user_write("pipe: only one | is supported\n");
+            user_write("pipe: invalid syntax\n");
             continue;
         }
 
@@ -60,7 +63,12 @@ void _start(void) {
             continue;
         }
 
-        if (pipe_index >= 0) {
+        if (pipe_count > 0) {
+            if (pipe_count > 1) {
+                shell_run_pipeline(argc, argv, pipe_count, pipe_indices, (const char*)0, (const char*)0, 0);
+                continue;
+            }
+
             if (pipe_index == 0 || (pipe_index + 1) >= argc) {
                 user_write("pipe: missing command\n");
                 continue;
