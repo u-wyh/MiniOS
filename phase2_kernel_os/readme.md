@@ -577,7 +577,7 @@ PIT 基础结构：
 - 修改 `kernel/kernel.c`
 - 修改 `Makefile`
 - 修改 `readme.md`
-- 新增 `docs/task6_keyboard.md`
+- 新增 `docs/tasks/task6_keyboard.md`
 
 验证结果：
 
@@ -611,7 +611,7 @@ PIT 基础结构：
 
 - 修改 `kernel/keyboard.c`
 - 修改 `readme.md`
-- 新增 `docs/task7_input.md`
+- 新增 `docs/tasks/task7_input.md`
 
 验证结果：
 
@@ -651,7 +651,7 @@ PIT 基础结构：
 - 修改 `kernel/pit.c`
 - 修改 `Makefile`
 - 修改 `readme.md`
-- 新增 `docs/task8_shell.md`
+- 新增 `docs/tasks/task8_shell.md`
 
 支持命令：
 
@@ -697,7 +697,7 @@ PIT 基础结构：
 - 修改 `kernel/shell.c`
 - 修改 `Makefile`
 - 修改 `readme.md`
-- 新增 `docs/task9_kernel_commands.md`
+- 新增 `docs/tasks/task9_kernel_commands.md`
 
 验证结果：
 
@@ -731,7 +731,7 @@ PIT 基础结构：
 - 修改 `kernel/kernel.c`
 - 修改 `Makefile`
 - 修改 `readme.md`
-- 新增 `docs/task10_task_basic.md`
+- 新增 `docs/tasks/task10_task_basic.md`
 
 验证结果：
 
@@ -764,7 +764,7 @@ PIT 基础结构：
 - 修改 `kernel/shell.c`
 - 修改 `Makefile`
 - 修改 `readme.md`
-- 新增 `docs/task10_sched.md`
+- 新增 `docs/tasks/task10_sched.md`
 
 验证结果：
 
@@ -788,7 +788,7 @@ PIT 基础结构：
 - 修改 `boot/switch.asm`
 - 修改 `kernel/task.c`
 - 修改 `readme.md`
-- 新增 `docs/task11_ctx.md`
+- 新增 `docs/tasks/task11_ctx.md`
 
 验证结果：
 
@@ -815,7 +815,7 @@ PIT 基础结构：
 - 修改 `kernel/pit.c`
 - 修改 `kernel/sched.c`
 - 修改 `readme.md`
-- 新增 `docs/task12_interrupt_schedule.md`
+- 新增 `docs/tasks/task12_interrupt_schedule.md`
 
 中断现场保存方式：
 
@@ -862,7 +862,7 @@ PIT IRQ0 -> CPU 自动压栈 -> irq0_stub: pusha -> timer_handler -> schedule
 - 修改 `kernel/shell.c`
 - 修改 `Makefile`
 - 修改 `readme.md`
-- 新增 `docs/task13_mm.md`
+- 新增 `docs/tasks/task13_mm.md`
 
 验证方法：
 
@@ -892,7 +892,7 @@ PIT IRQ0 -> CPU 自动压栈 -> irq0_stub: pusha -> timer_handler -> schedule
 - 修改 `kernel/mm.c`
 - 修改 `kernel/shell.c`
 - 修改 `readme.md`
-- 新增 `docs/task14_kmalloc.md`
+- 新增 `docs/tasks/task14_kmalloc.md`
 
 验证方法：
 
@@ -924,7 +924,7 @@ PIT IRQ0 -> CPU 自动压栈 -> irq0_stub: pusha -> timer_handler -> schedule
 - 修改 `kernel/kernel.c`
 - 修改 `Makefile`
 - 修改 `readme.md`
-- 新增 `docs/task15_paging.md`
+- 新增 `docs/tasks/task15_paging.md`
 
 验证方法：
 
@@ -954,7 +954,7 @@ PIT IRQ0 -> CPU 自动压栈 -> irq0_stub: pusha -> timer_handler -> schedule
 - 修改 `kernel/kernel.c`
 - 修改 `kernel/shell.c`
 - 修改 `readme.md`
-- 新增 `docs/task16_higher_half.md`
+- 新增 `docs/tasks/task16_higher_half.md`
 
 验证方法：
 
@@ -1158,7 +1158,7 @@ limit = 4GB
 - `kernel/idt.c`
 - `kernel/kernel.c`
 - `kernel/paging.c`
-- `docs/task17_user_mode.md`
+- `docs/tasks/task17_user_mode.md`
 
 验证结果：
 
@@ -1203,7 +1203,7 @@ limit = 4GB
 - `kernel/user.c`
 - `kernel/kernel.c`
 - `kernel/shell.c`
-- `docs/task18_user_space.md`
+- `docs/tasks/task18_user_space.md`
 
 验证结果：
 
@@ -1250,7 +1250,7 @@ limit = 4GB
 - `kernel/idt.c`
 - `kernel/user.c`
 - `Makefile`
-- `docs/task19_syscall.md`
+- `docs/tasks/task19_syscall.md`
 
 验证结果：
 
@@ -1326,7 +1326,7 @@ limit = 4GB
 - `kernel/sched.c`
 - `include/sched.h`
 - `Makefile`
-- `docs/task20_syscall_layer.md`
+- `docs/tasks/task20_syscall_layer.md`
 
 下一步计划：
 
@@ -1428,7 +1428,7 @@ MiniOS 可在内存文件系统中查找并执行 ELF 文件。
 - `kernel/user.c`
 - `kernel/elf.c`
 - `readme.md`
-- `docs/task26_process_lifecycle.md`
+- `docs/tasks/task26_process_lifecycle.md`
 
 验证结果：
 
@@ -1472,7 +1472,7 @@ MiniOS 可在内存文件系统中查找并执行 ELF 文件。
 - `kernel/process.c`
 - `kernel/shell.c`
 - `readme.md`
-- `docs/task27_parent_waitpid.md`
+- `docs/tasks/task27_parent_waitpid.md`
 
 验证结果：
 
@@ -1521,7 +1521,7 @@ MiniOS 可在内存文件系统中查找并执行 ELF 文件。
 - `include/process.h`
 - `kernel/process.c`
 - `readme.md`
-- `docs/task28_process_reclaim.md`
+- `docs/tasks/task28_process_reclaim.md`
 
 验证结果（最小场景）：
 
@@ -1560,8 +1560,8 @@ TODO：
 - `kernel/process.c`
 - `kernel/kernel.c`
 - `readme.md`
-- `docs/task25_process.md`
-- `docs/task29_exec_semantics.md`
+- `docs/tasks/task25_process.md`
+- `docs/tasks/task29_exec_semantics.md`
 
 验证结果（最小场景）：
 
@@ -1609,8 +1609,8 @@ TODO：
 - `kernel/process.c`
 - `kernel/syscall.c`
 - `readme.md`
-- `docs/task25_process.md`
-- `docs/task30_fork.md`
+- `docs/tasks/task25_process.md`
+- `docs/tasks/task30_fork.md`
 
 验证结果（最小场景）：
 
@@ -1653,8 +1653,8 @@ TODO：
 - `kernel/syscall.c`
 - `kernel/fs.c`
 - `readme.md`
-- `docs/task25_process.md`
-- `docs/task31_fork_validation.md`
+- `docs/tasks/task25_process.md`
+- `docs/tasks/task31_fork_validation.md`
 
 验证结果（最小场景）：
 
@@ -1692,8 +1692,8 @@ TODO：
 - `kernel/syscall.c`
 - `kernel/fs.c`
 - `readme.md`
-- `docs/task25_process.md`
-- `docs/task32_fork_exec_waitpid.md`
+- `docs/tasks/task25_process.md`
+- `docs/tasks/task32_fork_exec_waitpid.md`
 
 验证结果（最小场景）：
 
@@ -1733,8 +1733,8 @@ TODO：
 - `kernel/kernel.c`
 - `kernel/fs.c`
 - `readme.md`
-- `docs/task25_process.md`
-- `docs/task33_init_process.md`
+- `docs/tasks/task25_process.md`
+- `docs/tasks/task33_init_process.md`
 
 验证结果（最小场景）：
 
@@ -1784,8 +1784,8 @@ TODO：
 - `kernel/process.c`
 - `kernel/fs.c`
 - `readme.md`
-- `docs/task25_process.md`
-- `docs/task34_user_shell.md`
+- `docs/tasks/task25_process.md`
+- `docs/tasks/task34_user_shell.md`
 
 验证结果（最小场景）：
 
@@ -1835,9 +1835,9 @@ TODO：
 
 - `kernel/fs.c`
 - `readme.md`
-- `docs/task7_input.md`
-- `docs/task25_process.md`
-- `docs/task36_interactive_shell.md`
+- `docs/tasks/task7_input.md`
+- `docs/tasks/task25_process.md`
+- `docs/tasks/task36_interactive_shell.md`
 
 验证结果（最小场景）：
 
@@ -1881,9 +1881,9 @@ TODO：
 
 - `kernel/fs.c`
 - `readme.md`
-- `docs/task7_input.md`
-- `docs/task25_process.md`
-- `docs/task37_shell_args.md`
+- `docs/tasks/task7_input.md`
+- `docs/tasks/task25_process.md`
+- `docs/tasks/task37_shell_args.md`
 
 验证结果（最小场景）：
 
@@ -1930,9 +1930,9 @@ TODO：
 - `kernel/syscall.c`
 - `kernel/fs.c`
 - `readme.md`
-- `docs/task7_input.md`
-- `docs/task25_process.md`
-- `docs/task38_argv.md`
+- `docs/tasks/task7_input.md`
+- `docs/tasks/task25_process.md`
+- `docs/tasks/task38_argv.md`
 
 验证结果（最小场景）：
 
@@ -3869,8 +3869,8 @@ TODO：
 已完成：
 
 - 新增：
-  - `docs/tests/phase2_regression.md`
-  - `docs/tests/phase2_smoke.md`
+  - `docs/phase2_regression.md`
+  - `docs/phase2_smoke.md`
   - `docs/tasks/task101_phase2_regression.md`
 - 回归测试覆盖：
   - RAMFS
@@ -3898,8 +3898,51 @@ TODO：
 
 测试文档入口：
 
-1. [docs/tests/phase2_smoke.md](/home/wyh/MiniOS/phase2_kernel_os/docs/tests/phase2_smoke.md)
-2. [docs/tests/phase2_regression.md](/home/wyh/MiniOS/phase2_kernel_os/docs/tests/phase2_regression.md)
+1. [docs/phase2_smoke.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase2_smoke.md)
+2. [docs/phase2_regression.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase2_regression.md)
+
+## ✅ Task102：Phase2 收尾清理 / phase2-complete 冻结点
+
+本轮目标：
+
+- 不再新增功能
+- 只做收尾、冻结点说明、文档一致性检查和 Phase3 入口整理
+
+Phase2 状态：
+
+- Phase2 已完成
+- 当前冻结点建议为：
+  - `phase2-complete`
+
+Phase2 最终能力：
+
+- RAMFS
+- 用户程序
+- fd table
+- open/read/write/close
+- redirect
+- pipe
+- pipe object table
+- fork
+- dup2
+- exec
+- argv
+- mini_pipeline
+- Shell 多级管道
+- `cat / wc / grep / head / tail / sort`
+
+Phase2 验收入口：
+
+1. [docs/phase2_summary.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase2_summary.md)
+2. [docs/phase2_smoke.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase2_smoke.md)
+3. [docs/phase2_regression.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase2_regression.md)
+
+后续方向：
+
+- Phase2 到此进入冻结状态
+- 后续建议进入 Phase3，对照 Linux 内核机制做复盘
+- 参考：
+  - [docs/phase3_plan.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase3_plan.md)
 
 ## ✅ Task97：多个 pipe object / pipe 分配表雏形
 

@@ -352,5 +352,17 @@ run cat /readme.txt | run grep MiniOS | run wc
 
 如果要验证当前 Phase2 是否仍然稳定，建议优先看：
 
-1. [tests/phase2_smoke.md](/home/wyh/MiniOS/phase2_kernel_os/docs/tests/phase2_smoke.md)
-2. [tests/phase2_regression.md](/home/wyh/MiniOS/phase2_kernel_os/docs/tests/phase2_regression.md)
+1. [phase2_smoke.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase2_smoke.md)
+2. [phase2_regression.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase2_regression.md)
+
+## 18. Phase2 冻结说明
+
+到 Task102 为止，Phase2 建议进入：
+
+1. 功能冻结
+2. 文档和测试入口冻结
+3. `phase2-complete` 节点确认
+
+后续如果继续推进，建议不要再把大功能塞回 Phase2，而是转到：
+
+1. [phase3_plan.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase3_plan.md)

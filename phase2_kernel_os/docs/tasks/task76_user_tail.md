@@ -34,7 +34,7 @@ stdin / pipe / file redirect -> tail -> 最后 N 行 -> stdout / redirect file
 6. `readme.md`
 7. `docs/phase2.md`
 8. `docs/user_programs.md`
-9. `docs/task76_user_tail.md`
+9. `docs/tasks/task76_user_tail.md`
 
 ## 4. 实现思路
 

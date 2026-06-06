@@ -318,3 +318,4 @@ Task99 没有再新增一套新的进程模型，而是明确分工成两层：
 1. [phase2_summary.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase2_summary.md)
 2. [fd.md](/home/wyh/MiniOS/phase2_kernel_os/docs/fd.md)
 3. [shell.md](/home/wyh/MiniOS/phase2_kernel_os/docs/shell.md)
+4. [phase3_plan.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase3_plan.md)

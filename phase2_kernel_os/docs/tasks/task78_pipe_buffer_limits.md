@@ -42,7 +42,7 @@
 5. `readme.md`
 6. `docs/phase2.md`
 7. `docs/pipe.md`
-8. `docs/task78_pipe_buffer_limits.md`
+8. `docs/tasks/task78_pipe_buffer_limits.md`
 
 ## 4. 实现思路
 

@@ -35,7 +35,7 @@
 并新增：
 
 1. `kernel/user_program_blobs/head_elf.inc`
-2. `docs/task75_user_head.md`
+2. `docs/tasks/task75_user_head.md`
 
 ## 4. 实现思路
 

@@ -198,3 +198,4 @@ Task99 之后，shell 已经能把多级 `run ... | run ... | run ...` 翻译成
 1. [phase2_summary.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase2_summary.md)
 2. [process.md](/home/wyh/MiniOS/phase2_kernel_os/docs/process.md)
 3. [pipe.md](/home/wyh/MiniOS/phase2_kernel_os/docs/pipe.md)
+4. [phase3_plan.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase3_plan.md)

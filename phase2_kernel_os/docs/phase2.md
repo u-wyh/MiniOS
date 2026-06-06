@@ -912,11 +912,24 @@
 
 - 本轮不新增内核功能，而是建立阶段验收测试文档。
 - 新增：
-  - `docs/tests/phase2_regression.md`
-  - `docs/tests/phase2_smoke.md`
+  - `docs/phase2_regression.md`
+  - `docs/phase2_smoke.md`
   - `docs/tasks/task101_phase2_regression.md`
 - 当前建议流程是：
   - 先跑 smoke
   - 再跑完整 regression
 - 当前 Phase2 已进入收尾阶段：
   - Task102 主要做阶段冻结和收尾清理
+
+## Task102：Phase2 收尾清理 / phase2-complete 冻结点
+
+- 本轮不再新增功能。
+- 主要做：
+  - 文档一致性检查
+  - 测试入口确认
+  - 冻结点说明
+  - Phase3 计划入口整理
+- 当前结论是：
+  - Phase2 到此收束
+  - 后续进入 Phase3
+  - 冻结点建议为 `phase2-complete`

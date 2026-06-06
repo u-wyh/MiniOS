@@ -22,8 +22,8 @@
 
 本轮新增：
 
-1. `docs/tests/phase2_regression.md`
-2. `docs/tests/phase2_smoke.md`
+1. `docs/phase2_regression.md`
+2. `docs/phase2_smoke.md`
 3. `docs/tasks/task101_phase2_regression.md`
 
 ## 4. 测试覆盖范围

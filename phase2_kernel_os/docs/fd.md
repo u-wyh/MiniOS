@@ -478,3 +478,4 @@ Task99 之后，shell 原生 `|` 语法也会走同一套 fd 接线，只是多�
 1. [phase2_summary.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase2_summary.md)
 2. [pipe.md](/home/wyh/MiniOS/phase2_kernel_os/docs/pipe.md)
 3. [process.md](/home/wyh/MiniOS/phase2_kernel_os/docs/process.md)
+4. [phase3_plan.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase3_plan.md)

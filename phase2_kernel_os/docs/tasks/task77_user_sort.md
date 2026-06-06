@@ -45,7 +45,7 @@ stdin / pipe / 文件输入
 6. `readme.md`
 7. `docs/phase2.md`
 8. `docs/user_programs.md`
-9. `docs/task77_user_sort.md`
+9. `docs/tasks/task77_user_sort.md`
 
 ## 4. 实现思路
 
