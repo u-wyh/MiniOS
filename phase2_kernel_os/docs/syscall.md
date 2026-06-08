@@ -283,11 +283,11 @@ Task84 新增了教学版最小 `pipe()` syscall：
 
 当前限制：
 
-1. 仍然只复用一个全局教学版 pipe buffer
-2. 不支持多个独立 pipe object
-3. 不支持阻塞读写
-4. 不支持并发 pipe
-5. 不支持用户态 `dup2()`
+1. pipe object 数量有固定上限
+2. 阻塞等待仍然是教学版 busy-wait / retry
+3. 没有完整引用计数
+4. 没有 signal / SIGPIPE / EPIPE
+5. 不是完整 POSIX `pipe()`
 
 最小错误保护：
 
@@ -302,6 +302,12 @@ pipe(fds)
 write(fds[1], ...)
 read(fds[0], ...)
 ```
+
+Task97 之后，这里的最终态应理解为：
+
+1. `pipe()` 不再复用单全局 buffer
+2. 每次都会分配一个独立 `pipe_id`
+3. `FD_PIPE_READ / FD_PIPE_WRITE` 通过 `pipe_id` 绑定到 `pipe_table[pipe_id]`
 
 ## 14. SYS_DUP2 当前语义
 

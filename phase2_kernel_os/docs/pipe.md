@@ -2,27 +2,36 @@
 
 ## 1. 当前定位
 
-当前 MiniOS Phase2 的 pipe 不是完整 UNIX pipe。
+当前 MiniOS Phase2 的 pipe 不是完整 UNIX pipe，但已经不再是最早期那种“单全局顺序缓冲区”。
 
-它是一个教学版顺序 pipe，目标是验证：
+最终态下它更准确的定位是：
 
 ```text
-左侧程序 stdout
-  -> 内核 pipe buffer
-    -> 右侧程序 stdin
+pipe fd
+  -> pipe_id
+    -> pipe_table[pipe_id]
+      -> 独立 pipe object
 ```
 
-也就是说，当前并不是两个进程并发读写同一个 pipe，而是：
+当前已经具备：
 
-1. shell 先运行左侧程序
-2. 左侧程序把输出完整写到 pipe buffer
-3. 左侧程序结束
-4. shell 再运行右侧程序
-5. 右侧程序从 pipe buffer 读取直到 EOF
+1. 多个独立 pipe object
+2. `pipe()` syscall
+3. `FD_PIPE_READ / FD_PIPE_WRITE`
+4. `fork + dup2 + exec` 组合
+5. `mini_pipeline` 多级管道
+6. shell 多级 `|` 语法入口
+
+但它仍然是教学版实现：
+
+1. 不是完整 POSIX pipe
+2. 没有完整引用计数
+3. 阻塞等待仍然是教学版 busy-wait / retry
+4. 没有 signal / SIGPIPE / 进程组
 
 ## 2. pipe fd 与 pipe buffer
 
-Task79 之后，当前教学版 pipe 已经开始进入 fd 体系。
+当前教学版 pipe 已经进入 fd 体系。
 
 最小语义是：
 
@@ -30,8 +39,8 @@ Task79 之后，当前教学版 pipe 已经开始进入 fd 体系。
    只能读，不能写。
 2. `pipe write fd`
    只能写，不能读。
-3. 两者都不直接持有独立 pipe object。
-4. 当前仍然统一绑定到同一个全局教学版 pipe buffer。
+3. 两者通过 `pipe_id` 绑定到同一个 pipe object。
+4. 不同 pipe fd 可以绑定到不同的 pipe object。
 
 也就是说，这一轮还不是完整 UNIX pipe，只是把“左右端”先抽象进 fd 类型。
 
@@ -42,29 +51,38 @@ Task81 之后，左右端与标准入口的关系又前进了一步：
 2. 右侧 `stdin`
    可以通过内核内部 `fd_dup2(pipe_read_fd, 0)` 绑定到 `fd=0`
 
-当前仍然没有用户态 `dup2()` syscall，这只是内核内部统一入口雏形。
+当前已经有教学版用户态 `dup2()` syscall，但仍不是完整 POSIX `dup2`。
 
 ## 3. pipe buffer 结构
 
-当前 pipe buffer 位于进程子系统里，核心状态包括：
+当前最终态的核心结构是：
 
-1. `data`
-   保存当前 pipe 的字节内容。
-2. `size`
-   表示当前 buffer 中已有多少有效字节。
-3. `read_offset`
-   表示右侧程序已经读取到哪个位置。
-4. `active`
-   表示当前是否正处在一条教学版 pipe 命令的生命周期内。
-5. `overflowed`
-   表示本次 pipe 是否已经发生过“写满”事件，用来保证错误提示只输出一次。
+1. `pipe_table[PROCESS_MAX_PIPE_OBJECTS]`
+   保存固定数量的 pipe object。
+2. 每个 pipe object 至少包含：
+   - `used`
+   - `active`
+   - `overflowed`
+   - `read_open`
+   - `write_open`
+   - `data`
+   - `read_pos`
+   - `write_pos`
+   - `count`
+3. `fd_table[]` 里的 pipe fd 通过 `pipe_id` 找到对应对象。
 
 ## 4. 容量限制
 
-当前 pipe buffer 的固定容量是：
+当前每个 pipe object 的固定容量是：
 
 ```text
 PROCESS_PIPE_BUFFER_SIZE = 512
+```
+
+当前 pipe object 数量上限是：
+
+```text
+PROCESS_MAX_PIPE_OBJECTS = 8
 ```
 
 当前不支持：
@@ -76,20 +94,14 @@ PROCESS_PIPE_BUFFER_SIZE = 512
 
 ## 5. 写入流程
 
-当左侧程序的 `stdout` 被配置为写 pipe 时：
+当进程的 `stdout` 被配置为写 pipe，或用户态直接对 `pipe write fd` 调用 `write(fd, ...)` 时：
 
 1. `SYS_WRITE` 进入内核
 2. syscall 分发识别到当前进程启用了 `stdout -> pipe`
 3. 当前进程会通过自己绑定的 `pipe write fd` 进入 `process_write_pipe_fd(...)`
-4. 写入前先计算剩余空间
-5. 只把还能放下的字节写进 `data`
-6. 更新 `size`
-
-如果用户态或内核路径直接调用 `SYS_FD_WRITE(fd, ...)`：
-
-1. 普通文件 fd 仍走文件写入逻辑
-2. `pipe write fd` 会写入同一个教学版 pipe buffer
-3. `pipe read fd` 上调用写会返回错误
+4. 根据 `pipe_id` 找到对应 pipe object
+5. 写入前先检查剩余空间
+6. 写入后更新 `write_pos / count`
 
 当前写满时的行为：
 
@@ -108,65 +120,37 @@ pipe: buffer full
 
 ## 6. 读取流程
 
-当右侧程序的 `stdin` 被配置为从 pipe 读取时：
+当进程的 `stdin` 被配置为从 pipe 读取，或用户态直接对 `pipe read fd` 调用 `read(fd, ...)` 时：
 
 1. 用户态执行 `SYS_READ(fd=0, ...)`
 2. 当前进程会把 `fd=0` 映射到自己绑定的 `pipe read fd`
 3. 内核进入 `process_read_pipe_fd(...)`
-4. 从 `data + read_offset` 开始拷贝
-5. 最多读取剩余的 `size - read_offset` 字节
-6. 读取成功后推进 `read_offset`
-
-如果用户态或内核路径直接调用 `SYS_READ(fd, ...)`：
-
-1. 普通文件 fd 仍走文件读取逻辑
-2. `pipe read fd` 从 pipe buffer 读取
-3. `pipe write fd` 上调用读会返回错误
+4. 根据 `pipe_id` 找到对应 pipe object
+5. 从 `read_pos` 开始读取
+6. 读取成功后推进 `read_pos`，并维护 `count`
 
 EOF 语义：
 
-1. `read_offset >= size` 时返回 `0`
-2. 空 pipe 返回 `0`
-3. 未激活 pipe 的路径下也不会 panic
-
-因此当前 pipe 的读完语义就是最小 EOF 语义。
+1. 写端已关闭且 `count == 0` 时返回 `0`
+2. 空 pipe 且写端仍开着时不会立刻 EOF，而是等待
+3. 非法端点调用不会 panic，而是返回错误
 
 ## 7. 初始化与清理
 
-每次执行 `run A | run B` 时：
+当前最终态的初始化与清理更准确地说是：
 
-1. shell 在执行前调用 `pipe reset`
-2. 清空 `active / size / read_offset / overflowed / data 语义状态`
-3. 运行左侧程序并写入 pipe
-4. 运行右侧程序并读取 pipe
-5. 执行结束后再次 `pipe reset`
+1. `pipe()` 创建时，从 `pipe_table[]` 分配一个独立 pipe object
+2. 读端和写端 fd 都记录同一个 `pipe_id`
+3. `fork()` / `dup2()` 复制 pipe fd 时，本质上复制的是 `pipe_id`
+4. `close()` / `exit()` 时，会更新该 `pipe_id` 对应对象的 `read_open / write_open`
+5. 当两端都关闭后，对应 pipe object 槽位会被回收复用
 
-这样做的目的是：
+shell / `mini_pipeline` 的生命周期管理则是：
 
-1. 避免连续 pipe 命令复用旧数据
-2. 避免右侧读到上一次命令残留
-3. 让每条 pipe 命令拥有独立的最小生命周期
-
-Task80 之后，pipe 的 fd 生命周期也更清楚了一些：
-
-1. 左侧子进程会绑定一个 `pipe write fd`
-2. 右侧子进程会绑定一个 `pipe read fd`
-3. `close`、进程清空和 pipe reset 现在会复用更统一的 fd 槽位重置逻辑
-4. 兼容字段仍保留，但 pipe 读写分发已经优先走 fd 类型
-
-Task81 之后，pipe 配置路径进一步统一为：
-
-1. 先分配 `pipe read/write fd`
-2. 再通过内核内部 `fd_dup2` 把它们接到 `fd=0 / fd=1`
-3. 仍然保留兼容字段，避免影响已有 shell 行为
-
-Task82 与 Task83 串起来后的状态是：
-
-1. `<` 与 `>` 文件重定向已经开始迁移到 `fd_dup2`
-2. `pipe` 连接也已经统一到：
-   - 左侧 `fd_dup2(pipe_write_fd, 1)`
-   - 右侧 `fd_dup2(pipe_read_fd, 0)`
-3. `pipe + redirect` 组合继续走同一套 shell 启动顺序，但仍保留教学版兼容字段
+1. shell 多级 `|` 会转交给 `mini_pipeline`
+2. `mini_pipeline` 根据命令段数量创建 `N-1` 个 pipe
+3. 每个子进程通过 `dup2(pipe_fd, 0/1)` 接线
+4. 父进程会关闭自己手里的多余 pipe fd，再统一 `waitpid()`
 
 ## 8. 与 redirect 的组合
 
@@ -184,12 +168,24 @@ Task82 与 Task83 串起来后的状态是：
 3. 右侧 `stdout` 若继续重定向，则写 RAMFS 文件
 4. 左侧若还有 `stdin redirect`，会先从输入文件读取，再写入 pipe
 
-从 Task80 开始，可以更清楚地把它理解成：
+从最终态来看，可以更清楚地把它理解成：
 
 1. 左侧 `stdout` 通过绑定的 `pipe write fd` 写入 pipe
 2. 右侧 `stdin` 通过绑定的 `pipe read fd` 读取 pipe
-3. `stdin/stdout` 文件重定向仍然保留原有兼容路径
-4. 也就是说，当前是“fd 分发开始统一，但 shell 入口仍保留教学版特殊配置”的过渡阶段
+3. 首段 `< input` 与末段 `> output` / `>> output` 可以继续组合
+4. shell `|` 最终会被翻译成 `mini_pipeline ... -- ... -- ...`
+
+## 9. 演进说明
+
+下面 Task79~Task99 的小节保留的是阶段演进记录。
+
+其中早期出现的：
+
+1. “只有一个全局 pipe buffer”
+2. “顺序 pipe”
+3. “还没有用户态 dup2 / pipe()”
+
+这些说法都只表示对应任务当时的阶段状态，不代表当前 Phase2 最终态。
 
 Task84 之后，MiniOS 额外新增了教学版 `pipe()` syscall 雏形：
 
@@ -207,7 +203,7 @@ Task85 之后，pipe fd 还可以继续通过用户态 `dup2` 复制：
 2. `dup2(pipe_read_fd, newfd)`
    - 可以把 pipe 读端复制到另一个教学版 fd 位置
 3. 这为后续用户态自己组合 `pipe + dup2 + fork` 奠定了接口基础
-4. 当前仍然没有 fork 后共享 pipe fd，也没有多个独立 pipe object
+4. 这一步当时仍然没有 fork 后共享 pipe fd，也没有多个独立 pipe object
 
 Task86 之后，fork 也会继承当前教学版 pipe fd 视图：
 
@@ -215,7 +211,7 @@ Task86 之后，fork 也会继承当前教学版 pipe fd 视图：
 2. `fork()` 后子进程会复制这对 pipe fd 的表项和绑定字段
 3. 子进程可以直接使用继承下来的 pipe write fd 写入
 4. 父进程在 `waitpid()` 后仍可从原 pipe read fd 读出数据
-5. 当前仍然只有一个全局 pipe buffer，这只是教学版继承语义，不是完整 UNIX pipe 生命周期模型
+5. 这里描述的是 Task86 当时的阶段状态；最终态已在 Task97 之后推进到多个独立 pipe object
 
 Task87 之后，用户态已经可以把这条链路自己组合出来：
 

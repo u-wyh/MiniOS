@@ -147,10 +147,11 @@ Task50 的目标，就是把这条链路里的程序编号、程序名和内置�
 4. 描述符再关联到内置 ELF/blob
 5. 内核把目标镜像装入当前进程地址空间
 
-## 5. shell run/start 语义
+## 5. shell 用户程序执行语义
 
-- `run <program>`：前台执行，shell `fork` 子进程，子进程 `exec`，父进程 `waitpid`
+- `<program>`：前台执行，shell `fork` 子进程，子进程 `exec`，父进程 `waitpid`
 - `start <program>`：后台执行，shell `fork` 子进程并 `exec`，父进程不等待
+- `run <program>`：兼容别名，当前仍等价于直接写 `<program>`
 
 ## 6. 用户程序参数传递
 
@@ -163,7 +164,7 @@ shell token -> program_id -> SYS_EXEC_ARGS -> PCB 暂存 argv -> 用户程序通
 例如：
 
 ```text
-run echo hello minios
+echo hello minios
 ```
 
 会被解释为：
@@ -182,19 +183,20 @@ run echo hello minios
 - 参数过多：shell 会直接报错 `Too many args`，不会继续 `fork/exec`
 - 参数过长：shell 会直接报错 `Arg too long`，内核 `process_copy_user_args()` 也会做兜底校验
 
-## 7.1 Shell run 下的 argv 规则
+## 7.1 Shell 用户程序 argv 规则
 
-当前 shell 在 `run/start` 下采用最小教学版 `argv` 规则：
+当前 shell 在“直接用户程序执行 / 兼容 `run` / `start`”下采用最小教学版 `argv` 规则：
 
-- `run` / `start` 自己不进入用户程序 `argv`
+- `start` 自己不进入用户程序 `argv`
 - 程序名会作为 `argv[0]`
 - 后续普通 token 依次成为 `argv[1..]`
 - `<`、`>`、`>>`、`|` 以及它们的目标 token 不会进入用户程序 `argv`
+- 兼容别名 `run` 自己也不会进入用户程序 `argv`
 
 例如：
 
 ```text
-run grep MiniOS < /readme.txt
+grep MiniOS < /readme.txt
 ```
 
 用户程序最终收到：
@@ -205,7 +207,7 @@ run grep MiniOS < /readme.txt
 例如：
 
 ```text
-run cat /readme.txt | run head -n 3
+cat /readme.txt | head -n 3
 ```
 
 右侧用户程序最终收到：
@@ -216,9 +218,9 @@ run cat /readme.txt | run head -n 3
 
 ## 8. echo 验证方式
 
-- `run echo`：验证“无附加参数”路径，程序应安全输出空行并退出
-- `run echo hello`：验证单参数传递
-- `run echo hello minios phase2`：验证多参数与顺序保持
+- `echo`：验证“无附加参数”路径，程序应安全输出空行并退出
+- `echo hello`：验证单参数传递
+- `echo hello minios phase2`：验证多参数与顺序保持
 
 ## 9. 退出与等待语义
 

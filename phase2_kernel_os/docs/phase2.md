@@ -555,6 +555,12 @@
 
 ## Task84：pipe() syscall 雏形
 
+说明：
+
+- Task84 到 Task99 这几节保留的是阶段演进记录
+- 其中每节里的“当前”默认指对应任务当时的状态
+- 最终态请以 `Task97 / Task98 / Task99` 以及 [phase2_summary.md](/home/wyh/MiniOS/phase2_kernel_os/docs/phase2_summary.md) 为准
+
 - 当前任务是把教学版 pipe 从“shell 内部连接”再往前推进一步，新增最小用户态 `pipe()` syscall。
 - 当前 Phase2 数据流链路可以概括为：
   - 文件系统
@@ -569,7 +575,7 @@
   - `fds[0]` 返回 `pipe read fd`
   - `fds[1]` 返回 `pipe write fd`
 - `pipe_test` 可以直接验证 pipe fd 的最小读写与 EOF 语义
-- 当前仍然只支持一个全局教学版 pipe buffer，不支持多个独立 pipe object。
+- 这里描述的是 Task84 当时的阶段状态；最终态已在 Task97 之后推进到多个独立 pipe object。
 
 ## Task85：dup2 syscall 雏形
 
@@ -634,7 +640,7 @@
   - `-> pipe / dup2 / fork`
   - `-> close 语义整理`
   - `-> 用户态组合测试`
-- 当前仍然只有一个全局教学版 pipe buffer，也没有引用计数。
+- 这里描述的是 Task88 当时的阶段状态；最终态已在 Task97 之后推进到 `pipe_table + pipe_id` 多对象模型，但仍没有完整引用计数。
 
 ## Task89：exec 与 fd 保留语义整理
 

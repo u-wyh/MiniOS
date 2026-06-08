@@ -1,23 +1,5 @@
 /* ===== shell 内建命令实现 ===== */
 
-// 输出 echo 的参数。
-static void shell_cmd_echo(int argc, char** argv) {
-    int i;
-
-    if (argc <= 1) {
-        user_write("\n");
-        return;
-    }
-
-    for (i = 1; i < argc; i++) {
-        user_write(argv[i]);
-        if ((i + 1) < argc) {
-            user_write(" ");
-        }
-    }
-    user_write("\n");
-}
-
 // 输出当前 tick。
 static void shell_cmd_uptime(void) {
     unsigned int ticks = user_get_ticks();
@@ -28,77 +10,6 @@ static void shell_cmd_uptime(void) {
     user_write(", seconds: ");
     shell_write_uint((int)seconds);
     user_write("\n");
-}
-
-// 输出教学版只读文件表：当前只列出内置文本文件，不做真实目录遍历。
-static void shell_cmd_ls(int argc) {
-    int i;
-    int count;
-    char path[MAX_FS_PATH_LEN];
-
-    if (argc > 1) {
-        user_write("ls: directory args not supported\n");
-        return;
-    }
-
-    count = user_file_count();
-    if (count < 0) {
-        user_write("ls: count failed\n");
-        return;
-    }
-
-    user_write("NAME              SIZE\n");
-    for (i = 0; i < count; i++) {
-        int size = user_file_info(i, path, MAX_FS_PATH_LEN);
-
-        if (size < 0) {
-            user_write("ls: info failed\n");
-            return;
-        }
-
-        user_write(path);
-        user_write("       ");
-        shell_write_uint(size);
-        user_write("\n");
-    }
-}
-
-// 输出指定只读文本文件内容；当前优先通过 open/read/close 走教学版 fd 层。
-static void shell_cmd_cat(int argc, char** argv) {
-    char buffer[SHELL_CAT_CHUNK_SIZE + 1];
-    int fd;
-    int read_result;
-
-    if (argc <= 1) {
-        user_write("Usage: cat <file>\n");
-        return;
-    }
-
-    fd = user_open(argv[1]);
-    if (fd < 0) {
-        user_write("cat: file not found\n");
-        return;
-    }
-
-    for (;;) {
-        read_result = user_read(fd, buffer, SHELL_CAT_CHUNK_SIZE);
-        if (read_result < 0) {
-            user_write("cat: read failed\n");
-            user_close(fd);
-            return;
-        }
-
-        if (read_result == 0) {
-            break;
-        }
-
-        buffer[read_result] = '\0';
-        user_write(buffer);
-    }
-
-    if (user_close(fd) < 0) {
-        user_write("cat: close failed\n");
-    }
 }
 
 // 创建一个空 RAMFS 文件；当前要求路径不存在，且不能覆盖内置只读文件。
@@ -113,48 +24,6 @@ static void shell_cmd_touch(int argc, char** argv) {
     result = user_touch(argv[1]);
     if (result < 0) {
         user_write("touch failed\n");
-    }
-}
-
-// 覆盖写入一个 RAMFS 文本文件；当前把剩余参数用空格拼成一段文本。
-static void shell_cmd_writefile(int argc, char** argv) {
-    char text[SHELL_WRITEFILE_MAX_LEN];
-    int result;
-
-    if (argc < 3) {
-        user_write("Usage: writefile <file> <text>\n");
-        return;
-    }
-
-    if (shell_join_args(argc, argv, 2, text, SHELL_WRITEFILE_MAX_LEN) < 0) {
-        user_write("writefile: text too long\n");
-        return;
-    }
-
-    result = user_writefile(argv[1], text);
-    if (result < 0) {
-        user_write("writefile failed\n");
-    }
-}
-
-// 追加写入一个 RAMFS 文本文件；当前把剩余参数用空格拼成一段文本。
-static void shell_cmd_append(int argc, char** argv) {
-    char text[SHELL_WRITEFILE_MAX_LEN];
-    int result;
-
-    if (argc < 3) {
-        user_write("Usage: append <file> <text>\n");
-        return;
-    }
-
-    if (shell_join_args(argc, argv, 2, text, SHELL_WRITEFILE_MAX_LEN) < 0) {
-        user_write("append: text too long\n");
-        return;
-    }
-
-    result = user_appendfile(argv[1], text);
-    if (result < 0) {
-        user_write("append failed\n");
     }
 }
 
@@ -360,37 +229,33 @@ static void shell_cmd_help(void) {
     user_write("commands:\n");
     user_write("  help\n");
     user_write("  clear\n");
-    user_write("  echo <text>\n");
-    user_write("  echo <text> > <file>\n");
-    user_write("  echo <text> >> <file>\n");
-    user_write("  run <program> [args]\n");
-    user_write("  run <program> [args] > <file>\n");
-    user_write("  run <program> [args] >> <file>\n");
-    user_write("  run cat < <file>\n");
-    user_write("  run cat < <file> > <file>\n");
-    user_write("  run <program> [args] | run <program> [args]\n");
-    user_write("  run <program> < <file> | run <program> [args]\n");
-    user_write("  run <program> < <file> | run <program> [args] > <file>\n");
-    user_write("  run <program> < <file> | run <program> [args] >> <file>\n");
-    user_write("  run <program> [args] | run <program> [args] > <file>\n");
-    user_write("  run <program> [args] | run <program> [args] >> <file>\n");
+    user_write("  <program> [args]\n");
+    user_write("  <program> [args] > <file>\n");
+    user_write("  <program> [args] >> <file>\n");
+    user_write("  <program> [args] < <file>\n");
+    user_write("  <program> [args] < <file> > <file>\n");
+    user_write("  <program> [args] | <program> [args]\n");
+    user_write("  <program> [args] < <file> | <program> [args]\n");
+    user_write("  <program> [args] < <file> | <program> [args] > <file>\n");
+    user_write("  <program> [args] < <file> | <program> [args] >> <file>\n");
+    user_write("  <program> [args] | <program> [args] > <file>\n");
+    user_write("  <program> [args] | <program> [args] >> <file>\n");
     user_write("  start <program> [args]\n");
     user_write("  jobs\n");
     user_write("  wait [pid]\n");
     user_write("  kill <pid>\n");
-    user_write("  ls\n");
-    user_write("  cat <file>\n");
     user_write("  touch <file>\n");
-    user_write("  writefile <file> <text>\n");
-    user_write("  append <file> <text>\n");
     user_write("  rm <file>\n");
     user_write("  ps    show process table with age/runs\n");
     user_write("  uptime\n");
     user_write("  ticks\n");
     user_write("  sleep <ticks>\n");
-    user_write("  hello\n");
     user_write("  exit\n");
     user_write("programs:\n");
-    user_write("  hello echo ls cat stat writefile append loop loop_exit sleep_test\n");
+    user_write("  hello echo ls cat stat writefile append wc grep head tail sort\n");
+    user_write("  loop loop_exit sleep_test pipe_test dup2_test fork_fd_test\n");
+    user_write("  pipe_fork_dup2_test pipe_close_test exec_fd_test exec_args_test\n");
+    user_write("  pipeline_demo pipeline_args_demo mini_pipeline pipe_multi_test\n");
+    user_write("compat:\n");
+    user_write("  run <program> [args]   (legacy alias, no longer required)\n");
 }
-

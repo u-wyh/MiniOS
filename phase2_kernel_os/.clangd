@@ -1,0 +1,10 @@
+CompileFlags:
+  Add:
+    - -m32
+    - -ffreestanding
+    - -fno-pie
+    - -fno-stack-protector
+    - -Wall
+    - -Wextra
+    - -O0
+    - -Iinclude

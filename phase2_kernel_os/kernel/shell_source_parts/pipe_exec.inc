@@ -1,7 +1,7 @@
 /* ===== shell 管道执行模型 ===== */
 
-// 校验每一段教学版 shell pipeline 都是 run 开头，并构造传给 mini_pipeline 的 argv。
-// 这里会去掉每段开头的 run，把 | 换成 --，同时剥离首段输入重定向和末段输出重定向 token。
+// 校验每一段教学版 shell pipeline 都是“直接程序名”或兼容别名 run 开头，并构造传给 mini_pipeline 的 argv。
+// 这里会去掉每段开头可选的 run，把 | 换成 --，同时剥离首段输入重定向和末段输出重定向 token。
 static int shell_build_mini_pipeline_argv(
     int argc,
     char** argv,
@@ -53,9 +53,16 @@ static int shell_build_mini_pipeline_argv(
         }
 
         if (segment_start != 0) {
-            if (shell_streq(argv[token_index], "run") == 0) {
-                return -4;
+            if (shell_streq(argv[token_index], "run") != 0) {
+                continue;
             }
+            if (shell_streq(argv[token_index], "start") != 0) {
+                return -5;
+            }
+            if (out_argc >= max_argv) {
+                return -3;
+            }
+            out_argv[out_argc++] = argv[token_index];
             segment_start = 0;
             continue;
         }
@@ -115,7 +122,7 @@ static int shell_validate_pipeline_redirect_layout(
     return 0;
 }
 
-// 执行教学版多级 shell pipeline：shell 只负责解析多段 run ... | run ...，真正的数据流复用用户态 mini_pipeline。
+// 执行教学版多级 shell pipeline：shell 只负责解析多段命令，真正的数据流复用用户态 mini_pipeline。
 static void shell_run_pipeline(
     int argc,
     char** argv,
@@ -254,7 +261,9 @@ static void shell_run_pipeline(
     mini_argc = shell_build_mini_pipeline_argv(argc, argv, pipe_count, &first_redirects, &last_redirects, mini_pipeline_argv, SHELL_ARGV_MAX);
     if (mini_argc < 0) {
         if (mini_argc == -4) {
-            user_write("pipe only supports run ... | run ...\n");
+            user_write("pipe: missing program name\n");
+        } else if (mini_argc == -5) {
+            user_write("pipe does not support start\n");
         } else if (mini_argc == -3) {
             user_write("Too many args\n");
         } else {

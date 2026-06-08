@@ -4,7 +4,6 @@
 void _start(void) {
     static char line[SHELL_LINE_MAX];
     static char* argv[SHELL_ARGV_MAX];
-    static char* hello_argv[] = {"hello"};
     static int pipe_indices[SHELL_ARGV_MAX];
 
     user_write("shell start\n");
@@ -145,38 +144,26 @@ void _start(void) {
             continue;
         }
 
-        if (input_redirect_index >= 0) {
-            if (shell_streq(argv[0], "run") == 0) {
-                user_write("input redirect only supports run now\n");
-                continue;
-            }
-        }
-
-        if (redirect_index >= 0) {
-            if (shell_streq(argv[0], "echo") != 0) {
-                if (input_redirect_index >= 0) {
-                    user_write("combined redirection only supports run now\n");
-                    continue;
-                }
-                shell_cmd_echo_redirect(argc, argv, redirect_index, redirect_is_append);
-                continue;
-            }
-
-            if (shell_streq(argv[0], "run") != 0) {
-                // run 的重定向留到后面的 run 分支统一处理，避免把 > / >> 误传给用户程序 argv。
-            } else {
-                user_write("redirect only supports echo/run now\n");
-                continue;
-            }
+        if ((redirect_index >= 0 || input_redirect_index >= 0) &&
+            (shell_streq(argv[0], "help") != 0 ||
+             shell_streq(argv[0], "clear") != 0 ||
+             shell_streq(argv[0], "ps") != 0 ||
+             shell_streq(argv[0], "jobs") != 0 ||
+             shell_streq(argv[0], "touch") != 0 ||
+             shell_streq(argv[0], "rm") != 0 ||
+             shell_streq(argv[0], "fdtest") != 0 ||
+             shell_streq(argv[0], "uptime") != 0 ||
+             shell_streq(argv[0], "ticks") != 0 ||
+             shell_streq(argv[0], "sleep") != 0 ||
+             shell_streq(argv[0], "wait") != 0 ||
+             shell_streq(argv[0], "kill") != 0 ||
+             shell_streq(argv[0], "exit") != 0)) {
+            user_write("redirect does not support builtin command\n");
+            continue;
         }
 
         if (shell_streq(argv[0], "help")) {
             shell_cmd_help();
-            continue;
-        }
-
-        if (shell_streq(argv[0], "echo")) {
-            shell_cmd_echo(argc, argv);
             continue;
         }
 
@@ -196,28 +183,8 @@ void _start(void) {
             continue;
         }
 
-        if (shell_streq(argv[0], "ls")) {
-            shell_cmd_ls(argc);
-            continue;
-        }
-
-        if (shell_streq(argv[0], "cat")) {
-            shell_cmd_cat(argc, argv);
-            continue;
-        }
-
         if (shell_streq(argv[0], "touch")) {
             shell_cmd_touch(argc, argv);
-            continue;
-        }
-
-        if (shell_streq(argv[0], "writefile")) {
-            shell_cmd_writefile(argc, argv);
-            continue;
-        }
-
-        if (shell_streq(argv[0], "append")) {
-            shell_cmd_append(argc, argv);
             continue;
         }
 
@@ -302,18 +269,13 @@ void _start(void) {
             continue;
         }
 
-        if (shell_streq(argv[0], "run") || shell_streq(argv[0], "start")) {
-            int is_start = shell_streq(argv[0], "start");
+        if (shell_streq(argv[0], "start")) {
             int program_id;
             int validate_result;
             int program_argc = argc - 1;
 
             if (argc <= 1) {
-                if (is_start != 0) {
-                    user_write("Usage: start <program>\n");
-                } else {
-                    user_write("Usage: run <program>\n");
-                }
+                user_write("Usage: start <program>\n");
                 continue;
             }
 
@@ -329,17 +291,13 @@ void _start(void) {
             }
 
             if (run_redirects.has_stdout != 0) {
-                if (is_start != 0) {
-                    user_write("redirect does not support start\n");
-                    continue;
-                }
+                user_write("redirect does not support start\n");
+                continue;
             }
 
             if (run_redirects.has_stdin != 0) {
-                if (is_start != 0) {
-                    user_write("input redirect does not support start\n");
-                    continue;
-                }
+                user_write("input redirect does not support start\n");
+                continue;
             }
 
             program_argc = shell_effective_run_argc(argc, &run_redirects) - 1;
@@ -364,8 +322,8 @@ void _start(void) {
                 program_id,
                 program_argc,
                 &argv[1],
-                is_start == 0,
-                is_start != 0,
+                0,
+                1,
                 run_redirects.stdout_path,
                 run_redirects.stdout_append,
                 run_redirects.stdin_path,
@@ -374,9 +332,74 @@ void _start(void) {
             continue;
         }
 
-        if (shell_streq(argv[0], "hello")) {
-            shell_spawn_program(PROGRAM_HELLO, 1, hello_argv, 1, 0, (const char*)0, 0, (const char*)0, 0, 0);
-            continue;
+        {
+            int command_offset = 0;
+            int sub_argc = argc;
+            int sub_redirect_index = redirect_index;
+            int sub_input_redirect_index = input_redirect_index;
+            int program_argc;
+            int program_id;
+            int validate_result;
+
+            if (shell_streq(argv[0], "run") != 0) {
+                command_offset = 1;
+                if (argc <= 1) {
+                    user_write("Usage: run <program>\n");
+                    continue;
+                }
+                sub_argc = argc - 1;
+                if (sub_redirect_index >= 0) {
+                    sub_redirect_index--;
+                }
+                if (sub_input_redirect_index >= 0) {
+                    sub_input_redirect_index--;
+                }
+            }
+
+            program_id = shell_program_id_from_name(argv[command_offset]);
+            if (program_id != PROGRAM_INVALID) {
+                validate_result = shell_parse_run_redirects(
+                    sub_argc,
+                    &argv[command_offset],
+                    sub_redirect_index,
+                    redirect_is_append,
+                    sub_input_redirect_index,
+                    &run_redirects);
+                if (validate_result < 0) {
+                    shell_write_run_redirect_error(validate_result);
+                    continue;
+                }
+
+                if (run_redirects.first_redirect_index == 0) {
+                    user_write("redirect: missing program target\n");
+                    continue;
+                }
+
+                program_argc = shell_effective_run_argc(sub_argc, &run_redirects);
+
+                validate_result = shell_validate_program_args(program_argc, &argv[command_offset]);
+                if (validate_result == -1) {
+                    user_write("Too many args\n");
+                    continue;
+                }
+                if (validate_result == -2) {
+                    user_write("Arg too long\n");
+                    continue;
+                }
+
+                shell_spawn_program(
+                    program_id,
+                    program_argc,
+                    &argv[command_offset],
+                    1,
+                    0,
+                    run_redirects.stdout_path,
+                    run_redirects.stdout_append,
+                    run_redirects.stdin_path,
+                    0,
+                    0);
+                continue;
+            }
         }
 
         if (shell_streq(argv[0], "exit")) {

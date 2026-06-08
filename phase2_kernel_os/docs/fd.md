@@ -8,7 +8,7 @@
 
 1. 内置只读文件表
 2. RAMFS 文件槽位
-3. 教学版 pipe buffer
+3. 教学版 pipe object / pipe_table
 
 它们统一通过：
 
@@ -57,36 +57,36 @@ PROCESS_FD_TYPE_PIPE_WRITE
 1. 目录 fd
 2. `lseek`
 3. `dup`
-4. `dup2`
+4. 完整 POSIX `dup2`
 5. 多进程共享同一个真实 file object
 
 ## 4. pipe read fd 语义
 
-`pipe read fd` 表示教学版单管道的读端。
+`pipe read fd` 表示某个教学版 pipe object 的读端。
 
 最小语义是：
 
 1. 只能读，不能写
-2. 读取来源是当前唯一的教学版全局 pipe buffer
-3. `read(fd, ...)` 从 `read_offset` 开始读取
-4. 读完后返回 `0`，表示最小 EOF
+2. 通过 `pipe_id` 绑定到 `pipe_table[pipe_id]`
+3. `read(fd, ...)` 从对应 pipe object 的读位置开始读取
+4. 写端关闭且数据读完后返回 `0`，表示最小 EOF
 5. 对 `pipe read fd` 调用 `write(fd, ...)` 返回错误
 
-当前它不对应独立 pipe object，也没有引用计数。
+当前它已经对应独立 pipe object，但仍没有完整引用计数。
 
 ## 5. pipe write fd 语义
 
-`pipe write fd` 表示教学版单管道的写端。
+`pipe write fd` 表示某个教学版 pipe object 的写端。
 
 最小语义是：
 
 1. 只能写，不能读
-2. 写入目标是当前唯一的教学版全局 pipe buffer
-3. 写入前会检查剩余容量
+2. 通过 `pipe_id` 绑定到 `pipe_table[pipe_id]`
+3. 写入前会检查对应 pipe object 的剩余容量
 4. 写满时沿用 Task78 的“截断 + 单次提示”策略
 5. 对 `pipe write fd` 调用 `read(fd, ...)` 返回错误
 
-当前它也不对应独立 pipe object，只是当前 pipe buffer 的一个写端抽象。
+当前它已经对应独立 pipe object，但仍没有完整引用计数与阻塞队列。
 
 ## 6. fd=0 / fd=1 / fd=2 的关系
 
@@ -105,7 +105,7 @@ PROCESS_FD_TYPE_PIPE_WRITE
 
 1. `fd>=3` 的普通文件 fd 和 pipe fd 真正存放在 `fd_table[]`
 2. `fd=0` / `fd=1` 仍然带有教学版特殊入口语义
-3. Task79 只是让 `stdin <- pipe` 和 `stdout -> pipe` 开始绑定到 `pipe read fd / pipe write fd`
+3. 后续任务又把 `<`、`>`、`|`、`mini_pipeline` 逐步接到了 `fd=0 / fd=1`
 
 也就是说，Phase2 现在处在：
 
@@ -161,13 +161,13 @@ Task80 之后，当前 fd 路径比 Task79 更清楚了一些。
 
 ## 9. fd_dup2 雏形
 
-Task81 之后，内核内部新增了教学版 `fd_dup2(oldfd, newfd)` 雏形。
+Task81 之后，内核内部新增了教学版 `fd_dup2(oldfd, newfd)` 雏形；Task85 又把它继续暴露成了用户态 `dup2()` syscall。
 
 它的定位是：
 
-1. 只供内核内部使用
-2. 当前没有用户态 `dup2` syscall
-3. 用于给 redirect / pipe 提供更统一的“把 oldfd 接到 0/1”入口
+1. 内核内部有 `fd_dup2`
+2. 用户态也有最小 `dup2()` syscall
+3. 用于给 redirect / pipe / mini_pipeline 提供统一的“把 oldfd 接到 0/1”入口
 
 当前最小语义是：
 
@@ -202,16 +202,16 @@ Task81 之后，内核内部新增了教学版 `fd_dup2(oldfd, newfd)` 雏形。
 
 ## 10. 当前限制
 
-Task79 之后，fd 抽象比之前更统一了一步，但还远不是完整 Unix/Linux 设计。
+Task79 之后，fd 抽象一路推进到 Phase2 末尾，已经能统一承接文件 fd、pipe fd、redirect、fork/exec 继承和 shell pipeline，但还远不是完整 Unix/Linux 设计。
 
 当前仍然不支持：
 
-1. fork 后共享 pipe fd
-2. 阻塞读写
-3. 并发 pipe
-4. 多级管道
-5. 多个 pipe object
-6. socket / tty / 设备文件统一进入同一对象模型
+1. 共享 open file object 与完整引用计数
+2. 完整阻塞队列 / wakeup 机制
+3. socket / tty / 设备文件统一进入同一对象模型
+4. `lseek`
+5. 完整 `stderr` / `2>` / `2>&1`
+6. 完整 POSIX `dup/dup2/close-on-exec`
 
 所以现在的定位是：
 

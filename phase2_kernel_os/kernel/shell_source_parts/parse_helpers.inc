@@ -257,7 +257,7 @@ static int shell_collect_pipes(int argc, char** argv, int* out_indices, int max_
     return count;
 }
 
-// 解析 run 命令中的教学版 < / > / >> 重定向；当前只支持每种最多一个，并保证它们不会进入用户 argv。
+// 解析教学版用户程序命令中的 < / > / >> 重定向；当前只支持每种最多一个，并保证它们不会进入用户 argv。
 static int shell_parse_run_redirects(int argc, char** argv, int output_index, int output_is_append, int input_index, struct shell_redirect_info* out_info) {
     int i;
     int seen_input = 0;
@@ -336,7 +336,7 @@ static int shell_parse_run_redirects(int argc, char** argv, int output_index, in
     return 0;
 }
 
-// 根据 run 命令解析出的重定向信息，计算真正应该传给用户程序的 argc。
+// 根据用户程序命令解析出的重定向信息，计算真正应该传给用户程序的 argc。
 // 这样可以统一保证 < / > / >> 以及它们的目标文件名不会混进用户程序 argv。
 static int shell_effective_run_argc(int argc, const struct shell_redirect_info* info) {
     if (info == (const struct shell_redirect_info*)0) {
